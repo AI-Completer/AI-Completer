@@ -137,7 +137,7 @@ class Session:
 
 class Message:
     '''A normal message from the Interface.'''
-    def __init__(self, character:Character, content:MultiContent, session:Session, id:uuid.UUID = uuid.uuid4()) -> None:
+    def __init__(self, character:Character, content:MultiContent, session:Session,cmd:str = "ask",id:uuid.UUID = uuid.uuid4(), from_:Message|None = None) -> None:
         self.character:Character = character
         '''Character of the message'''
         self.content:MultiContent = content
@@ -148,6 +148,11 @@ class Message:
         '''ID of the message'''
         self.extra:dict = {}
         '''Extra information'''
+        self.last_message:Message|None = from_
+        '''Last message'''
+        self.cmd:str = cmd
+        '''Call which command to transfer this Message'''
+        
 
     def __str__(self) -> str:
         return f"{self.character.name}: {self.content.text}"

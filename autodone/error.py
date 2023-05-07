@@ -1,7 +1,5 @@
-
-
-from autodone import interface
-
+from autodone.interface.base import Interface
+from autodone.session import Message
 
 class BaseException(Exception):
     '''Base Exception for all Autodone-AI error'''
@@ -31,19 +29,31 @@ class NotFound(BaseException):
 
 class AliasConflict(BaseException):
     '''Alias Conflict'''
-    def __init__(self, command:str, interface: interface, *args: object, **kwargs: object) -> None:
+    def __init__(self, command:str, interface: Interface, *args: object, **kwargs: object) -> None:
         self.command:str = command
         super().__init__(interface = interface, *args, **kwargs)
 
 class PermissionDenied(BaseException):
     '''Permission Denied'''
-    def __init__(self, command:str, interface: interface, *args: object, **kwargs: object) -> None:
+    def __init__(self, command:str, interface: Interface, *args: object, **kwargs: object) -> None:
         self.command:str = command
         super().__init__(interface = interface, *args, **kwargs)
 
 class CommandNotImplement(NotFound):
     '''Command Not Implement'''
-    def __init__(self, command:str, interface: interface, *args: object, **kwargs: object) -> None:
+    def __init__(self, command:str, interface: Interface, *args: object, **kwargs: object) -> None:
         self.command:str = command
+        super().__init__(interface = interface, *args, **kwargs)
+
+class MessageNotUnderstood(BaseException):
+    '''Message Not Understood'''
+    def __init__(self, message:Message, interface: Interface, *args: object, **kwargs: object) -> None:
+        self.message:Message  = message
+        super().__init__(interface = interface, *args, **kwargs)
+
+class FormatError(BaseException):
+    '''Format Error'''
+    def __init__(self, message:Message ,interface: Interface, *args: object, **kwargs: object) -> None:
+        self.message:Message  = message
         super().__init__(interface = interface, *args, **kwargs)
 

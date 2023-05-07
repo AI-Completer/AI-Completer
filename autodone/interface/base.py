@@ -9,6 +9,7 @@ from command import CommandSet
 import autodone.session as session
 from command import Command
 from autodone import error
+from autodone.config import Config
 
 @unique
 class Role(Enum):
@@ -38,7 +39,7 @@ class Character:
 
 class Interface:
     '''Interface of AutoDone-AI'''
-    def __init__(self, character:Character, id:uuid.UUID = uuid.uuid4()):
+    def __init__(self, character:Character, id:uuid.UUID = uuid.uuid4(), config:Config = Config()):
         self.character = character
         '''Character of the interface'''
         self._closed:bool = False
@@ -49,6 +50,9 @@ class Interface:
         '''Extra information'''
         self.commands:CommandSet = CommandSet()
         '''Command Set of Interface'''
+        self.config:Config = config
+        self.config.readonly = True
+        '''Config of Interface(Not Writeable)'''
 
     def check_cmd_support(self, cmd:str) -> Command:
         '''Check whether the command is support by this interface'''
@@ -86,6 +90,7 @@ class Interface:
         Call the command
 
         *Note*: Handler Class has add the history, no need to add it again
+        Call by this method will skip the command check
         '''
         pass
     

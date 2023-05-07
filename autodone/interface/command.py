@@ -1,12 +1,86 @@
 '''
 Command Support For Interface
 '''
-from typing import Callable, Coroutine, Iterator
+from typing import Any, Callable, Coroutine, Iterable, Iterator, overload
 import attr
 from autodone import session
 from autodone.interface.base import Interface
 from autodone.session.base import Role
 import autodone.error as error
+
+@attr.s(auto_attribs=True,frozen=True)
+class CommandParamElement:
+    '''Command Parameter Element'''
+    name:str = ""
+    '''Name of the parameter'''
+    type:type|Callable[[Any], bool] = str
+    '''
+    Type of the parameter
+    When callable, its value will be checked by calling this function
+    The function should return boolean to adjust whether the type is right
+    '''
+    default:Any = None
+    '''Default Value of the parameter'''
+    description:str = ""
+    '''Description of the parameter'''
+    optional:bool = False
+    '''Whether the parameter is optional'''
+    tooltip:str = ""
+    '''Tooltip of the parameter'''
+
+class CommandParamStruct:
+    '''
+    Command Parameters Struct
+    Used to test struct mainly
+    '''
+    @staticmethod
+    def _check_struct(struct:dict|list|CommandParamElement) -> None:
+        if not isinstance(struct, (dict, list, CommandParamElement)):
+            raise TypeError("struct must be a dict, list or CommandParamElement instance")
+        if isinstance(struct, dict):
+            for i in struct:
+                CommandParamStruct._check_struct(struct[i])
+        elif isinstance(struct, list):
+            if len(struct) != 1:
+                raise TypeError("list must have only one element")
+            CommandParamStruct._check_struct(struct[0])
+        elif isinstance(struct, CommandParamElement):
+            pass
+
+    def __init__(self, struct:dict|list|CommandParamElement) -> None:
+        self._struct = struct
+        CommandParamStruct._check_struct(struct)
+
+    def check(self, data:dict) -> bool:
+        '''Check the data to see whether it is in proper format.'''
+        def _check(struct:dict|list|CommandParamElement, ndata:dict):
+            if isinstance(struct, dict):
+                for key,value in struct.items():
+                    if isinstance(value,CommandParamElement):
+                        if value.optional:
+                            pass
+                    if key not in ndata:
+                        raise TypeError(f"key {key} not in data")
+                    if not _check(value, ndata[key]):
+                        return False
+                return True
+            elif isinstance(struct, list):
+                if not isinstance(ndata, list):
+                    raise TypeError("data must be a list")
+                for item in ndata:
+                    if not _check(struct[0], item):
+                        return False
+                return True
+            elif isinstance(struct, CommandParamElement):
+                if isinstance(struct.type, type):    
+                    if not isinstance(ndata, struct.type):
+                        raise TypeError(f"data must be {struct.type}")
+                    return True
+                elif callable(struct.type):
+                    if not struct.type(ndata):
+                        raise TypeError(f"data must be {struct.type}")
+                    return True
+        return _check(self._struct, data)
 
 @attr.s(auto_attribs=True,frozen=True)
 class Command:
@@ -17,12 +91,18 @@ class Command:
     '''Alias Names'''
     description:str = ""
     '''Description For Command'''
+    format:CommandParamStruct = CommandParamStruct({})
+    '''Format For Command'''
+    check_format:bool = True
+    '''Whether to check the format of the command'''
     callable_roles:set[Role] = set()
     '''Roles who can call this command'''
     overrideable:bool = False
     '''Whether this command can be overrided by other command'''
     extra:dict = {}
     '''Extra information'''
+    expose:bool = True
+    '''Whether this command can be exposed to handlers'''
 
     in_interface:Interface|None = None
     '''Interface where the command is from'''
@@ -35,6 +115,9 @@ class Command:
     async def call(self, session:session.Session, message:session.Message) -> None:
         '''Call the command'''
         message.dest_interface = self.in_interface
+        if self.check_format:
+            if not self.format.check(message.data):
+                raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",message=message,interface=self.in_interface)
         if self.call_func is not None:
             return await self._call_func(session, message)
         else:   
@@ -59,10 +142,22 @@ class CommandSet:
     def __init__(self) -> None:
         self._set:set[Command] = set()
 
+    @overload
     def add(self, cmd:Command) -> None:
+        ...
+
+    @overload
+    def add(self, cmds:Iterable[Command]) -> None:
+        ...
+
+    def add(self, cmd:Command|Iterable[Command]) -> None:
         '''Add a command to the set(not overrideable)'''
         if not isinstance(cmd, Command):
-            raise TypeError("cmd must be a Command instance")
+            if not isinstance(cmd, Iterable):
+                raise TypeError("cmd must be a Command instance or an iterable object")
+            for i in cmd:
+                self.add(i)
+            return
         if cmd in self._set:
             raise error.Existed(cmd, cmd_set=self)
         if cmd.cmd in self:
@@ -120,6 +215,10 @@ class CommandSet:
             for j in i.alias:
                 if j == cmd:
                     return i
+                
+    def has(self, cmd:str) -> bool:
+        '''Check if a command is in the set'''
+        return cmd in [i.cmd for i in self._set] or cmd in [j for i in self._set for j in i.alias]
                 
     def get_by_role(self, role:Role) -> set(Command):
         '''Get commands callable by a role'''

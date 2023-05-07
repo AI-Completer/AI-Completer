@@ -5,3 +5,7 @@ from base import (
     Agent,
     Interface
 )
+from command import (
+    Command,
+    CommandSet
+)

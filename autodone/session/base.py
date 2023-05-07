@@ -1,6 +1,7 @@
 from __future__ import annotations
 import aiohttp
-from autodone.interface.base import Character
+from autodone.handler import Handler
+from autodone.interface.base import Character, Interface
 import autodone.session as session
 import attr
 import json
@@ -74,7 +75,7 @@ class MultiContent(Content):
 class Session:
     '''Session'''
     LOGGER=logging.getLogger(__name__)
-    def __init__(self) -> None:
+    def __init__(self, handler:Handler) -> None:
         self.create_time: float = time.time()
         '''Create time'''
         self.last_used: float = self.create_time
@@ -91,6 +92,10 @@ class Session:
         '''Active role'''
         self.id:uuid.UUID = uuid.uuid4()
         '''ID'''
+        self.in_handler:Handler = handler
+        '''In which handler'''
+        self.src_interface:Interface|None = None
+        '''Source interface'''
         self.extra:dict = {
             'http_session':aiohttp.ClientSession(),
         }
@@ -135,24 +140,26 @@ class Session:
     def closed(self) -> bool:
         return self._closed
 
+@attr.s(auto_attribs=True, frozen=True)
 class Message:
     '''A normal message from the Interface.'''
-    def __init__(self, character:Character, content:MultiContent, session:Session,cmd:str = "ask",id:uuid.UUID = uuid.uuid4(), from_:Message|None = None) -> None:
-        self.character:Character = character
-        '''Character of the message'''
-        self.content:MultiContent = content
-        '''Content of the message'''
-        self.session:Session = session
-        '''Session of the message'''
-        self.id:uuid.UUID = id
-        '''ID of the message'''
-        self.extra:dict = {}
-        '''Extra information'''
-        self.last_message:Message|None = from_
-        '''Last message'''
-        self.cmd:str = cmd
-        '''Call which command to transfer this Message'''
-        
+    content:MultiContent
+    '''Content of the message'''
+    session:Session = session
+    '''Session of the message'''
+    id:uuid.UUID = uuid.uuid4()
+    '''ID of the message'''
+    extra:dict = {}
+    '''Extra information'''
+    last_message:Message|None = None
+    '''Last message'''
+    cmd:str
+    '''Call which command to transfer this Message'''
+
+    src_interface:Interface|None = None
+    '''Interface which send this message'''
+    dest_interface:Interface|None = None
+    '''Interface which receive this message'''
 
     def __str__(self) -> str:
         return f"{self.character.name}: {self.content.text}"
@@ -160,3 +167,9 @@ class Message:
     def __repr__(self) -> str:
         return f"Message({self.character.name}, {self.content.text}, {self.session.id}, {self.id})"
     
+class MessageQueue(asyncio.Queue[session.Message]):
+    '''Message Queue'''
+    def __init__(self, id:uuid.UUID = uuid.uuid4()):
+        self.id:uuid.UUID = id
+        '''ID of the queue'''
+

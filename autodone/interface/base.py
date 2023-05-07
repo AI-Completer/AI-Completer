@@ -5,6 +5,7 @@ from abc import abstractmethod
 import uuid
 from enum import Enum, unique
 import attr
+from command import CommandSet
 import autodone.session as session
 from command import Command
 from autodone import error
@@ -46,7 +47,8 @@ class Interface:
         '''ID'''
         self.extra:dict = {}
         '''Extra information'''
-        self.commands:set[Command] = set()
+        self.commands:CommandSet = CommandSet()
+        '''Command Set of Interface'''
 
     def check_cmd_support(self, cmd:str) -> Command:
         '''Check whether the command is support by this interface'''
@@ -79,16 +81,11 @@ class Interface:
         pass
 
     @abstractmethod
-    async def call(self, session:session.Session, command:Command, message:session.Message):
-        pass
+    async def call(self, session:session.Session, message:session.Message):
+        '''
+        Call the command
 
-    def input(self,session:session.Session, message:session.Message):
+        *Note*: Handler Class has add the history, no need to add it again
         '''
-        Input function for Session
-        The Message contain a `cmd` parameter for function 'call' to use.
-        '''
-        cmd = self.check_cmd_support(message.cmd)
-        if cmd == None:
-            raise error.CommandNotFound('Command',self)
-        return self.call(session, cmd, message)
+        pass
     

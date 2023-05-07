@@ -1,17 +1,13 @@
 '''
 Handler between the interfaces
 '''
-from typing import overload
+from typing import Iterator, overload
 from autodone.interface.base import Interface, Command, Role
+from autodone.interface.command import CommandSet
 import session
 import asyncio
 import uuid
 import error
-
-class MessageQueue(asyncio.Queue[session.Message]):
-    '''Message Queue'''
-    def __init__(self, id:uuid.UUID = uuid.uuid4()):
-        self.id:uuid.UUID = id
 
 class Handler:
     '''
@@ -21,12 +17,53 @@ class Handler:
     '''
     def __init__(self) -> None:
         self._interfaces:set[Interface] = set()
+        self._commands:CommandSet = CommandSet()
+        self._call_queues:list[tuple[session.Session, session.Message]] = []
+        self.closed:bool = False
+
+        async def queue_check():
+            while True:
+                if self.closed:
+                    return
+                if len(self._call_queues) > 0:
+                    session, message = self._call_queues.pop(0)
+                    await self.call(session, message)
+                await asyncio.sleep(0.1)
+
+        asyncio.get_event_loop().create_task(queue_check())
+
+    def __contains__(self, interface:Interface) -> bool:
+        return interface in self._interfaces
+    
+    def __iter__(self) -> Iterator[Interface]:
+        return iter(self._interfaces)
+    
+    def __len__(self) -> int:
+        return len(self._interfaces)
+    
+    def reload_commands(self) -> None:
+        '''Reload commands from interfaces'''
+        self._commands.clear()
+        for i in self._interfaces:
+            cmds = i.commands
+            for cmd in cmds:
+                cmd.extra['from'] = i
+                self._commands.add(cmd)
+
+    def check_cmd_support(self, cmd:str) -> Command:
+        '''Check whether the command is support by this handler'''
+        return cmd in self._commands
+    
+    def get_cmds_by_role(self, role:Role) -> list[Command]:
+        '''Get commands by role'''
+        return self._commands.get_by_role(role)
 
     def add_interface(self, interface:Interface) -> None:
         '''Add interface to the handler'''
         if interface in self._interfaces:
             raise error.Existed(interface, handler=self)
         self._interfaces.add(interface)
+        self.reload_commands()
 
     @overload
     def rm_interface(self, interface:Interface) -> None:
@@ -42,15 +79,17 @@ class Handler:
             if param not in self._interfaces:
                 raise error.NotFound(param, handler=self)
             self._interfaces.remove(param)
+            self.reload_commands()
         elif isinstance(param, uuid.UUID):
             for i in self._interfaces:
                 if i.id == param:
                     self._interfaces.remove(i)
+                    self.reload_commands()
                     return
             raise error.NotFound(param, handler=self)
         else:
             raise TypeError(f"Expected type Interface or uuid.UUID, got {type(param)}")
-        
+    
     def get_interface(self, id:uuid.UUID) -> Interface:
         '''Get interface by id'''
         for i in self._interfaces:
@@ -66,10 +105,43 @@ class Handler:
                 ret.add(i)
         return ret
     
-    
-    
-    
+    async def call(self, session:session.Session, message:session.Message) -> None:
+        '''Call a command'''
+        command = message.cmd
+        from_ = message.src_interface
+        cmd = self.check_cmd_support(command)
+        if cmd == None:
+            raise error.CommandNotImplement(command, self)
+        if from_.character.role not in cmd.callable_roles:
+            raise error.PermissionDenied(from_, cmd, self)
+        if from_ not in cmd.callable_roles:
+            raise error.PermissionDenied(from_, cmd, self)
+        message.dest_interface = cmd.in_interface
+        await cmd.call(session, message)
+        session.history.append(message)
 
-        
+    def call_soon(self, session:session.Session, message:session.Message) -> None:
+        '''Call a command soon'''
+        self._call_queues.append((session, message))
 
+    @overload
+    def new_session(self, interface:Interface) -> session.Session:
+        pass
 
+    @overload
+    def new_session(self) -> session.Session:
+        pass
+
+    def new_session(self, interface:Interface|None = None) -> session.Session:
+        '''Create a new session'''
+        ret = session.Session(self)
+        if interface:
+            if not isinstance(interface, Interface):
+                raise TypeError(f"Expected type Interface, got {type(interface)}")
+            ret.src_interface = interface
+        return ret
+
+    async def init_interfaces(self):
+        '''Init interfaces'''
+        for i in self._interfaces:
+            await i.init()

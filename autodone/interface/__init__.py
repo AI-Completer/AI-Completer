@@ -3,9 +3,12 @@ from base import (
     User,
     System,
     Agent,
-    Interface
+    Interface,
+    Character,
 )
 from command import (
     Command,
-    CommandSet
+    CommandSet,
+    CommandParamElement,
+    CommandParamStruct,
 )

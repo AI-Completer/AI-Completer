@@ -1,4 +1,5 @@
 from __future__ import annotations
+import enum
 import aiohttp
 from autodone.handler import Handler
 from autodone.interface.base import Character, Interface
@@ -72,6 +73,16 @@ class MultiContent(Content):
         '''Get audio content.'''
         return [content for content in self.contents if isinstance(content, Audio)]
 
+@enum.unique
+class MessageStatus(enum.Enum):
+    '''Message status.'''
+    NOT_SENT = enum.auto()
+    '''Not sent.'''
+    ON_SENDING = enum.auto()
+    '''On sending.'''
+    SENT = enum.auto()
+    '''Sent.'''
+
 class Session:
     '''Session'''
     LOGGER=logging.getLogger(__name__)
@@ -102,12 +113,21 @@ class Session:
         '''Extra information'''
 
     async def acquire(self) -> None:
+        '''Lock the session.'''
         await self.lock.acquire()
         self.last_used = time.time()
     
     def release(self) -> None:
+        '''Release the session.'''
         self.lock.release()
     
+    async def __aenter__(self) -> Session:
+        await self.acquire()
+        return self
+    
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        self.release()
+
     @property
     def locked(self) -> bool:
         return self.lock.locked()
@@ -160,6 +180,26 @@ class Message:
     '''Interface which send this message'''
     dest_interface:Interface|None = None
     '''Interface which receive this message'''
+
+    _status:MessageStatus = MessageStatus.NOT_SENT
+    '''
+    Status of the message.
+    '''
+    @property
+    def status(self) -> MessageStatus:
+        return self._status
+    
+    @status.setter
+    def status(self, value:MessageStatus) -> None:
+        '''
+        Set status of the message.
+        Note that you can only set status to more advanced status.
+        '''
+        if value.value <= self._status.value:
+            raise ValueError(f"Cannot set status to {value.name} from {self._status.name}")
+        self._status = value
+        if value == MessageStatus.SENT and self.session is not None and self._status != MessageStatus.SENT:
+            self.session.history.append(self)
 
     def __str__(self) -> str:
         return f"{self.character.name}: {self.content.text}"

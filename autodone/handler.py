@@ -1,7 +1,7 @@
 '''
 Handler between the interfaces
 '''
-from typing import Iterator, overload
+from typing import Iterable, Iterator, overload
 from autodone.interface.base import Interface, Command, Role
 from autodone.interface.command import CommandSet
 import session
@@ -22,6 +22,7 @@ class Handler:
         self.closed:bool = False
 
         async def queue_check():
+            await self.init_interfaces()
             while True:
                 if self.closed:
                     return
@@ -47,6 +48,8 @@ class Handler:
         for i in self._interfaces:
             cmds = i.commands
             for cmd in cmds:
+                if cmd.expose == False:
+                    continue
                 cmd.extra['from'] = i
                 self._commands.add(cmd)
 
@@ -58,12 +61,20 @@ class Handler:
         '''Get commands by role'''
         return self._commands.get_by_role(role)
 
+    @overload
     def add_interface(self, interface:Interface) -> None:
+        pass
+
+    @overload
+    def add_interface(self, *interfaces:Interface) -> None:
+        pass
+
+    def add_interface(self, *interfaces:Interface) -> None:
         '''Add interface to the handler'''
-        if interface in self._interfaces:
-            raise error.Existed(interface, handler=self)
-        self._interfaces.add(interface)
-        self.reload_commands()
+        for i in interfaces:
+            if i in self._interfaces:
+                raise error.Existed(i, handler=self)
+            self._interfaces.add(i)
 
     @overload
     def rm_interface(self, interface:Interface) -> None:
@@ -118,7 +129,6 @@ class Handler:
             raise error.PermissionDenied(from_, cmd, self)
         message.dest_interface = cmd.in_interface
         await cmd.call(session, message)
-        session.history.append(message)
 
     def call_soon(self, session:session.Session, message:session.Message) -> None:
         '''Call a command soon'''

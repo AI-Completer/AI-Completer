@@ -21,9 +21,24 @@ class Config(defaultdict):
         with open(path, "r", encoding="utf-8") as f:
             return Config(json.load(f))
     
+    def __init__(self, readonly:bool = True,*args, **kwargs) -> None:
+        self._readonly = readonly
+        super().__init__(*args, **kwargs)
+        self.__dict__ = self
+
     def save(self, path:str) -> None:
         with open(path, "w" ,encoding='utf-8') as f:
             json.dump(self, f, indent=4)
+
+    @property
+    def readonly(self) -> bool:
+        '''Get readonly'''
+        return self._readonly
+    
+    @readonly.setter
+    def readonly(self, value:bool) -> None:
+        '''Set readonly'''
+        self._readonly = value
 
     @property
     def interfaces(self) -> Config:
@@ -41,6 +56,8 @@ class Config(defaultdict):
         return self.get("global")
 
     def set(self, path:str, value:Any):
+        if not self._writeable:
+            raise AttributeError("Config is not writeable")
         spilts = path.split('.',2)
         if len(spilts) == 1:
             self[path] = value
@@ -59,6 +76,16 @@ class Config(defaultdict):
     
     def __repr__(self) -> str:
         return f"<Config {str(self)}>"
+    
+    def __setitem__(self, __key: Any, __value: Any) -> None:
+        if not self._writeable:
+            raise AttributeError("Config is not writeable")
+        return super().__setitem__(__key, __value)
+    
+    def __delitem__(self, __key: Any) -> None:
+        if not self._writeable:
+            raise AttributeError("Config is not writeable")
+        return super().__delitem__(__key)
     
 def loadConfig(path:str) -> Config:
     '''Load configuration from file'''

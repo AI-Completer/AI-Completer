@@ -13,39 +13,10 @@ class OPENAI_ChatInterface(Interface):
     '''
     OpenAI API Chat Interface
     '''
-    def __init__(self, character: Character, config: Config, id: uuid.UUID = ...):
-        config.setdefault("chat.model", "gpt-3.5-turbo-0301")
-        config.setdefault("chat.temperature", None)
-        config.setdefault("chat.max_tokens", None)
-        config.setdefault("chat.top_p", None)
-        config.setdefault("chat.frequency_penalty", None)
-        config.setdefault("chat.presence_penalty", None)
-        config.setdefault("chat.stop", None)
-        config.setdefault("chat.n", None)
-        config.setdefault("chat.logit_bias", None)
-        config.setdefault("chat.stream", None)
-        config.setdefault("chat.user", None)
-        config.require("api_key")
+    def __init__(self, character: Character, id: uuid.UUID = ...):
         # Require the api key
-        super().__init__(character, id, config)
+        super().__init__(character, id)
         
-        self.proxy:Optional[dict] = None
-        if config.has('interface.openaichat.proxy'):
-            proxy_config = config['interface.openaichat.proxy']
-            if isinstance(proxy_config, str):
-                self.proxy = {
-                    'http':proxy_config,
-                    'https':proxy_config,
-                    'socks5':proxy_config,
-                }
-            else:
-                if not Struct({
-                    'http':str,
-                    'https':str,
-                    'socks5':str,
-                }).check(proxy_config):
-                    raise ValueError("Invalid proxy")
-                self.proxy = proxy_config
         
 
     async def chat(self, session: Session, message: Message):
@@ -98,6 +69,38 @@ class OPENAI_ChatInterface(Interface):
         '''
         Init the interface
         '''
+        with self.config.session() as config:
+            config.setdefault("chat.model", "gpt-3.5-turbo-0301")
+            config.setdefault("chat.temperature", None)
+            config.setdefault("chat.max_tokens", None)
+            config.setdefault("chat.top_p", None)
+            config.setdefault("chat.frequency_penalty", None)
+            config.setdefault("chat.presence_penalty", None)
+            config.setdefault("chat.stop", None)
+            config.setdefault("chat.n", None)
+            config.setdefault("chat.logit_bias", None)
+            config.setdefault("chat.stream", None)
+            config.setdefault("chat.user", None)
+            config.require("api_key")
+        
+        self.proxy:Optional[dict] = None
+        if config.has('interface.openaichat.proxy'):
+            proxy_config = config['interface.openaichat.proxy']
+            if isinstance(proxy_config, str):
+                self.proxy = {
+                    'http':proxy_config,
+                    'https':proxy_config,
+                    'socks5':proxy_config,
+                }
+            else:
+                if not Struct({
+                    'http':str,
+                    'https':str,
+                    'socks5':str,
+                }).check(proxy_config):
+                    raise ValueError("Invalid proxy")
+                self.proxy = proxy_config
+
         self.commands.add(
             Command(
                 cmd="chat",

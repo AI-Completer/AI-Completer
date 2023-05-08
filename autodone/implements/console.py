@@ -15,13 +15,13 @@ class ConsoleInterface(interface.Interface):
     Console Interface
     Interactive with user in console
     '''
-    def __init__(self,config:Config = Config(),id: uuid.UUID = uuid.uuid4(), character: Optional[Character] = None):
+    def __init__(self,id: uuid.UUID = uuid.uuid4(), character: Optional[Character] = None):
         character = character or Character(
             name="Console",
             role=Role.USER,
             interface=self,
         )
-        super().__init__(character, id, config)
+        super().__init__(character, id)
 
     async def ask_user(self, session:Session, message:Message):
         '''

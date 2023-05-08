@@ -127,11 +127,13 @@ class EnhancedDict(defaultdict):
                 self._dict = copy.deepcopy(dict)
         
         def __enter__(self) -> EnhancedDict:
-            if self.locked:self._dict._readonly = False
+            self.__old_readonly = self._dict._readonly
+            if self.locked:
+                self._dict._readonly = False
             return self._dict
         
         def __exit__(self, exc_type, exc_value, traceback) -> None:
-            if self.locked:self._dict._readonly = True
+            self._dict._readonly = self.__old_readonly
 
     def session(self, locked:bool = True, save:bool = True) -> __Session:
         '''

@@ -1,10 +1,13 @@
 import asyncio
+from typing import Optional
 import uuid
+
 from autodone import *
 from autodone.config import Config
 from autodone.implements.openai.api import EnterPoint
 from autodone.interface.base import Character
 import api
+from autodone.utils import Struct
 
 class OPENAI_ChatInterface(Interface):
     '''
@@ -25,6 +28,25 @@ class OPENAI_ChatInterface(Interface):
         config.require("api_key")
         # Require the api key
         super().__init__(character, id, config)
+        
+        self.proxy:Optional[dict] = None
+        if config.has('interface.openaichat.proxy'):
+            proxy_config = config['interface.openaichat.proxy']
+            if isinstance(proxy_config, str):
+                self.proxy = {
+                    'http':proxy_config,
+                    'https':proxy_config,
+                    'socks5':proxy_config,
+                }
+            else:
+                if not Struct({
+                    'http':str,
+                    'https':str,
+                    'socks5':str,
+                }).check(proxy_config):
+                    raise ValueError("Invalid proxy")
+                self.proxy = proxy_config
+        
 
     async def chat(self, session: Session, message: Message):
         '''
@@ -44,6 +66,7 @@ class OPENAI_ChatInterface(Interface):
                 )
             ]
         enterpoiot:EnterPoint = session.extra['interface.openaichat.enterpoint']
+        enterpoiot.proxy = self.proxy
         try:
             ret = await enterpoiot.chat(param)
         except Exception as e:
@@ -60,6 +83,7 @@ class OPENAI_ChatInterface(Interface):
             )
         )
         session.extra['interface.openaichat.history'] = param.messages
+        session.extra['interface.openaichat.enterpoint'] = enterpoiot
         session.send(
             Message(
                 src_interface=self,
@@ -86,4 +110,5 @@ class OPENAI_ChatInterface(Interface):
         )
         session.extra['interface.openaichat.history'] = []
         session.extra['interface.openaichat.enterpoint'] = api.EnterPoint(self.config['api_key'])
+
 

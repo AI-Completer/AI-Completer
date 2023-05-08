@@ -4,7 +4,7 @@ Utils for autodone
 from __future__ import annotations
 import sys
 import asyncio
-from typing import Any, Callable
+from typing import Any, Callable, Literal, TypeVar
 
 class defaultdict(dict):
     '''
@@ -40,6 +40,7 @@ async def aprint(string: str) -> None:
             None, lambda s=string: sys.stdout.write(s))
     _on_reading.release()
 
+StructType = TypeVar('StructType', dict, list, type, Callable, tuple)
 class Struct:
     '''
     Struct To Check Json Data
@@ -53,14 +54,13 @@ class Struct:
         }
         'key5':lambda x: x > 0,
         'key6':[{'key7':type}],
+        'key8':(type, type),
     })
     '''
-    def _check_struct(self, struct:dict|list) -> None:
+    def _check_struct(self, struct:StructType) -> None:
         '''
         Check struct
         '''
-        if not isinstance(struct, (dict, list)):
-            raise TypeError('struct must be dict or list')
         if isinstance(struct, dict):
             for key in struct:
                 if not isinstance(key, str):
@@ -73,21 +73,33 @@ class Struct:
                     pass
                 else:
                     raise TypeError('value must be type or callable')
+            return
         if isinstance(struct, list):
             if len(struct) != 1:
                 raise TypeError('list must have only one element')
             for item in struct:
                 self._check_struct(item)
-        
-    def __init__(self ,struct:dict|list) -> None:
+            return
+        if isinstance(struct, type):
+            return
+        if callable(struct):
+            return
+        if isinstance(struct, tuple):
+            # Check every item in tuple
+            for item in struct:
+                self._check_struct(item)
+            return
+        raise TypeError('struct must be dict or list or type or callable or tuple')
+    
+    def __init__(self ,struct:StructType) -> None:
         self.struct = struct
         self._check_struct(struct)
 
-    def check(self, data:dict|list) -> bool:
+    def check(self, data:Any) -> bool:
         '''
-        Check data
+        Check data(No allow extra keys)
         '''
-        def _check(struct:dict|list|type|Callable, data:Any) -> bool:
+        def _check(struct:StructType, data:Any) -> bool:
             if isinstance(struct, dict):
                 if not isinstance(data, dict):
                     return False
@@ -96,6 +108,9 @@ class Struct:
                         return False
                     if not _check(struct[key], data[key]):
                         return False
+                if set(struct.keys()) < set(data.keys()):
+                    # Extra keys
+                    return False
                 return True
             if isinstance(struct, list):
                 if not isinstance(data, list):
@@ -108,6 +123,12 @@ class Struct:
                 return isinstance(data, struct)
             if callable(struct):
                 return struct(data)
+            if isinstance(struct, tuple):
+                # Check every item in tuple
+                for item in struct:
+                    if not _check(item, data):
+                        return False
+                return True
             raise TypeError('struct must be dict or list or type or callable')
         
         return _check(self.struct, data)

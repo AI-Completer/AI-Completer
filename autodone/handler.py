@@ -134,6 +134,11 @@ class Handler:
         '''Call a command soon'''
         self._call_queues.append((session, message))
 
+    asend = call
+    '''Alias of call'''
+    send = call_soon
+    '''Alias of call_soon'''
+
     @overload
     def new_session(self, interface:Interface) -> session.Session:
         pass

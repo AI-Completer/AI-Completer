@@ -1,3 +1,4 @@
+from autodone.config import Config
 from autodone.interface.base import Interface
 from autodone.session import Message
 
@@ -26,6 +27,12 @@ class Existed(BaseException):
 
 class NotFound(BaseException):
     '''Not Found'''
+
+class ConfigureMissing(BaseException):
+    '''Configure Missing'''
+    def __init__(self, configure:str,origin:Config, *args: object, **kwargs: object) -> None:
+        self.configure:str = configure
+        super().__init__(*args, **kwargs)
 
 class AliasConflict(BaseException):
     '''Alias Conflict'''

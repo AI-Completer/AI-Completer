@@ -1,16 +1,23 @@
 from __future__ import annotations
+
+import asyncio
 import enum
-import aiohttp
-from autodone.handler import Handler
-from autodone.interface.base import Character, Interface
-import autodone.session as session
-import attr
 import json
 import logging
-import uuid
 import time
-import asyncio
+from typing import Any, Coroutine, overload
+import uuid
+
+import aiohttp
+import attr
+from autodone.config import EnhancedDict
+
+import autodone.session as session
+from autodone.handler import Handler
 from autodone.interface import Role
+from autodone.interface.base import Character, Interface
+from autodone.utils import defaultdict
+
 
 class Content(object):
     '''Common content class.'''
@@ -42,8 +49,28 @@ class Audio(Content):
 
 class MultiContent(Content):
     '''Combine text, images and audios.'''
+    @overload
     def __init__(self) -> None:
+        ...
+
+    @overload
+    def __init__(self, text:str) -> None:
+        ...
+
+    @overload
+    def __init__(self, contents:list[Content]) -> None:
+        ...
+
+    def __init__(self, param) -> None:
         self.contents:list[Content] = []
+        if isinstance(param, str):
+            self.contents.append(Text(param))
+        elif isinstance(param, list):
+            self.contents.extend(param)
+        elif param is None:
+            pass
+        else:
+            raise TypeError(f"Unsupported type {type(param)}")
 
     def add(self, content:Content) -> None:
         '''Add a content.'''
@@ -107,9 +134,7 @@ class Session:
         '''In which handler'''
         self.src_interface:Interface|None = None
         '''Source interface'''
-        self.extra:dict = {
-            'http_session':aiohttp.ClientSession(),
-        }
+        self.extra:EnhancedDict = EnhancedDict()
         '''Extra information'''
 
     async def acquire(self) -> None:
@@ -159,6 +184,14 @@ class Session:
     @property
     def closed(self) -> bool:
         return self._closed
+    
+    def asend(self, message:Message) -> Coroutine[Any, Any, None]:
+        '''Send a message.(async)'''
+        return self.in_handler.asend(self,message)
+    
+    def send(self, message:Message):
+        '''Send a message.'''
+        self.in_handler.send(self,message)
 
 @attr.s(auto_attribs=True, frozen=True)
 class Message:

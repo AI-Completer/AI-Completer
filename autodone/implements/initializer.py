@@ -1,7 +1,7 @@
 import asyncio
-from typing import Any
+from typing import Any, Optional
 from autodone import interface
-from autodone.interface.base import Character
+from autodone.interface.base import Character, Role
 from autodone.session import Session, Message
 import uuid
 import json
@@ -13,7 +13,13 @@ class InitInterface(interface.Interface):
     Initializer Interface
     Only used for initializing the session request
     '''
-    def __init__(self, character: Character, id: uuid.UUID = uuid.uuid4()):
+    def __init__(self, id: uuid.UUID = uuid.uuid4(), character: Optional[Character] = None):
+        character = character or Character(
+            name="Initializer",
+            role=Role.SYSTEM,
+            interface=self,
+            support_text=False,
+        )
         super().__init__(character, id)
 
     async def cmd_init(self, session:Session, message:Message):

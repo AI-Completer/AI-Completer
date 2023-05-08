@@ -5,22 +5,15 @@ Description: Configuration file for autodone
 from __future__ import annotations
 import os
 import json
-from typing import Any
+from tkinter import E
+from typing import Any, Self
+from autodone.error import ConfigureMissing
 from utils import defaultdict
 
-class Config(defaultdict):
-    '''Configuration Class'''
-    @staticmethod
-    def loadFromFile(path:str) -> Config:
-        '''
-        Load Configuration From File
-        The file should be in json format
-        '''
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"Configuration file not found: {path}")
-        with open(path, "r", encoding="utf-8") as f:
-            return Config(json.load(f))
-    
+class EnhancedDict(defaultdict):
+    '''
+    Enhanced dict
+    '''
     def __init__(self, readonly:bool = True,*args, **kwargs) -> None:
         self._readonly = readonly
         super().__init__(*args, **kwargs)
@@ -40,36 +33,60 @@ class Config(defaultdict):
         '''Set readonly'''
         self._readonly = value
 
-    @property
-    def interfaces(self) -> Config:
-        '''Get interfaces'''
-        return self.get("interfaces")
-    
-    @property
-    def handler(self) -> Config:
-        '''Get handler'''
-        return self.get("handler")
-
-    @property
-    def global_(self) -> Config:
-        '''Get global config'''
-        return self.get("global")
-
     def set(self, path:str, value:Any):
+        '''
+        Set a value
+        '''
         if not self._writeable:
+            raise AttributeError("EnhancedDict is not writeable")
+        if '.' in path:
+            spilts = path.split('.',2)
+            if spilts[0] not in self:
+                super().__setitem__(spilts[0], self.__class__())
+            self[spilts[0]][spilts[1]] = value
+            return
+        if isinstance(value, dict):
+            value = self.__class__(value)
+        return super().__setitem__(path, value)
+
+    def get(self, path:str, default:Any = None) -> Any:
+        '''
+        Get a value
+        '''
+        spilts = path.split('.',2)
+        if len(spilts) == 1:
+            ret = super().get(path, default)
+            if isinstance(ret, dict):
+                return self.__class__(ret)
+        else:
+            return self[spilts[0]].get(spilts[1], default)
+        
+    def has(self, path:str) -> bool:
+        '''
+        Check whether the path exists
+        '''
+        spilts = path.split('.',2)
+        if len(spilts) == 1:
+            return path in self
+        else:
+            return self[spilts[0]].has(spilts[1])
+        
+    def require(self, path:str) -> Any:
+        '''
+        Require a value, raise KeyError if not found
+        '''
+        if not self.has(path):
+            raise KeyError(f"Key not found: {path}")
+        return self.get(path)
+        
+    def setdefault(self, path:str, default:Any = None) -> Any:
+        if self._readonly:
             raise AttributeError("Config is not writeable")
         spilts = path.split('.',2)
         if len(spilts) == 1:
-            self[path] = value
+            return super().setdefault(path, default)
         else:
-            self[spilts[0]].set(spilts[1], value)
-
-    def get(self, path:str, default:Any = None) -> Any:
-        spilts = path.split('.',2)
-        if len(spilts) == 1:
-            return super().get(path, default)
-        else:
-            return self[spilts[0]].get(spilts[1], default)
+            return self[spilts[0]].setdefault(spilts[1], default)
         
     def __str__(self) -> str:
         return json.dumps(self, indent=4)
@@ -77,15 +94,35 @@ class Config(defaultdict):
     def __repr__(self) -> str:
         return f"<Config {str(self)}>"
     
-    def __setitem__(self, __key: Any, __value: Any) -> None:
-        if not self._writeable:
-            raise AttributeError("Config is not writeable")
-        return super().__setitem__(__key, __value)
-    
     def __delitem__(self, __key: Any) -> None:
         if not self._writeable:
             raise AttributeError("Config is not writeable")
         return super().__delitem__(__key)
+    
+    __getitem__ = get
+    __setitem__ = set
+    __getattr__ = __getitem__
+    __setattr__ = __setitem__
+    __delattr__ = __delitem__
+
+class Config(EnhancedDict):
+    '''Configuration Class'''
+    @staticmethod
+    def loadFromFile(path:str) -> Config:
+        '''
+        Load Configuration From File
+        The file should be in json format
+        '''
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Configuration file not found: {path}")
+        with open(path, "r", encoding="utf-8") as f:
+            return Config(json.load(f))
+        
+    def require(self, path: str) -> Any:
+        try:
+            return super().require(path)
+        except KeyError as e:
+            raise ConfigureMissing(f"Configure missing: {path}",parent=e) from e
     
 def loadConfig(path:str) -> Config:
     '''Load configuration from file'''

@@ -4,21 +4,9 @@ from autodone import *
 
 async def main():
     # Console Interface
-    console_interface:Interface = implements.ConsoleInterface(Character(
-        name="Console",
-        role=Role.USER,
-        support_text=True,
-        support_image=False,
-        support_audio=False,
-    ))
+    console_interface:Interface = implements.ConsoleInterface()
     # Initialier Interface
-    initialier_interface:Interface = implements.InitInterface(Character(
-        name="Initialier",
-        role=Role.SYSTEM,
-        support_text=False,
-        support_image=False,
-        support_audio=False,
-    ))
+    initialier_interface:Interface = implements.InitInterface()
     # To-do: Add a AI interface
 
     # Handler

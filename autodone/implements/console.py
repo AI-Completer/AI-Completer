@@ -3,8 +3,10 @@ Console Interface Implement
 Provide a console interface for Autodone-AI
 '''
 import asyncio
+from typing import Optional
 import uuid
 from autodone import interface, error, utils
+from autodone.config import Config
 from autodone.session import Session, Message
 from autodone.interface.base import Character, Role
 
@@ -13,8 +15,13 @@ class ConsoleInterface(interface.Interface):
     Console Interface
     Interactive with user in console
     '''
-    def __init__(self, character: Character, id: uuid.UUID = uuid.uuid4()):
-        super().__init__(character, id)
+    def __init__(self,config:Config = Config(),id: uuid.UUID = uuid.uuid4(), character: Optional[Character] = None):
+        character = character or Character(
+            name="Console",
+            role=Role.USER,
+            interface=self,
+        )
+        super().__init__(character, id, config)
 
     async def ask_user(self, session:Session, message:Message):
         '''

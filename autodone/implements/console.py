@@ -17,7 +17,7 @@ class ConsoleInterface(interface.Interface):
     '''
     def __init__(self,id: uuid.UUID = uuid.uuid4(), character: Optional[Character] = None):
         character = character or Character(
-            name="Console",
+            name="console",
             role=Role.USER,
             interface=self,
         )

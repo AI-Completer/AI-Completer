@@ -4,6 +4,7 @@ Handler between the interfaces
 import asyncio
 import uuid
 from typing import Iterable, Iterator, Optional, overload
+from autodone import interface
 
 import error
 import session
@@ -129,6 +130,11 @@ class Handler:
             if i.role == role:
                 ret.add(i)
         return ret
+    
+    @property
+    def interfaces(self) -> set[Interface]:
+        '''Get all interfaces'''
+        return self._interfaces
     
     async def call(self, session:session.Session, message:session.Message) -> None:
         '''Call a command'''

@@ -148,12 +148,13 @@ class EnterPoint:
     def __init__(self, api_key:str):
         self.api_key = api_key
         self.session = aiohttp.ClientSession()
+        self.proxy:Optional[dict] = None
 
     async def _request(self, url:str, parameters:CommonParameters) -> dict:
         with self.session.post(url, data=parameters.to_json(), headers={
             'Content-Type': 'application/json',
             'Authorization':f"Bearer {self.api_key}",
-        }) as res:
+        }, proxy=self.proxy) as res:
             return await res.json()
 
     async def completions(self, parameters:CompletionParameters) -> dict:

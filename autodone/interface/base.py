@@ -39,7 +39,7 @@ class Character:
 
 class Interface:
     '''Interface of AutoDone-AI'''
-    def __init__(self, character:Character, id:uuid.UUID = uuid.uuid4(), config:Config = Config()):
+    def __init__(self, character:Character, id:uuid.UUID = uuid.uuid4()):
         self.character = character
         '''Character of the interface'''
         self._closed:bool = False
@@ -50,7 +50,7 @@ class Interface:
         '''Extra information'''
         self.commands:CommandSet = CommandSet()
         '''Command Set of Interface'''
-        self.config:Config = config
+        self.config:Config = Config()
         self.config.readonly = True
         '''Config of Interface(Not Writeable)'''
 

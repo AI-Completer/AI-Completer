@@ -1,13 +1,17 @@
 '''
 Handler between the interfaces
 '''
-from typing import Iterable, Iterator, overload
-from autodone.interface.base import Interface, Command, Role
-from autodone.interface.command import CommandSet
-import session
 import asyncio
 import uuid
+from typing import Iterable, Iterator, Optional, overload
+
 import error
+import session
+
+from autodone.config import Config
+from autodone.interface.base import Command, Interface, Role
+from autodone.interface.command import CommandSet
+
 
 class Handler:
     '''
@@ -15,11 +19,21 @@ class Handler:
     The handler will transfer various information between Interfaces, 
     enabling interaction among person, AI and system.
     '''
+    @overload
     def __init__(self) -> None:
+        pass
+
+    @overload
+    def __init__(self, config:Config) -> None:
+        pass
+
+    def __init__(self, config:Optional[Config] = Config()) -> None:
         self._interfaces:set[Interface] = set()
         self._commands:CommandSet = CommandSet()
         self._call_queues:list[tuple[session.Session, session.Message]] = []
         self.closed:bool = False
+        self.config:Config = config
+        self.global_config:Config = config['global']
 
         async def queue_check():
             await self.init_interfaces()
@@ -31,7 +45,7 @@ class Handler:
                     await self.call(session, message)
                 await asyncio.sleep(0.1)
 
-        asyncio.get_event_loop().create_task(queue_check())
+        asyncio.get_event_loop().call_soon(queue_check)
 
     def __contains__(self, interface:Interface) -> bool:
         return interface in self._interfaces
@@ -159,4 +173,5 @@ class Handler:
     async def init_interfaces(self):
         '''Init interfaces'''
         for i in self._interfaces:
+            i.config = self.config['interface'][i.character.name]
             await i.init()

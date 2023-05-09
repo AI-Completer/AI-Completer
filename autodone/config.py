@@ -6,9 +6,16 @@ from __future__ import annotations
 import os
 import json
 from tkinter import E
-from typing import Any, Self
+from typing import Any, Self, TypeVar
 from autodone.error import ConfigureMissing
 from utils import defaultdict
+import copy
+
+Pointer = TypeVar('Pointer', list)
+'''
+Pointer type
+Use list to implement pointer
+'''
 
 class EnhancedDict(defaultdict):
     '''
@@ -18,10 +25,6 @@ class EnhancedDict(defaultdict):
         self._readonly = readonly
         super().__init__(*args, **kwargs)
         self.__dict__ = self
-
-    def save(self, path:str) -> None:
-        with open(path, "w" ,encoding='utf-8') as f:
-            json.dump(self, f, indent=4)
 
     @property
     def readonly(self) -> bool:
@@ -99,11 +102,47 @@ class EnhancedDict(defaultdict):
             raise AttributeError("Config is not writeable")
         return super().__delitem__(__key)
     
+    def __contains__(self, __key: object) -> bool:
+        spilts = __key.split('.',2)
+        if len(spilts) == 1:
+            return super().__contains__(__key)
+        else:
+            return self[spilts[0]].__contains__(spilts[1])
+    
     __getitem__ = get
     __setitem__ = set
     __getattr__ = __getitem__
     __setattr__ = __setitem__
     __delattr__ = __delitem__
+
+    class __Session:
+        '''
+        Open a session to modify the EnhancedDict
+        '''
+        def __init__(self, dict:EnhancedDict, locked:bool, save:bool) -> None:
+            self.locked = locked
+            if save:
+                self._dict = dict
+            else:
+                self._dict = copy.deepcopy(dict)
+        
+        def __enter__(self) -> EnhancedDict:
+            self.__old_readonly = self._dict._readonly
+            if self.locked:
+                self._dict._readonly = False
+            return self._dict
+        
+        def __exit__(self, exc_type, exc_value, traceback) -> None:
+            self._dict._readonly = self.__old_readonly
+
+    def session(self, locked:bool = True, save:bool = True) -> __Session:
+        '''
+        Open a session to modify the EnhancedDict
+        param:
+            locked: Whether the session is locked
+            save: Whether to save the dict after the session
+        '''
+        return self.__Session(self, locked, save)
 
 class Config(EnhancedDict):
     '''Configuration Class'''
@@ -123,7 +162,13 @@ class Config(EnhancedDict):
             return super().require(path)
         except KeyError as e:
             raise ConfigureMissing(f"Configure missing: {path}",parent=e) from e
+        
+    def save(self, path:str) -> None:
+        with open(path, "w" ,encoding='utf-8') as f:
+            json.dump(self, f, indent=4)
     
 def loadConfig(path:str) -> Config:
     '''Load configuration from file'''
     return Config.loadFromFile(path)
+
+

@@ -33,6 +33,7 @@ class Handler:
         self._call_queues:list[tuple[session.Session, session.Message]] = []
         self.closed:bool = False
         self.config:Config = config
+        self.global_config:Config = config['global']
 
         async def queue_check():
             await self.init_interfaces()
@@ -44,7 +45,7 @@ class Handler:
                     await self.call(session, message)
                 await asyncio.sleep(0.1)
 
-        asyncio.get_event_loop().create_task(queue_check())
+        asyncio.get_event_loop().call_soon(queue_check)
 
     def __contains__(self, interface:Interface) -> bool:
         return interface in self._interfaces

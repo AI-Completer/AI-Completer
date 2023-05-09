@@ -164,3 +164,6 @@ config.yml
 config.json
 config.yaml
 config.toml
+
+# VSCode
+.vscode/

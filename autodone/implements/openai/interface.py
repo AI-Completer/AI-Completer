@@ -14,10 +14,7 @@ class OPENAI_ChatInterface(Interface):
     OpenAI API Chat Interface
     '''
     def __init__(self, character: Character, id: uuid.UUID = ...):
-        # Require the api key
         super().__init__(character, id)
-        
-        
 
     async def chat(self, session: Session, message: Message):
         '''

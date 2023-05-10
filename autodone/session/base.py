@@ -112,7 +112,7 @@ class MessageStatus(enum.Enum):
 
 class Session:
     '''Session'''
-    LOGGER=logging.getLogger(__name__)
+    logger=logging.getLogger(__name__)
     def __init__(self, handler:Handler) -> None:
         self.create_time: float = time.time()
         '''Create time'''
@@ -187,13 +187,36 @@ class Session:
     
     def asend(self, message:Message) -> Coroutine[Any, Any, None]:
         '''Send a message.(async)'''
+        if self._closed:
+            raise RuntimeError("Session closed")
         return self.in_handler.asend(self,message)
     
     def send(self, message:Message):
         '''Send a message.'''
+        if self._closed:
+            raise RuntimeError("Session closed")
         self.in_handler.send(self,message)
 
-@attr.s(auto_attribs=True, frozen=True)
+    async def start(self, interface:Interface, cmd:str, data:MultiContent, awaitable:bool = True):
+        '''Start a session.'''
+        if self.closed:
+            raise RuntimeError("Session closed")
+        try:
+            message = Message(
+                content=MultiContent({
+                    "interface-name":interface.character.name,
+                    "command":cmd,
+                    "data":data
+                }),
+                session=self,
+                cmd="init",
+                dest_interface=[i for i in self.in_handler.interfaces if i.character.name == 'initializer'][0]
+            )
+        except IndexError:
+            raise RuntimeError("Interface[Initializer] not found")
+        await self.asend(message) if awaitable else self.send(message)
+
+@attr.s(auto_attribs=True, frozen=True, kw_only=True)
 class Message:
     '''A normal message from the Interface.'''
     content:MultiContent
@@ -214,7 +237,9 @@ class Message:
     dest_interface:Interface|None = None
     '''Interface which receive this message'''
 
-    _status:MessageStatus = MessageStatus.NOT_SENT
+    def __attrs_post_init__(self) -> None:
+        self._status:MessageStatus = MessageStatus.NOT_SENT
+    
     '''
     Status of the message.
     '''

@@ -13,6 +13,7 @@ async def main():
     handler:Handler = Handler()
     handler.add_interface(console_interface)
     handler.add_interface(initialier_interface)
+    await handler.init_interfaces()
     # Session
     session:Session = handler.new_session()
     # Start

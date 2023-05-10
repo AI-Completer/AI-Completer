@@ -10,6 +10,9 @@ class BaseException(Exception):
         super().__init__(*args)
         self.kwargs = kwargs
 
+    def __str__(self) -> str:
+        return f"<{self.__class__.__name__}: {self.args} {self.kwargs}>"
+
 class ParamRequired(BaseException):
     '''Param Required'''
     def __init__(self, param:str, *args: object, **kwargs: object) -> None:
@@ -60,6 +63,15 @@ class MessageNotUnderstood(BaseException):
 
 class FormatError(BaseException):
     '''Format Error'''
+    def __init__(self, message:Message ,interface: Interface, *args: object, **kwargs: object) -> None:
+        self.message:Message  = message
+        super().__init__(interface = interface, *args, **kwargs)
+
+class StopHandler(BaseException):
+    '''
+    Stop Handler
+    This exception will stop the handler if raised
+    '''
     def __init__(self, message:Message ,interface: Interface, *args: object, **kwargs: object) -> None:
         self.message:Message  = message
         super().__init__(interface = interface, *args, **kwargs)

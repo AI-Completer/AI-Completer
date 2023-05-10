@@ -1,10 +1,11 @@
 import asyncio
 from typing import Any, Optional
 from autodone import interface
-from autodone.interface.base import Character, Role
+from autodone.interface.base import Character, Interface, Role
 from autodone.session import Session, Message
 import uuid
 import json
+from autodone.session.base import MultiContent
 import error
 from autodone.utils import Struct
 
@@ -15,21 +16,31 @@ class InitInterface(interface.Interface):
     '''
     def __init__(self, id: uuid.UUID = uuid.uuid4(), character: Optional[Character] = None):
         character = character or Character(
-            name="Initializer",
+            name="initializer",
             role=Role.SYSTEM,
             interface=self,
             support_text=False,
         )
         super().__init__(character, id)
 
+        self.__init_called:bool = False
+        '''Whether cmd_init is called'''
+
     async def cmd_init(self, session:Session, message:Message):
         '''
         Init the session
         '''
+        if self.__init_called is True:
+            raise error.PermissionDenied(
+                message.cmd,
+                interface=self,
+                session=session,
+                content='Initializer can only be called once'
+            )
         try:
             data = json.loads(message.content.text)
         except json.JSONDecodeError:
-            raise error.MessageNotUnderstood(message, self)
+            raise error.MessageNotUnderstood(message, session)
         if not Struct({
             "interface-name":str,
             "command":str,
@@ -50,6 +61,7 @@ class InitInterface(interface.Interface):
         message.content = data["data"]
         message.src_interface = self
         message.dest_interface = i
+        self.__init_called = True
         session.in_handler.call_soon(session, message)
 
     async def init(self):
@@ -70,4 +82,4 @@ class InitInterface(interface.Interface):
                 call=self.cmd_init,
             )
         )
-        
+

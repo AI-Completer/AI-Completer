@@ -4,7 +4,7 @@ Handler between the interfaces
 import asyncio
 import uuid
 from typing import Iterable, Iterator, Optional, overload
-from autodone import interface
+from autodone import events, interface
 
 import error
 import session
@@ -35,6 +35,7 @@ class Handler:
         self.closed:bool = False
         self.config:Config = config
         self.global_config:Config = config['global']
+        self.on_exception:events.Exception = events.Exception(Exception)
 
         async def queue_check():
             await self.init_interfaces()
@@ -43,8 +44,11 @@ class Handler:
                     return
                 if len(self._call_queues) > 0:
                     session, message = self._call_queues.pop(0)
-                    await self.call(session, message)
-                await asyncio.sleep(0.1)
+                    try:
+                        await self.call(session, message)
+                    except Exception as e:
+                        self.on_exception.trigger(e)
+                await asyncio.create_task(asyncio.Future())
 
         asyncio.get_event_loop().call_soon(queue_check)
 

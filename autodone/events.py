@@ -23,23 +23,31 @@ class Event:
     '''ID'''
     type:Type
     '''Type of the event'''
-    callback:Callable[[Event,*object],]|None = None
-    '''Callback function'''
+    callbacks:list[Callable[[Event,*object],bool]] = []
+    '''
+    Callback functions
+    When a callback function returns True, the event will be stopped
+    '''
     extra:dict = {}
     '''Extra information'''
 
     def __attrs_post_init__(self):
         self.last_active_time = time.time()
         '''Last active time'''
-    
-    def __call__(self,*args,**kwargs):
-        if self.callback is not None:
-            self.last_active_time = time.time()
-            self.callback(self,*args,**kwargs)
 
-    def trigger(self,*args,**kwargs):
+    def __call__(self, *args, **kwargs):
+        self.last_active_time = time.time()
+        for cb in self.callbacks:
+            if cb(self, *args, **kwargs):
+                break
+
+    def trigger(self, *args, **kwargs):
         '''Trigger the event'''
-        self.__call__(*args,**kwargs)
+        self(*args, **kwargs)
+
+    def add_callback(self, cb:Callable[[Event,*object],bool]) -> None:
+        '''Add callback function'''
+        self.callbacks.append(cb)
 
 class Exception(Event):
     '''Exception Event'''
@@ -57,4 +65,3 @@ class Exception(Event):
     def reraise(self):
         '''Reraise the exception'''
         raise self.exception
-    

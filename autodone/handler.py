@@ -171,7 +171,7 @@ class Handler:
     def new_session(self) -> session.Session:
         pass
 
-    def new_session(self, interface:Interface|None = None) -> session.Session:
+    def new_session(self, interface:Optional[Interface] = None) -> session.Session:
         '''Create a new session'''
         ret = session.Session(self)
         if interface:

@@ -23,7 +23,6 @@ body:
     attributes:
       label: What is needed
       placeholder: Tell us what you want!
-      value: ""
     validations:
       required: true
   - type: textarea

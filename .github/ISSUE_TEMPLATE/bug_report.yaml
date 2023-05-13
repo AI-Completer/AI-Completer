@@ -24,7 +24,6 @@ body:
       label: What happened, and how to do?
       description: Also tell us, what did you expect to happen? And provide a posible solution if necessery.
       placeholder: Tell us what you see!
-      value: ""
     validations:
       required: true
   - type: input

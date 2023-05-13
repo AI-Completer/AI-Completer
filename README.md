@@ -8,7 +8,7 @@ A totally automatic AI to interact with environments.
 - [x] Add ChatGPT config
 - [x] Add Config.SetDefault Function
 - [x] Add colorma to control output color?
-- [ ] Add Logger Support
+- [x] Add Logger Support
 - [x] Add OpenAI API support
 - [ ] Add POE support(for plugins)
 - [ ] Add logical structure for automatic task

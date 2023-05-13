@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import asyncio
 from typing import Any, Callable, Literal, TypeVar
+from concurrent.futures import ThreadPoolExecutor
 
 class defaultdict(dict):
     '''
@@ -19,25 +20,16 @@ _on_reading:asyncio.Lock = asyncio.Lock()
 Global asyncio lock for console input
 '''
 
-async def ainput(string: str = "") -> str:
-    '''
-    Async input
-    '''
-    await _on_reading.acquire()
-    await asyncio.get_event_loop().run_in_executor(
-            None, lambda s=string: sys.stdout.write(s))
-    ret = await asyncio.get_event_loop().run_in_executor(
-            None, sys.stdin.readline)
-    _on_reading.release()
-    return ret
+async def ainput(prompt: str = "") -> str:
+    with ThreadPoolExecutor(1, "AsyncInput") as executor:
+        return (await asyncio.get_event_loop().run_in_executor(executor, input, prompt)).rstrip()
 
 async def aprint(string: str) -> None:
     '''
     Async print
     '''
     await _on_reading.acquire()
-    await asyncio.get_event_loop().run_in_executor(
-            None, lambda s=string: sys.stdout.write(s))
+    print(string)
     _on_reading.release()
 
 StructType = TypeVar('StructType', dict, list, type, Callable, tuple)
@@ -120,7 +112,7 @@ class Struct:
                         return False
                 return True
             if isinstance(struct, type):
-                return isinstance(data, struct)
+                return isinstance(data, struct) if struct != Any else True
             if callable(struct):
                 return struct(data)
             if isinstance(struct, tuple):

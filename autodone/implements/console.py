@@ -9,32 +9,32 @@ from autodone import interface, error, utils
 from autodone.config import Config
 from autodone.session import Session, Message
 from autodone.interface.base import Character, Role
+from autodone.session.base import MultiContent
 
 class ConsoleInterface(interface.Interface):
     '''
     Console Interface
     Interactive with user in console
     '''
+    namespace:str = "console"
     def __init__(self,id: uuid.UUID = uuid.uuid4(), character: Optional[Character] = None):
         character = character or Character(
             name="console",
             role=Role.USER,
-            interface=self,
         )
-        super().__init__(character, id)
+        super().__init__(character,id = id)
 
     async def ask_user(self, session:Session, message:Message):
         '''
         Ask user for input
         '''
         await utils.aprint(f"The {message.src_interface.character.name} ask you: {message.content.text}")
-        ret = await utils.ainput("Please input your answer:")
+        ret = await utils.ainput("Please input your answer: ")
         new_message = Message(
-            content=ret,
+            content=MultiContent(ret),
             session=session,
-            cmd="reply",
+            cmd="chat",
             src_interface=self,
-            dest_interface=message.src_interface,
             last_message=message,
         )
         session.in_handler.call_soon(session, new_message)
@@ -49,6 +49,7 @@ class ConsoleInterface(interface.Interface):
         '''
         Init the interface
         '''
+        await super().init()
         self.commands.add(
             interface.Command(
                 cmd="ask",
@@ -56,7 +57,7 @@ class ConsoleInterface(interface.Interface):
                 callable_roles={Role.SYSTEM, Role.AGENT},
                 overrideable=True,
                 in_interface=self,
-                call=self.ask_user,
+                callback=self.ask_user,
             ),
             interface.Command(
                 cmd="reply",
@@ -64,6 +65,6 @@ class ConsoleInterface(interface.Interface):
                 callable_roles={Role.SYSTEM, Role.AGENT},
                 overrideable=True,
                 in_interface=self,
-                call=self.reply,
+                callback=self.reply,
             )
         )

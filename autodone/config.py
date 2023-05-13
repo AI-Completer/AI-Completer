@@ -5,13 +5,12 @@ Description: Configuration file for autodone
 from __future__ import annotations
 import os
 import json
-from tkinter import E
 from typing import Any, Self, TypeVar
 from autodone.error import ConfigureMissing
-from utils import defaultdict
+from .utils import defaultdict
 import copy
 
-Pointer = TypeVar('Pointer', list)
+Pointer = list
 '''
 Pointer type
 Use list to implement pointer
@@ -20,11 +19,26 @@ Use list to implement pointer
 class EnhancedDict(defaultdict):
     '''
     Enhanced dict
+    param:
+        readonly: bool, Optional, default: False, readonly or not
     '''
-    def __init__(self, readonly:bool = True,*args, **kwargs) -> None:
-        self._readonly = readonly
+    def __update_dict(self) -> None:
+        for key, value in self.items():
+            if isinstance(value, dict):
+                self[key] = self.__class__(value, readonly=self._readonly)
+    
+    def __init__(self, *args, **kwargs) -> None:
+        self._readonly = kwargs.pop('readonly', False)
+        if not isinstance(self._readonly, bool):
+            raise TypeError("readonly must be bool")
         super().__init__(*args, **kwargs)
-        self.__dict__ = self
+        self.__update_dict()
+
+    def __missing__(self, key):
+        if self._readonly:
+            return None
+        self[key] = self.__class__()
+        return super().__getitem__(key)
 
     @property
     def readonly(self) -> bool:
@@ -40,13 +54,13 @@ class EnhancedDict(defaultdict):
         '''
         Set a value
         '''
-        if not self._writeable:
+        if self._readonly:
             raise AttributeError("EnhancedDict is not writeable")
         if '.' in path:
-            spilts = path.split('.',2)
+            spilts = path.split('.', 1)
             if spilts[0] not in self:
                 super().__setitem__(spilts[0], self.__class__())
-            self[spilts[0]][spilts[1]] = value
+            super().__getitem__(spilts[0]).set(spilts[1],value)
             return
         if isinstance(value, dict):
             value = self.__class__(value)
@@ -56,11 +70,15 @@ class EnhancedDict(defaultdict):
         '''
         Get a value
         '''
-        spilts = path.split('.',2)
+        spilts = path.split('.', 1)
         if len(spilts) == 1:
+            if default is None:
+                if path not in self:
+                    return self.__class__()
             ret = super().get(path, default)
             if isinstance(ret, dict):
                 return self.__class__(ret)
+            return ret
         else:
             return self[spilts[0]].get(spilts[1], default)
         
@@ -68,7 +86,7 @@ class EnhancedDict(defaultdict):
         '''
         Check whether the path exists
         '''
-        spilts = path.split('.',2)
+        spilts = path.split('.', 1)
         if len(spilts) == 1:
             return path in self
         else:
@@ -84,12 +102,24 @@ class EnhancedDict(defaultdict):
         
     def setdefault(self, path:str, default:Any = None) -> Any:
         if self._readonly:
-            raise AttributeError("Config is not writeable")
-        spilts = path.split('.',2)
+            raise AttributeError("The dict is not writeable")
+        spilts = path.split('.', 1)
         if len(spilts) == 1:
             return super().setdefault(path, default)
         else:
             return self[spilts[0]].setdefault(spilts[1], default)
+        
+    def update(self, data:EnhancedDict):
+        '''Update the dict'''
+        if self._readonly:
+            raise AttributeError("The dict is not writeable")
+        for key, value in data.items():
+            if isinstance(value, EnhancedDict):
+                if key not in self:
+                    self[key] = data.__class__()
+                self[key].update(value)
+            else:
+                self[key] = value
         
     def __str__(self) -> str:
         return json.dumps(self, indent=4)
@@ -98,22 +128,28 @@ class EnhancedDict(defaultdict):
         return f"<Config {str(self)}>"
     
     def __delitem__(self, __key: Any) -> None:
-        if not self._writeable:
-            raise AttributeError("Config is not writeable")
+        if self._readonly:
+            raise AttributeError("The dict is not writeable")
         return super().__delitem__(__key)
     
-    def __contains__(self, __key: object) -> bool:
-        spilts = __key.split('.',2)
+    def __contains__(self, __key: str) -> bool:
+        spilts = __key.split('.', 1)
         if len(spilts) == 1:
             return super().__contains__(__key)
         else:
             return self[spilts[0]].__contains__(spilts[1])
     
-    __getitem__ = get
+    def __getitem__(self, __key: str) -> Any:
+        spilts = __key.split('.', 1)
+        if len(spilts) == 1:
+            return super().__getitem__(__key)
+        else:
+            return self[spilts[0]].__getitem__(spilts[1])
+
     __setitem__ = set
-    __getattr__ = __getitem__
-    __setattr__ = __setitem__
-    __delattr__ = __delitem__
+
+    def __bool__(self) -> bool:
+        return self.__len__() != 0
 
     class __Session:
         '''
@@ -161,11 +197,16 @@ class Config(EnhancedDict):
         try:
             return super().require(path)
         except KeyError as e:
-            raise ConfigureMissing(f"Configure missing: {path}",parent=e) from e
+            raise ConfigureMissing(f"Configure missing: {path}",origin=self, parent=e) from e
         
     def save(self, path:str) -> None:
         with open(path, "w" ,encoding='utf-8') as f:
             json.dump(self, f, indent=4)
+
+    @property
+    def global_(self) -> Config:
+        '''Get global config'''
+        return self.get('global', Config())
     
 def loadConfig(path:str) -> Config:
     '''Load configuration from file'''

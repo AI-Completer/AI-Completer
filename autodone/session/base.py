@@ -5,19 +5,22 @@ import enum
 import json
 import logging
 import time
-from typing import Any, Coroutine, overload
 import uuid
+from typing import Any, Coroutine, Optional, TypeVar, overload
 
 import aiohttp
 import attr
-from autodone.config import EnhancedDict
 
+import autodone
 import autodone.session as session
-from autodone.handler import Handler
-from autodone.interface import Role
-from autodone.interface.base import Character, Interface
+from autodone import log
+from autodone.config import EnhancedDict
 from autodone.utils import defaultdict
 
+Handler = TypeVar('Handler', bound='autodone.handler.Handler')
+Role = TypeVar('Role', bound='autodone.interface.Role')
+Character = TypeVar('Character', bound='autodone.interface.Character')
+Interface = TypeVar('Interface', bound='autodone.interface.Interface')
 
 class Content(object):
     '''Common content class.'''
@@ -67,6 +70,8 @@ class MultiContent(Content):
             self.contents.append(Text(param))
         elif isinstance(param, list):
             self.contents.extend(param)
+        elif isinstance(param, dict):
+            self.contents.append(Text(json.dumps(param)))
         elif param is None:
             pass
         else:
@@ -99,6 +104,12 @@ class MultiContent(Content):
     def audios(self) -> list[Audio]:
         '''Get audio content.'''
         return [content for content in self.contents if isinstance(content, Audio)]
+    
+    def __str__(self):
+        return self.text
+
+    def __json__(self):
+        return self.text
 
 @enum.unique
 class MessageStatus(enum.Enum):
@@ -112,7 +123,6 @@ class MessageStatus(enum.Enum):
 
 class Session:
     '''Session'''
-    logger=logging.getLogger(__name__)
     def __init__(self, handler:Handler) -> None:
         self.create_time: float = time.time()
         '''Create time'''
@@ -128,7 +138,7 @@ class Session:
         '''Role list'''
         self.active_role:Role|None = None
         '''Active role'''
-        self.id:uuid.UUID = uuid.uuid4()
+        self._id:uuid.UUID = uuid.uuid4()
         '''ID'''
         self.in_handler:Handler = handler
         '''In which handler'''
@@ -136,6 +146,23 @@ class Session:
         '''Source interface'''
         self.extra:EnhancedDict = EnhancedDict()
         '''Extra information'''
+
+        self.logger:log.Logger=log.Logger('session')
+        '''Logger'''
+        formatter = log.Formatter()
+        _handler = log.ConsoleHandler()
+        _handler.setFormatter(formatter)
+        self.logger.addHandler(_handler)
+        if handler.global_config['debug']:
+            self.logger.setLevel(logging.DEBUG)
+        else:
+            self.logger.setLevel(logging.INFO)
+        self.logger.push(self.id.hex[:8])
+
+    @property
+    def id(self) -> uuid.UUID:
+        '''ID'''
+        return self._id
 
     async def acquire(self) -> None:
         '''Lock the session.'''
@@ -197,7 +224,7 @@ class Session:
             raise RuntimeError("Session closed")
         self.in_handler.send(self,message)
 
-    async def start(self, interface:Interface, cmd:str, data:MultiContent, awaitable:bool = True):
+    async def start(self, interface:Interface, cmd:str, data:Any, awaitable:bool = True):
         '''Start a session.'''
         if self.closed:
             raise RuntimeError("Session closed")
@@ -206,7 +233,7 @@ class Session:
                 content=MultiContent({
                     "interface-name":interface.character.name,
                     "command":cmd,
-                    "data":data
+                    "data":str(data)
                 }),
                 session=self,
                 cmd="init",
@@ -216,7 +243,16 @@ class Session:
             raise RuntimeError("Interface[Initializer] not found")
         await self.asend(message) if awaitable else self.send(message)
 
-@attr.s(auto_attribs=True, frozen=True, kw_only=True)
+    async def close(self):
+        '''Close the session.'''
+        if self.closed:
+            return
+        self.logger.debug(f"Session closing")
+        for interface in self.in_handler._interfaces:
+            await interface.session_final(self)
+        self._closed = True
+
+@attr.s(auto_attribs=True, kw_only=True)
 class Message:
     '''A normal message from the Interface.'''
     content:MultiContent
@@ -232,13 +268,16 @@ class Message:
     cmd:str
     '''Call which command to transfer this Message'''
 
-    src_interface:Interface|None = None
+    src_interface:Optional[Interface] = None
     '''Interface which send this message'''
-    dest_interface:Interface|None = None
+    dest_interface:Optional[Interface] = None
     '''Interface which receive this message'''
 
     def __attrs_post_init__(self) -> None:
         self._status:MessageStatus = MessageStatus.NOT_SENT
+
+        if not isinstance(self.content, MultiContent):
+            self.content = MultiContent(self.content)
     
     '''
     Status of the message.
@@ -265,7 +304,7 @@ class Message:
     def __repr__(self) -> str:
         return f"Message({self.character.name}, {self.content.text}, {self.session.id}, {self.id})"
     
-class MessageQueue(asyncio.Queue[session.Message]):
+class MessageQueue(asyncio.Queue[Message]):
     '''Message Queue'''
     def __init__(self, id:uuid.UUID = uuid.uuid4()):
         self.id:uuid.UUID = id

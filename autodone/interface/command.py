@@ -1,12 +1,18 @@
 '''
 Command Support For Interface
 '''
-from typing import Any, Callable, Coroutine, Iterable, Iterator, overload
+from typing import (Any, Callable, Coroutine, Iterable, Iterator, Optional, TypeVar,
+                    overload)
+
 import attr
-from autodone import session
-from autodone.interface.base import Interface
-from autodone.session.base import Role
+
+import autodone
+from autodone import log
 import autodone.error as error
+from autodone import session
+from autodone.session.base import Role
+
+Interface = TypeVar('Interface', bound='autodone.interface.Interface')
 
 @attr.s(auto_attribs=True,frozen=True)
 class CommandParamElement:
@@ -82,7 +88,7 @@ class CommandParamStruct:
                     return True
         return _check(self._struct, data)
 
-@attr.s(auto_attribs=True,frozen=True)
+@attr.s(auto_attribs=True,hash=False)
 class Command:
     '''Command Struct'''
     cmd:str = ""
@@ -91,10 +97,8 @@ class Command:
     '''Alias Names'''
     description:str = ""
     '''Description For Command'''
-    format:CommandParamStruct = CommandParamStruct({})
-    '''Format For Command'''
-    check_format:bool = True
-    '''Whether to check the format of the command'''
+    format:Optional[CommandParamStruct] = None
+    '''Format For Command, if None, no format required'''
     callable_roles:set[Role] = set()
     '''Roles who can call this command'''
     overrideable:bool = False
@@ -106,37 +110,59 @@ class Command:
 
     in_interface:Interface|None = None
     '''Interface where the command is from'''
-    _call_func:Callable[[session.Session, session.Message], Coroutine[None, None, None]]|None = None
+    callback:Optional[Callable[[session.Session, session.Message], Coroutine[None, None, None]]] = None
     '''
     Call Function To Call The Command
     If None, the command will be called by in_interface
     '''
+    def __attrs_post_init__(self):
+        self.logger:log.Logger = log.Logger("Command", log.INFO)
+        formatter = log.Formatter([self.cmd])
+        _handler = log.ConsoleHandler()
+        _handler.setFormatter(formatter)
+        self.logger.addHandler(_handler)
+        self.logger.push(self.cmd)
+        if self.in_interface is not None:
+            if self.in_interface.config['debug']:
+                self.logger.setLevel(log.DEBUG)
+            else:
+                self.logger.setLevel(log.INFO)
     
     async def call(self, session:session.Session, message:session.Message) -> None:
         '''Call the command'''
+        self.logger.info(f"Call ({session.id}, {message.id}) {message.content}")
         message.dest_interface = self.in_interface
-        if self.check_format:
-            if not self.format.check(message.data):
+        if self.format != None:
+            if not self.format.check(message.content.pure_text):
                 raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",message=message,interface=self.in_interface)
-        if self.call_func is not None:
-            return await self._call_func(session, message)
+        if self.callback is not None:
+            return await self.callback(session, message)
         else:   
             if self.in_interface is None:
                 raise error.ParamRequired(f"[Command <{self.cmd}>]in_interface required: Command.call")
             return await self.in_interface.call(session, message)
         
-    def bind(self, call_func:Callable[[session.Session, session.Message], None]) -> None:
+    def bind(self, callback:Callable[[session.Session, session.Message], None]) -> None:
         '''
         Bind a call function to the command
         If not bind, the command will be called by in_interface
         '''
-        if not callable(call_func):
+        if not callable(callback):
             raise TypeError("call_func must be a callable function")
-        self._call_func = call_func
+        self._call_func = callback
 
     def __call__(self, session:session.Session, message:session.Message) -> None:
         '''Call the command'''
         self.call(session, message)
+
+    def __hash__(self):
+        '''Hash the command'''
+        # To fix the hash error
+        return hash((
+            self.cmd, (*self.alias,), self.description, self.format, 
+             (*self.callable_roles, ), 
+            self.overrideable, tuple(self.extra.items()), 
+            self.expose))
 
 class CommandSet:
     def __init__(self) -> None:
@@ -147,38 +173,35 @@ class CommandSet:
         ...
 
     @overload
-    def add(self, cmds:Iterable[Command]) -> None:
+    def add(self, *cmds:Command) -> None:
         ...
 
-    def add(self, cmd:Command|Iterable[Command]) -> None:
+    def add(self, *cmds:object) -> None:
         '''Add a command to the set(not overrideable)'''
-        if not isinstance(cmd, Command):
-            if not isinstance(cmd, Iterable):
+        for cmd in cmds:
+            if not isinstance(cmd, Command):
                 raise TypeError("cmd must be a Command instance or an iterable object")
-            for i in cmd:
-                self.add(i)
-            return
-        if cmd in self._set:
-            raise error.Existed(cmd, cmd_set=self)
-        if cmd.cmd in self:
-            to_raise:bool = True
-            if not cmd.overrideable:
-                for i in self._set:
-                    if i.overrideable:
-                        if i.cmd == cmd.cmd:
-                            self._set.remove(i)
-                            to_raise = False
-                            break
-                        if cmd.cmd in i.alias:
-                            i.alias.remove(cmd.cmd)
-                            to_raise = False
-                            break
-            else:
-                to_raise = False
-                # Preserve the first command ? To be discussed
-            if to_raise:
-                raise error.AliasConflict(cmd.cmd, cmd_set=self)
-        self._set.add(cmd)
+            if cmd in self._set:
+                raise error.Existed(cmd, cmd_set=self)
+            if cmd.cmd in self:
+                to_raise:bool = True
+                if not cmd.overrideable:
+                    for i in self._set:
+                        if i.overrideable:
+                            if i.cmd == cmd.cmd:
+                                self._set.remove(i)
+                                to_raise = False
+                                break
+                            if cmd.cmd in i.alias:
+                                i.alias.remove(cmd.cmd)
+                                to_raise = False
+                                break
+                else:
+                    to_raise = False
+                    # Preserve the first command ? To be discussed
+                if to_raise:
+                    raise error.AliasConflict(cmd.cmd, cmd_set=self)
+            self._set.add(cmd)
 
     def set(self, cmd:Command) -> None:
         '''Add a command to the set(overrideable)'''
@@ -220,9 +243,13 @@ class CommandSet:
         '''Check if a command is in the set'''
         return cmd in [i.cmd for i in self._set] or cmd in [j for i in self._set for j in i.alias]
                 
-    def get_by_role(self, role:Role) -> set(Command):
+    def get_by_role(self, role:Role) -> set:
         '''Get commands callable by a role'''
         return {i for i in self._set if role in i.callable_roles}
+    
+    def clear(self) -> None:
+        '''Clear the set'''
+        self._set.clear()
                 
     def __contains__(self, cmd:str) -> bool:
         return cmd in [i.cmd for i in self._set] or cmd in [j for i in self._set for j in i.alias]

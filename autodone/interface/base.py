@@ -2,13 +2,13 @@
 Base Objects for Interface of AutoDone-AI
 '''
 from abc import abstractmethod
+from typing import Optional
 import uuid
 from enum import Enum, unique
 import attr
-from command import CommandSet
+from .command import CommandSet, Command
 import autodone.session as session
-from command import Command
-from autodone import error
+from autodone import error, log
 from autodone.config import Config
 
 @unique
@@ -39,12 +39,13 @@ class Character:
 
 class Interface:
     '''Interface of AutoDone-AI'''
-    def __init__(self, character:Character, id:uuid.UUID = uuid.uuid4()):
+    namespace:str = ""
+    def __init__(self, character:Character, namespace:Optional[str] = None,id:uuid.UUID = uuid.uuid4()):
         self.character = character
         '''Character of the interface'''
         self._closed:bool = False
         '''Closed'''
-        self.id:uuid.UUID = id
+        self._id:uuid.UUID = id
         '''ID'''
         self.extra:dict = {}
         '''Extra information'''
@@ -53,6 +54,25 @@ class Interface:
         self.config:Config = Config()
         self.config.readonly = True
         '''Config of Interface(Not Writeable)'''
+
+        if namespace != None:
+            self.namespace = namespace
+
+        self.logger:log.Logger = log.Logger("interface")
+        '''Logger of Interface'''
+        formatter = log.Formatter(['%s - %s' % (self.namespace, str(self._id))])
+        _handler = log.ConsoleHandler()
+        _handler.setFormatter(formatter)
+        self.logger.addHandler(_handler)
+        if self.config['debug']:
+            self.logger.setLevel(log.DEBUG)
+        else:
+            self.logger.setLevel(log.INFO)
+
+    @property
+    def id(self):
+        '''ID of the interface'''
+        return self._id
 
     def check_cmd_support(self, cmd:str) -> Command:
         '''Check whether the command is support by this interface'''
@@ -67,12 +87,12 @@ class Interface:
     @abstractmethod
     async def init(self):
         '''Initial function for Interface'''
-        pass
+        self.logger.debug("Interface %s initializing" % self.id)
 
     @abstractmethod
     async def final(self):
         '''Finial function for Interface'''
-        pass
+        self.logger.debug("Interface %s finalizing" % self.id)
 
     @abstractmethod
     async def session_init(self,session:session.Session):
@@ -94,3 +114,8 @@ class Interface:
         '''
         pass
     
+    async def close(self):
+        '''Close the interface'''
+        self._closed = True
+        self.logger.debug("Interface %s closing" % self.id)
+        await self.final()

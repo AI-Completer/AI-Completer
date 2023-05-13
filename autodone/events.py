@@ -15,13 +15,15 @@ class Type(Enum):
     '''Exception'''
     Message = 2
     '''Message'''
+    KeyboardInterrupt = 3
+    '''KeyboardInterrupt'''
 
-@attr.s(auto_attribs=True, frozen=True, kw_only=True)
+@attr.s(auto_attribs=True, kw_only=True)
 class Event:
     '''Base class for all events'''
     id:uuid.UUID = uuid.uuid4()
     '''ID'''
-    type:Type
+    type:Type = Type.Exception
     '''Type of the event'''
     callbacks:list[Callable[[Event,*object],bool]] = []
     '''
@@ -56,7 +58,7 @@ class Exception(Event):
     '''Callback function'''
 
     def __init__(self,exception:Exception) -> None:
-        super().__init__()
+        super().__init__(type=Type.Exception)
         self.type = Type.Exception
         '''Type of the event'''
         self.exception = exception

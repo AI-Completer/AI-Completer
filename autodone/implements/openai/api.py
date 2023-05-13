@@ -6,7 +6,10 @@ from typing import Any, Iterable, Literal, Optional, TypeVar
 import aiohttp
 import attr
 
-Model = TypeVar('Model', str)
+Model = str
+'''
+Model Name
+'''
 
 @attr.s(auto_attribs=True)
 class CommonParameters:
@@ -76,7 +79,7 @@ class CompletionParameters(CommonParameters):
     '''
     Completion parameters for OpenAI API
     '''
-    prompt:str
+    prompt:str = "" # To Fix ValueError: No mandatory attributes allowed after an attribute with a default value or factory.
     '''
     The prompt(s) to generate completions for. The API max length is 2048 tokens. One token is roughly 4 characters for normal English text.
     '''
@@ -102,13 +105,13 @@ class Message:
     '''
     Message for OpenAI API
     '''
-    role:Literal['system', 'user', 'agent'] = 'user'
-    '''
-    The role of the messager
-    '''
     content:str
     '''
     The content of the message
+    '''
+    role:Literal['system', 'user', 'agent'] = 'user'
+    '''
+    The role of the messager
     '''
     name:Optional[str] = None
     '''
@@ -136,6 +139,13 @@ class ChatParameters(CommonParameters):
     '''
     A list of messagers
     '''
+    def to_json(self) -> dict:
+        '''
+        Convert to json
+        '''
+        ret = attr.asdict(self, filter=lambda attr, value: value is not None and attr != 'messages')
+        ret['messages'] = [message.to_json() for message in self.messages]
+        return ret
 
 BASE_URL:str = 'https://api.openai.com/v1/'
 COMPLETIONS_URL:str = f'{BASE_URL}completions'
@@ -147,15 +157,15 @@ class EnterPoint:
     '''
     def __init__(self, api_key:str):
         self.api_key = api_key
-        self.session = aiohttp.ClientSession()
         self.proxy:Optional[dict] = None
 
     async def _request(self, url:str, parameters:CommonParameters) -> dict:
-        with self.session.post(url, data=parameters.to_json(), headers={
-            'Content-Type': 'application/json',
-            'Authorization':f"Bearer {self.api_key}",
-        }, proxy=self.proxy) as res:
-            return await res.json()
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, data=json.dumps(parameters.to_json()), headers={
+                'Content-Type': 'application/json',
+                'Authorization':f"Bearer {self.api_key}",
+            }, proxy=self.proxy) as res:
+                return await res.json()
 
     async def completions(self, parameters:CompletionParameters) -> dict:
         '''

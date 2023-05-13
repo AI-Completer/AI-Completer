@@ -1,27 +1,29 @@
 import asyncio
-from typing import Any, Optional
-from autodone import interface
-from autodone.interface.base import Character, Interface, Role
-from autodone.session import Session, Message
-import uuid
+from enum import Flag
 import json
+import uuid
+from typing import Any, Optional
+
+from autodone import error, interface
+from autodone.interface.base import Character, Interface, Role
+from autodone.session import Message, Session
 from autodone.session.base import MultiContent
-import error
 from autodone.utils import Struct
+
 
 class InitInterface(interface.Interface):
     '''
     Initializer Interface
     Only used for initializing the session request
     '''
+    namespace: str = "initializer"
     def __init__(self, id: uuid.UUID = uuid.uuid4(), character: Optional[Character] = None):
         character = character or Character(
             name="initializer",
             role=Role.SYSTEM,
-            interface=self,
             support_text=False,
         )
-        super().__init__(character, id)
+        super().__init__(character,id = id)
 
         self.__init_called:bool = False
         '''Whether cmd_init is called'''
@@ -55,20 +57,35 @@ class InitInterface(interface.Interface):
         if not i.commands.has(data["command"]):
             raise error.MessageNotUnderstood(message, self)
         cmd = i.commands.get(data["command"])
-        if not cmd.callable_roles.has(self.character.role):
+        if not self.character.role in cmd.callable_roles:
             raise error.PermissionDenied(message, self)
-        message.cmd = cmd
-        message.content = data["data"]
+        message.cmd = cmd.cmd
+        message.content = MultiContent(data["data"])
         message.src_interface = self
         message.dest_interface = i
         self.__init_called = True
         session.in_handler.call_soon(session, message)
+
+    async def cmd_reply(self, session:Session, message:Message):
+        '''
+        Reply to initializer
+        The will call the 'reply' command of the handler
+        '''
+        new_message:Message = Message(
+            content=message.content,
+            session=session,
+            cmd="chat",
+            src_interface=self,
+            last_message=message,
+        )
+        session.in_handler.call_soon(session, new_message)
 
     async def init(self):
         '''
         Initialize this interface
         Add commands for first call to handler
         '''
+        await super().init()
         self.commands.add(
             interface.Command(
                 cmd="init",
@@ -77,9 +94,18 @@ class InitInterface(interface.Interface):
                 # No one can call this command, it's only used for initializing
                 # and pass the message to the right interface
                 overrideable=True,
+                expose=True,
+                in_interface=self,
+                callback=self.cmd_init,
+            ),
+            interface.Command(
+                cmd="reply",
+                description="Reply to initializer",
+                callable_roles={Role.SYSTEM, Role.USER},
+                overrideable=True,
                 expose=False,
                 in_interface=self,
-                call=self.cmd_init,
+                callback=self.cmd_reply,
             )
         )
 

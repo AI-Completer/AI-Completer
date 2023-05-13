@@ -1,14 +1,31 @@
-from autodone.config import Config
-from autodone.interface.base import Interface
-from autodone.session import Message
+from __future__ import annotations
+from ctypes import util
+import os
+from typing import TypeVar
+import autodone
+from . import log
+
+Interface = TypeVar('Interface', bound='autodone.interface.Interface')
+Message = TypeVar('Message', bound='autodone.session.Message')
+Config = TypeVar('Config', bound='autodone.config.Config')
 
 class BaseException(Exception):
     '''Base Exception for all Autodone-AI error'''
     def __init__(self,*args:object, **kwargs: object) -> None:
-        self.interface = kwargs.popitem('interface', None)
-        self.parent = kwargs.popitem('parent', None)
+        self.interface = kwargs.pop('interface', None)
+        self.parent = kwargs.pop('parent', None)
         super().__init__(*args)
         self.kwargs = kwargs
+        self._logger:log.Logger = log.Logger('Exception')
+        formatter = log.Formatter([self.__class__.__name__])
+        _handler = log.ConsoleHandler()
+        _handler.formatter = formatter
+        self._logger.addHandler(_handler)
+        if os.environ.get('DEBUG', False):
+            self._logger.setLevel(log.DEBUG)
+        else:
+            self._logger.setLevel(log.INFO)
+        self._logger.debug(f"Exception raised. interface={self.interface} parent={self.parent} args={args} kwargs={kwargs}")
 
     def __str__(self) -> str:
         return f"<{self.__class__.__name__}: {self.args} {self.kwargs}>"
@@ -18,12 +35,6 @@ class ParamRequired(BaseException):
     def __init__(self, param:str, *args: object, **kwargs: object) -> None:
         self.param:str = param
         super().__init__(*args, **kwargs)
-
-# class CommandNotFound(BaseException):
-#     '''Command not found when call interface commands'''
-#     def __init__(self, command:str, interface: interface,*args:object , **kwargs: object) -> None:
-#         self.command:str = command
-#         super().__init__(interface = interface,*args, **kwargs)
 
 class Existed(BaseException):
     '''Existed'''
@@ -35,7 +46,7 @@ class ConfigureMissing(BaseException):
     '''Configure Missing'''
     def __init__(self, configure:str,origin:Config, *args: object, **kwargs: object) -> None:
         self.configure:str = configure
-        super().__init__(*args, **kwargs)
+        super().__init__(origin, *args, **kwargs)
 
 class AliasConflict(BaseException):
     '''Alias Conflict'''

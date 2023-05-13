@@ -11,7 +11,6 @@ __description__ = "AutoDone-AI"
 # __url__ = ""
 # Unknown yet
 
-
 from . import (
     implements,
     interface,
@@ -19,6 +18,7 @@ from . import (
     error,
     config,
     utils,
+    log,
 )
 
 from .handler import (

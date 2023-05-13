@@ -1,20 +1,29 @@
 import asyncio
-from typing import Optional
 import uuid
+from typing import Optional
 
 from autodone import *
 from autodone.config import Config
 from autodone.implements.openai.api import EnterPoint
 from autodone.interface.base import Character
-import api
 from autodone.utils import Struct
 
-class OPENAI_ChatInterface(Interface):
+from . import api
+
+from autodone.interface import Interface, Command, Role
+from autodone.session import Message, Session, MultiContent
+
+class OpenaichatInterface(Interface):
     '''
     OpenAI API Chat Interface
     '''
-    def __init__(self, character: Character, id: uuid.UUID = ...):
-        super().__init__(character, id)
+    namespace:str = "openaichat"
+    def __init__(self, character: Character, id: Optional[uuid.UUID] = None):
+        super().__init__(
+            character,
+            namespace=self.namespace,
+            id=id if id is not None else uuid.uuid4(),
+        )
 
     async def chat(self, session: Session, message: Message):
         '''
@@ -30,7 +39,7 @@ class OPENAI_ChatInterface(Interface):
             api.Message(
                 role='user',
                 content=message.content.text,
-                name=message.src_interface.character.name,
+                # name=message.src_interface.character.name,
                 )
             ]
         enterpoiot:EnterPoint = session.extra['interface.openaichat.enterpoint']
@@ -45,9 +54,8 @@ class OPENAI_ChatInterface(Interface):
         nmessage = ret['choices'][0]['message']
         param.messages.append(
             api.Message(
-                role='system',
-                content=nmessage,
-                name=self.character.name,
+                role=nmessage['role'],
+                content=nmessage['content'],
             )
         )
         session.extra['interface.openaichat.history'] = param.messages
@@ -55,14 +63,20 @@ class OPENAI_ChatInterface(Interface):
         session.send(
             Message(
                 src_interface=self,
-                dest_interface=message.src_interface,
                 cmd='ask',
                 last_message=message,
-                content=MultiContent(nmessage['text']),
+                content=MultiContent(nmessage['content']),
             )
         )
 
-    async def init(self, session: Session):
+    async def session_init(self, session: Session):    
+        '''
+        Init the session
+        '''    
+        session.extra['interface.openaichat.history'] = []
+        session.extra['interface.openaichat.enterpoint'] = api.EnterPoint(self.config['api-key'])
+
+    async def init(self):
         '''
         Init the interface
         '''
@@ -78,7 +92,7 @@ class OPENAI_ChatInterface(Interface):
             config.setdefault("chat.logit_bias", None)
             config.setdefault("chat.stream", None)
             config.setdefault("chat.user", None)
-            config.require("api_key")
+            config.require("api-key")
         
         self.proxy:Optional[dict] = None
         if config.has('interface.openaichat.proxy'):
@@ -102,13 +116,9 @@ class OPENAI_ChatInterface(Interface):
             Command(
                 cmd="chat",
                 description="Chat with OpenAI API",
-                callable_roles={Role.USER},
+                callable_roles={Role.USER, Role.SYSTEM},
                 overrideable=True,
                 in_interface=self,
-                call=self.chat,
+                callback=self.chat,
             )
         )
-        session.extra['interface.openaichat.history'] = []
-        session.extra['interface.openaichat.enterpoint'] = api.EnterPoint(self.config['api_key'])
-
-

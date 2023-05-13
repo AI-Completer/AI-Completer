@@ -1,4 +1,4 @@
-from base import (
+from .base import (
     Role,
     User,
     System,
@@ -6,7 +6,7 @@ from base import (
     Interface,
     Character,
 )
-from command import (
+from .command import (
     Command,
     CommandSet,
     CommandParamElement,

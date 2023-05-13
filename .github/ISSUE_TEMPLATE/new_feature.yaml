@@ -1,0 +1,36 @@
+name: New Feature
+description: Request a new feature
+title: "[New Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this new feature request!
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit this issue
+      description: You need to check for these requirements.
+      options:
+        - label: Do you use the lastest stable version?
+          required: false
+        - label: Have you check whether there is not same issue put forward before? 
+          required: false
+        - label: Do you check whether this problem is caused by this program itself, but not the plugins.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What is needed
+      placeholder: Tell us what you want!
+      value: ""
+    validations:
+      required: true
+  - type: textarea
+    id: ideas
+    attributes:
+      label: Ideas
+      description: Do you have any ideas for this enhancement? For example, other open-source projects, and a protental idea.
+      placeholder: Please input your idea.
+    validations:
+      required: false

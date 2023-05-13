@@ -1,0 +1,43 @@
+name: Bug Report
+description: File a bug report
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit this issue
+      description: You need to check for these requirements.
+      options:
+        - label: Do you use the lastest stable version?
+          required: false
+        - label: Have you check whether there is not same issue put forward before? 
+          required: false
+        - label: Do you check whether this problem is caused by this program itself, but not the plugins.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and how to do?
+      description: Also tell us, what did you expect to happen? And provide a posible solution if necessery.
+      placeholder: Tell us what you see!
+      value: ""
+    validations:
+      required: true
+  - type: input
+    id: py-version
+    attributes:
+      label: Python Version
+      description: What's the Python version you use.
+      placeholder: v3.11.1
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Please set DEBUG="True" environment varible and reproduce it. Copy this log to this textarea.
+      render: shell

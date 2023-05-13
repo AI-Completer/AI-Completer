@@ -1,0 +1,10 @@
+{
+    "interface":{
+        "openaichat":{
+            "api-key":"sk-..."
+        }
+    },
+    "global":{
+        "debug": false
+    }
+}

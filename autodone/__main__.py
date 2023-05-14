@@ -5,7 +5,6 @@ from autodone.config import Config
 from autodone.utils import ainput,aprint
 from . import log
 
-global __DEBUG__
 __DEBUG__:bool = False
 '''
 For debug
@@ -15,7 +14,16 @@ if os.environ['DEBUG'] == "True":
     __DEBUG__ = True
 
 logger = log.Logger("Main")
+formatter = log.Formatter()
+handler = log.ConsoleHandler()
+handler.formatter = formatter
+logger.addHandler(handler)
+if __DEBUG__:
+    logger.setLevel(log.DEBUG)
+else:
+    logger.setLevel(log.INFO)
 
+_handler:Handler = None
 async def main():
     # Read Config
     if not os.path.exists("config.json"):
@@ -41,15 +49,27 @@ async def main():
         role=Role.AGENT,
     ))
     # Handler
-    handler:Handler = Handler(config)
-    await handler.add_interface(console_interface, initialier_interface, openaichat_interface)
+    global _handler
+    _handler = Handler(config)
+    await _handler.add_interface(console_interface, initialier_interface, openaichat_interface)
     # Session
-    session:Session = await handler.new_session()
+    session:Session = await _handler.new_session()
     # Start
     await session.start(console_interface, "ask", "Please Start your conversation with AI.", __DEBUG__)
 
 loop = asyncio.new_event_loop()
 if os.name == "nt":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-loop.run_until_complete(main())
-loop.run_forever()
+try:
+    loop.run_until_complete(main())
+    loop.run_forever()
+except KeyboardInterrupt:
+    logger.info("KeyboardInterrupt")
+    # loop.stop()
+    # loop.run_until_complete(_handler.close())
+    loop.stop()
+    for task in asyncio.all_tasks(loop):
+        task.cancel()
+    loop.run_forever()
+    loop.stop()
+    loop.close()

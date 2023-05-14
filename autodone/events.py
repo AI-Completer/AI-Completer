@@ -4,7 +4,7 @@ from ast import Call
 from enum import Enum, unique
 import time
 import logging
-from typing import Callable
+from typing import Callable, Coroutine
 import uuid
 import attr
 
@@ -25,7 +25,7 @@ class Event:
     '''ID'''
     type:Type = Type.Exception
     '''Type of the event'''
-    callbacks:list[Callable[[Event,*object],bool]] = []
+    callbacks:list[Callable[[Event,*object],Coroutine[bool, None, None]]] = []
     '''
     Callback functions
     When a callback function returns True, the event will be stopped
@@ -37,17 +37,17 @@ class Event:
         self.last_active_time = time.time()
         '''Last active time'''
 
-    def __call__(self, *args, **kwargs):
+    async def __call__(self, *args, **kwargs):
         self.last_active_time = time.time()
         for cb in self.callbacks:
-            if cb(self, *args, **kwargs):
+            if (await cb(self, *args, **kwargs)):
                 break
 
-    def trigger(self, *args, **kwargs):
+    async def trigger(self, *args, **kwargs):
         '''Trigger the event'''
-        self(*args, **kwargs)
+        await self(*args, **kwargs)
 
-    def add_callback(self, cb:Callable[[Event,*object],bool]) -> None:
+    def add_callback(self, cb:Callable[[Event,*object],Coroutine[bool, None, None]]) -> None:
         '''Add callback function'''
         self.callbacks.append(cb)
 

@@ -29,7 +29,7 @@ class Handler:
         self._interfaces:set[Interface] = set()
         self._commands:CommandSet = CommandSet()
         self._call_queues:list[tuple[session.Session, session.Message]] = []
-        self._closed:bool = False
+        self._closed:asyncio.Event = asyncio.Event()
         '''Closed'''
         self.config:Config = config
         '''Config of Handler'''
@@ -40,7 +40,7 @@ class Handler:
         self.on_keyboardinterrupt:events.Exception = events.Exception(KeyboardInterrupt)
         '''Event of KeyboardInterrupt'''
 
-        self.on_keyboardinterrupt.add_callback(lambda e,obj: self.close())
+        self.on_keyboardinterrupt.add_callback(lambda e,obj:self.close())
 
         self.logger:log.Logger = log.Logger("Handler")
         '''Logger of Handler'''
@@ -58,20 +58,24 @@ class Handler:
 
         async def queue_check():
             while True:
-                if self._closed:
-                    return
                 if len(self._call_queues) > 0:
                     session, message = self._call_queues.pop(0)
                     try:
                         await self.call(session, message)
-                    except KeyboardInterrupt:
-                        self.on_exception.trigger(KeyboardInterrupt())
+                    except KeyboardInterrupt as e:
+                        await self.on_keyboardinterrupt.trigger(e)
+                    except asyncio.CancelledError as e:
+                        await self.close()
+                        return
                     except Exception as e:
-                        self.on_exception.trigger(e)
+                        await self.on_exception.trigger(e)
+                if self._closed.is_set():
+                    return
                 await asyncio.sleep(0)
         
         # Add queue check task to event loop
-        asyncio.get_event_loop().create_task(queue_check())
+        self.__coro_queue_check = queue_check()
+        asyncio.get_event_loop().create_task(self.__coro_queue_check)
 
     def __contains__(self, interface:Interface) -> bool:
         return interface in self._interfaces
@@ -87,7 +91,7 @@ class Handler:
         self.logger.debug("Closing handler")
         for i in self._interfaces:
             await i.close()
-        self._closed = True
+        self._closed.set()
 
     async def close_session(self, session:Session):
         '''Close the session'''

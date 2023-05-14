@@ -5,13 +5,12 @@ from typing import Optional
 from autodone import *
 from autodone.config import Config
 from autodone.implements.openai.api import EnterPoint
+from autodone.interface import Command, Interface, Role
 from autodone.interface.base import Character
+from autodone.session import Message, MultiContent, Session
 from autodone.utils import Struct
 
 from . import api
-
-from autodone.interface import Interface, Command, Role
-from autodone.session import Message, Session, MultiContent
 
 class OpenaichatInterface(Interface):
     '''
@@ -42,6 +41,17 @@ class OpenaichatInterface(Interface):
                 # name=message.src_interface.character.name,
                 )
             ]
+        if self.config['sys.prompt'] is not None:
+            param.messages.insert(0, api.Message(
+                    role='system',
+                    content=self.config['sys.prompt'],
+                    ))
+        if self.config['sys.max_history'] is not None:
+            param.messages = api.limitMessageToken(
+                self.config['chat.model'],
+                param.messages,
+                self.config['sys.max_input_tokens']
+            )
         enterpoiot:EnterPoint = session.extra['interface.openaichat.enterpoint']
         enterpoiot.proxy = self.proxy
         try:
@@ -58,6 +68,11 @@ class OpenaichatInterface(Interface):
                 content=nmessage['content'],
             )
         )
+        if self.config['sys.prompt'] is not None:
+            param.messages.pop(0) # Remove the first message
+        if self.config['sys.max_history'] is not None:
+            if len(param.messages) > self.config['sys.max_history']:
+                param.messages = param.messages[-self.config['sys.max_history']:]
         session.extra['interface.openaichat.history'] = param.messages
         session.extra['interface.openaichat.enterpoint'] = enterpoiot
         session.send(

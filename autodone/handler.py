@@ -196,7 +196,7 @@ class Handler:
                 await self.close()
                 return
             except Exception as e:
-                self.on_exception.trigger(e)
+                await self.on_exception.trigger(e)
         asyncio.get_event_loop().create_task(_handle_call())
 
     asend = call

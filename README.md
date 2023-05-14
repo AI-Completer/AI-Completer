@@ -30,11 +30,7 @@ python3 -m autodone
 ## To-do List
 
 We are adding more support to this program and 
-- [ ] Add ChatGPT chat support
-  - [x] Add Basic Chat Support
-  - [ ] Add System Prompt
-  - [ ] Add Tokens limit
-  - [ ] Add History Limit
+- [x] Add ChatGPT chat support
 - [ ] Add ChatGPT command support
 - [x] Add ChatGPT config
 - [x] Add Config.SetDefault Function

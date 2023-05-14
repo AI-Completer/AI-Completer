@@ -74,7 +74,10 @@ class OpenaichatInterface(Interface):
         Init the session
         '''    
         session.extra['interface.openaichat.history'] = []
-        session.extra['interface.openaichat.enterpoint'] = api.EnterPoint(self.config['api-key'])
+        enterpoint = api.EnterPoint(self.config['api-key'])
+        enterpoint.proxy = self.proxy
+        session.extra['interface.openaichat.enterpoint'] = enterpoint
+        
 
     async def init(self):
         '''
@@ -98,8 +101,8 @@ class OpenaichatInterface(Interface):
             config.require("api-key")
         
         self.proxy:Optional[dict] = None
-        if config.has('interface.openaichat.proxy'):
-            proxy_config = config['interface.openaichat.proxy']
+        if config.has('proxy'):
+            proxy_config = config['proxy']
             if isinstance(proxy_config, str):
                 self.proxy = {
                     'http':proxy_config,

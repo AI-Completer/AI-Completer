@@ -1,7 +1,10 @@
 {
     "interface":{
         "openaichat":{
-            "api-key":"sk-..."
+            "api-key":"sk-...",
+            "sys":{
+                "prompt":"You are ChatGPT created by OpenAI. Your task is to assist user."
+            }
         }
     },
     "global":{

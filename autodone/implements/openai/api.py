@@ -1,10 +1,11 @@
 import asyncio
 import json
-from re import L
 from typing import Any, Iterable, Literal, Optional, TypeVar
 
 import aiohttp
 import attr
+
+from autodone.implements import token
 
 Model = str
 '''
@@ -146,6 +147,29 @@ class ChatParameters(CommonParameters):
         ret = attr.asdict(self, filter=lambda attr, value: value is not None and attr != 'messages')
         ret['messages'] = [message.to_json() for message in self.messages]
         return ret
+
+def limitMessageToken(model:str, message:list[Message], limit:int) -> list[Message]:
+    '''
+    Limit the token of message
+    Cut from left
+    '''
+    enc = token.Encoder(model = model)
+    totallen = 0
+    ret = []
+    for rindex in range(len(message)-1, -1, -1):
+        totallen += len(enc.encode(message[rindex].content))
+        if totallen > limit:
+            ret.append(
+                Message(
+                    content = enc.decode(enc.encode(message[rindex].content)[totallen-limit:]),
+                    role = message[rindex].role,
+                    name = message[rindex].name
+                )
+            )
+            break
+        else:
+            ret.append(message[rindex])
+    return ret[::-1]
 
 BASE_URL:str = 'https://api.openai.com/v1/'
 COMPLETIONS_URL:str = f'{BASE_URL}completions'

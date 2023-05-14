@@ -92,6 +92,9 @@ class OpenaichatInterface(Interface):
             config.setdefault("chat.logit_bias", None)
             config.setdefault("chat.stream", None)
             config.setdefault("chat.user", None)
+            config.setdefault("sys.prompt", "You are ChatGPT created by OpenAI. Your task is to chat with user and assist him.")
+            config.setdefault("sys.max_history", None)
+            config.setdefault("sys.max_input_tokens", 2048)
             config.require("api-key")
         
         self.proxy:Optional[dict] = None

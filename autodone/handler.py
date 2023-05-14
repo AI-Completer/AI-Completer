@@ -3,7 +3,7 @@ Handler between the interfaces
 '''
 import asyncio
 import uuid
-from typing import Iterable, Iterator, Optional, overload
+from typing import Awaitable, Iterable, Iterator, Optional, overload
 
 from . import error, events, interface, log, session
 from .config import Config
@@ -28,7 +28,7 @@ class Handler:
     def __init__(self, config:Optional[Config] = Config()) -> None:
         self._interfaces:set[Interface] = set()
         self._commands:CommandSet = CommandSet()
-        self._call_queues:list[tuple[session.Session, session.Message]] = []
+        # self._call_queues:list[tuple[session.Session, session.Message]] = []
         self._closed:asyncio.Event = asyncio.Event()
         '''Closed'''
         self.config:Config = config
@@ -45,7 +45,6 @@ class Handler:
         self.logger:log.Logger = log.Logger("Handler")
         '''Logger of Handler'''
 
-
         formatter = log.Formatter()
         handler = log.ConsoleHandler()
         handler.formatter = formatter
@@ -55,27 +54,6 @@ class Handler:
             self.logger.setLevel(log.DEBUG)
         else:
             self.logger.setLevel(log.INFO)
-
-        async def queue_check():
-            while True:
-                if len(self._call_queues) > 0:
-                    session, message = self._call_queues.pop(0)
-                    try:
-                        await self.call(session, message)
-                    except KeyboardInterrupt as e:
-                        await self.on_keyboardinterrupt.trigger(e)
-                    except asyncio.CancelledError as e:
-                        await self.close()
-                        return
-                    except Exception as e:
-                        await self.on_exception.trigger(e)
-                if self._closed.is_set():
-                    return
-                await asyncio.sleep(0)
-        
-        # Add queue check task to event loop
-        self.__coro_queue_check = queue_check()
-        asyncio.get_event_loop().create_task(self.__coro_queue_check)
 
     def __contains__(self, interface:Interface) -> bool:
         return interface in self._interfaces
@@ -209,7 +187,17 @@ class Handler:
 
     def call_soon(self, session:session.Session, message:session.Message) -> None:
         '''Call a command soon'''
-        self._call_queues.append((session, message))
+        async def _handle_call():
+            try:
+                await self.call(session, message)
+            except KeyboardInterrupt:
+                self.on_keyboardinterrupt.trigger()
+            except asyncio.CancelledError:
+                await self.close()
+                return
+            except Exception as e:
+                self.on_exception.trigger(e)
+        asyncio.get_event_loop().create_task(_handle_call())
 
     asend = call
     '''Alias of call'''

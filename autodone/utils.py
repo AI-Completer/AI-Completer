@@ -21,8 +21,9 @@ Global asyncio lock for console input
 '''
 
 async def ainput(prompt: str = "") -> str:
-    with ThreadPoolExecutor(1, "AsyncInput") as executor:
-        return (await asyncio.get_event_loop().run_in_executor(executor, input, prompt)).rstrip()
+    async with _on_reading:
+        with ThreadPoolExecutor(1, "AsyncInput") as executor:
+            return (await asyncio.get_event_loop().run_in_executor(executor, input, prompt)).rstrip()
 
 async def aprint(string: str) -> None:
     '''

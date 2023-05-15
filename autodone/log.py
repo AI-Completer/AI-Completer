@@ -2,8 +2,9 @@
 Custom logging module
 '''
 import logging
-from typing import Iterable, Optional
 import colorama
+
+from typing import Iterable, Optional
 
 CRITICAL = logging.CRITICAL
 FATAL = logging.FATAL

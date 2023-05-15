@@ -3,13 +3,15 @@ Console Interface Implement
 Provide a console interface for Autodone-AI
 '''
 import asyncio
-from typing import Optional
 import uuid
-from autodone import interface, error, utils
+from typing import Optional
+
+from autodone import error, interface, utils
 from autodone.config import Config
-from autodone.session import Session, Message
 from autodone.interface.base import Character, Role
+from autodone.session import Message, Session
 from autodone.session.base import MultiContent
+
 
 class ConsoleInterface(interface.Interface):
     '''

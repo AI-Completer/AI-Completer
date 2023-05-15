@@ -1,17 +1,20 @@
 '''
 Base Objects for Interface of AutoDone-AI
 '''
-from abc import abstractmethod
-from typing import Optional
 import uuid
+from abc import abstractmethod
 from enum import Enum, unique
+from typing import Optional
+
 import attr
-from .command import CommandSet, Command
+
 import autodone.session as session
 from autodone import error, log
 from autodone.config import Config
-
 from autodone.interface import command
+
+from .command import Command, CommandSet
+
 
 @unique
 class Role(Enum):

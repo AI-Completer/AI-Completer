@@ -1,8 +1,11 @@
 from __future__ import annotations
-from ctypes import util
+
 import os
+from ctypes import util
 from typing import TypeVar
+
 import autodone
+
 from . import log
 
 Interface = TypeVar('Interface', bound='autodone.interface.Interface')

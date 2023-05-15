@@ -1,7 +1,7 @@
 import asyncio
-from enum import Flag
 import json
 import uuid
+from enum import Flag
 from typing import Any, Optional
 
 from autodone import error, interface

@@ -1,15 +1,14 @@
 '''
 Command Support For Interface
 '''
-from typing import (Any, Callable, Coroutine, Iterable, Iterator, Optional, TypeVar,
-                    overload)
+from typing import (Any, Callable, Coroutine, Iterable, Iterator, Optional,
+                    TypeVar, overload)
 
 import attr
 
 import autodone
-from autodone import log
 import autodone.error as error
-from autodone import session
+from autodone import log, session
 from autodone.session.base import Role
 
 Interface = TypeVar('Interface', bound='autodone.interface.Interface')

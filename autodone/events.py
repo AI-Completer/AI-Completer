@@ -1,11 +1,13 @@
 from __future__ import annotations
+
+import logging
+import time
+import uuid
 from abc import abstractmethod
 from ast import Call
 from enum import Enum, unique
-import time
-import logging
 from typing import Callable, Coroutine
-import uuid
+
 import attr
 
 @unique
@@ -44,7 +46,10 @@ class Event:
                 break
 
     async def trigger(self, *args, **kwargs):
-        '''Trigger the event'''
+        '''
+        Trigger the event
+        When triggered, the callbacks will be called orderly unless one of them returns True
+        '''
         await self(*args, **kwargs)
 
     def add_callback(self, cb:Callable[[Event,*object],Coroutine[bool, None, None]]) -> None:

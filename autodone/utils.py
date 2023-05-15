@@ -21,6 +21,9 @@ Global asyncio lock for console input
 '''
 
 async def ainput(prompt: str = "") -> str:
+    '''
+    Async input
+    '''
     async with _on_reading:
         with ThreadPoolExecutor(1, "AsyncInput") as executor:
             return (await asyncio.get_event_loop().run_in_executor(executor, input, prompt)).rstrip()
@@ -34,6 +37,9 @@ async def aprint(string: str) -> None:
     _on_reading.release()
 
 StructType = TypeVar('StructType', dict, list, type, Callable, tuple)
+'''
+Struct Type
+'''
 class Struct:
     '''
     Struct To Check Json Data

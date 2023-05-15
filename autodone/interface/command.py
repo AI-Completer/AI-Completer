@@ -273,3 +273,12 @@ class CommandSet:
         self.remove(cmd)
         self.add(value)
     
+    def register(self, value:Command):
+        '''
+        Decorator for registering a command
+        '''
+        def wrapper(func:Callable[[session.Session, session.Message], None]):
+            value.bind(func)
+            self.add(value)
+            return func
+        return wrapper

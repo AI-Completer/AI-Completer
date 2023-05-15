@@ -11,6 +11,8 @@ import autodone.session as session
 from autodone import error, log
 from autodone.config import Config
 
+from autodone.interface import command
+
 @unique
 class Role(Enum):
     '''Interface Role'''
@@ -119,3 +121,27 @@ class Interface:
         self._closed = True
         self.logger.debug("Interface %s closing" % self.id)
         await self.final()
+
+    def register_cmd(self, *, 
+                     cmd:str, 
+                     alias:list[str] = [], 
+                     desc:str = "", 
+                     format:Optional[command.CommandParamStruct] = None, 
+                     callable_roles:set[Role] = {Role.USER}, 
+                     override:bool = False,
+                     expose:bool = True,
+                     extra:dict = {},
+                     ):
+        '''Register a command'''
+        return self.commands.register(Command(
+            cmd = cmd,
+            alias = alias,
+            description = desc,
+            format = format,
+            callable_roles = callable_roles,
+            overrideable = override,
+            expose = expose,
+            extra = extra,
+            in_interface=self,
+        ))
+

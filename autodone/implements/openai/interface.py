@@ -5,8 +5,7 @@ from typing import Optional
 from autodone import *
 from autodone.config import Config
 from autodone.implements.openai.api import EnterPoint
-from autodone.interface import Command, Interface, Role
-from autodone.interface.base import Character
+from autodone.interface import Command, Interface, User, Group
 from autodone.session import Message, MultiContent, Session
 from autodone.utils import Struct
 
@@ -17,11 +16,14 @@ class OpenaichatInterface(Interface):
     OpenAI API Chat Interface
     '''
     namespace:str = "openaichat"
-    def __init__(self, character: Character, id: Optional[uuid.UUID] = None):
+    def __init__(self, user:Optional[User] = None, id: Optional[uuid.UUID] = None):
         super().__init__(
-            character,
-            namespace=self.namespace,
-            id=id if id is not None else uuid.uuid4(),
+            user=user or User(
+                name="openaichat",
+                in_group="agent",
+                support={"text"},
+            ),
+            id=id or uuid.uuid4(),
         )
 
     async def chat(self, session: Session, message: Message):
@@ -137,7 +139,7 @@ class OpenaichatInterface(Interface):
             Command(
                 cmd="chat",
                 description="Chat with OpenAI API",
-                callable_roles={Role.USER, Role.SYSTEM},
+                callable_groups={"user","system"},
                 overrideable=True,
                 in_interface=self,
                 callback=self.chat,

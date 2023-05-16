@@ -18,7 +18,8 @@ from autodone.config import EnhancedDict
 from autodone.utils import defaultdict
 
 Handler = TypeVar('Handler', bound='autodone.handler.Handler')
-Role = TypeVar('Role', bound='autodone.interface.Role')
+User = TypeVar('User', bound='autodone.interface.User')
+Group = TypeVar('Group', bound='autodone.interface.Group')
 Character = TypeVar('Character', bound='autodone.interface.Character')
 Interface = TypeVar('Interface', bound='autodone.interface.Interface')
 
@@ -134,10 +135,6 @@ class Session:
         '''Lock'''
         self._closed: bool = False
         '''Closed'''
-        self.roles:list[Role] = []
-        '''Role list'''
-        self.active_role:Role|None = None
-        '''Active role'''
         self._id:uuid.UUID = uuid.uuid4()
         '''ID'''
         self.in_handler:Handler = handler
@@ -231,13 +228,13 @@ class Session:
         try:
             message = Message(
                 content=MultiContent({
-                    "interface-name":interface.character.name,
+                    "interface-name":interface.user.name,
                     "command":cmd,
                     "data":str(data)
                 }),
                 session=self,
                 cmd="init",
-                dest_interface=[i for i in self.in_handler.interfaces if i.character.name == 'initializer'][0]
+                dest_interface=[i for i in self.in_handler.interfaces if i.user.name == 'initializer'][0]
             )
         except IndexError:
             raise RuntimeError("Interface[Initializer] not found")

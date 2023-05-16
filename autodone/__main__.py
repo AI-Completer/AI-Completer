@@ -44,9 +44,10 @@ async def main():
     else:
         name = await ainput("AI Name: ")
     # OpenAI Chat Interface
-    openaichat_interface:Interface = implements.openai.OpenaichatInterface(Character(
+    openaichat_interface:Interface = implements.openai.OpenaichatInterface(User(
         name=name,
-        role=Role.AGENT,
+        in_group="agent",
+        support={"text"},
     ))
     # Handler
     global _handler

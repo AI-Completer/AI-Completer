@@ -9,9 +9,11 @@ import attr
 import autodone
 import autodone.error as error
 from autodone import log, session
-from autodone.session.base import Role
 
 Interface = TypeVar('Interface', bound='autodone.interface.Interface')
+User = TypeVar('User', bound='autodone.interface.User')
+Group = TypeVar('Group', bound='autodone.interface.Group')
+
 
 @attr.s(auto_attribs=True,frozen=True)
 class CommandParamElement:
@@ -98,8 +100,8 @@ class Command:
     '''Description For Command'''
     format:Optional[CommandParamStruct] = None
     '''Format For Command, if None, no format required'''
-    callable_roles:set[Role] = set()
-    '''Roles who can call this command'''
+    callable_groups:set[str] = set()
+    '''Groups who can call this command'''
     overrideable:bool = False
     '''Whether this command can be overrided by other command'''
     extra:dict = {}
@@ -129,6 +131,9 @@ class Command:
     
     async def call(self, session:session.Session, message:session.Message) -> None:
         '''Call the command'''
+        if message.src_interface is not None:
+            if message.src_interface.user.in_group not in self.callable_groups:
+                raise error.PermissionDenied(f"[Command <{self.cmd}>]user {message.src_interface.user} not in callable_groups: Command.call",message=message,interface=self.in_interface)
         self.logger.info(f"Call ({session.id}, {message.id}) {message.content}")
         message.dest_interface = self.in_interface
         if self.format != None:
@@ -159,7 +164,7 @@ class Command:
         # To fix the hash error
         return hash((
             self.cmd, (*self.alias,), self.description, self.format, 
-             (*self.callable_roles, ), 
+             (*self.callable_groups, ), 
             self.overrideable, tuple(self.extra.items()), 
             self.expose))
 
@@ -242,9 +247,13 @@ class CommandSet:
         '''Check if a command is in the set'''
         return cmd in [i.cmd for i in self._set] or cmd in [j for i in self._set for j in i.alias]
                 
-    def get_by_role(self, role:Role) -> set:
-        '''Get commands callable by a role'''
-        return {i for i in self._set if role in i.callable_roles}
+    def get_by_group(self, groupname:str) -> list[Command]:
+        '''Get commands callable by a user'''
+        return [i for i in self._set if groupname in i.callable_groups]
+    
+    def get_by_user(self, user:User) -> list[Command]:
+        '''Get commands callable by a user'''
+        return [i for i in self._set if user.in_group in i.callable_groups]
     
     def clear(self) -> None:
         '''Clear the set'''

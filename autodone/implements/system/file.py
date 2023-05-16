@@ -2,7 +2,7 @@ import os
 import uuid
 from typing import Optional
 from autodone import *
-from autodone.interface.base import Character
+from autodone.interface import User, Group
 
 class FileInterface(Interface):
     '''
@@ -10,31 +10,14 @@ class FileInterface(Interface):
     Including File Read and Write
     '''
     namespace:str = 'file'
-    def __init__(self, character: Optional[Character] = None, id: Optional[uuid.UUID] = uuid.uuid4()):
-        character = character or Character(
+    def __init__(self, user: Optional[User] = None, id: Optional[uuid.UUID] = uuid.uuid4()):
+        user = user or User(
             name="file",
-            role=Role.SYSTEM,
+            in_group="system",
+            support={"text","image","audio","file"}
         )
-        super().__init__(character, 'file', id)
+        super().__init__(user, 'file', id)
 
     async def init(self):
-        '''
-        Init the interface
-        '''
-        await super().init()
-        self.commands.add(
-            Command(
-                cmd="read",
-                description="Read file",
-                callable_roles={Role.SYSTEM},
-                overrideable=True,
-            )
-        )
-        self.commands.add(
-            Command(
-                cmd="write",
-                description="Write file",
-                callable_roles={Role.SYSTEM},
-                overrideable=True,
-            )
-        )
+        ...
+        

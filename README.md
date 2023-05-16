@@ -32,12 +32,9 @@ python3 -m autodone
 We are adding more support to this program and 
 - [x] Add ChatGPT chat support
 - [ ] Add ChatGPT command support
-- [x] Add ChatGPT config
-- [x] Add Config.SetDefault Function
-- [x] Add colorma to control output color
-- [x] Add Logger Support
-- [x] Add OpenAI API support
 - [ ] Add POE support(for plugins)
 - [ ] Add logical structure for automatic task (important)
 - [ ] Add OneBot operation support (optioanl)
+- [ ] Add System Interface
+- [ ] Add User Controls and Group Controls
 

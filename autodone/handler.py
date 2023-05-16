@@ -7,7 +7,7 @@ from typing import Awaitable, Iterable, Iterator, Optional, overload
 
 from . import error, events, interface, log, session
 from .config import Config
-from .interface.base import Command, Interface, Role
+from .interface.base import Command, Interface, User, Group, UserSet, GroupSet
 from .interface.command import CommandSet
 from .session.base import Session
 
@@ -39,11 +39,19 @@ class Handler:
         '''Event of Exception'''
         self.on_keyboardinterrupt:events.Exception = events.Exception(KeyboardInterrupt)
         '''Event of KeyboardInterrupt'''
+        self._userset:UserSet = UserSet()
+        '''User Set of Handler'''
+        self._groupset:GroupSet = GroupSet()
+        '''Group Set of Handler'''
+
+        defaultExceptionHandler = lambda e,obj: self.logger.exception(e)
+        self.on_exception.add_callback(defaultExceptionHandler)
 
         self.on_keyboardinterrupt.add_callback(lambda e,obj:self.close())
 
         self.logger:log.Logger = log.Logger("Handler")
         '''Logger of Handler'''
+
 
         formatter = log.Formatter()
         handler = log.ConsoleHandler()
@@ -87,6 +95,30 @@ class Handler:
                 cmd.extra['from'] = i
                 self._commands.add(cmd)
 
+    def reload_users(self) -> None:
+        '''Reload users from interfaces'''
+        self.logger.debug("Reloading users")
+        # User
+        self._userset.clear()
+        for i in self._interfaces:
+            self._userset.add(i.user)
+        # Group
+        groupnames:set[str] = set()
+        for i in self._userset:
+            groupnames.add(i.in_group)
+        self._groupset.clear()
+        for i in groupnames:
+            _group = Group(i)
+            for j in self._userset:
+                if j.in_group == i:
+                    _group.add(j)
+            self._groupset.add(_group)
+
+    def reload(self):
+        '''Reload commands and users from interfaces'''
+        self.reload_commands()
+        self.reload_users()
+
     def check_cmd_support(self, cmd:str) -> bool:
         '''Check whether the command is support by this handler'''
         return cmd in self._commands
@@ -98,9 +130,13 @@ class Handler:
         else:
             return interface.commands.get(cmd)
     
-    def get_cmds_by_role(self, role:Role) -> list[Command]:
-        '''Get commands by role'''
-        return self._commands.get_by_role(role)
+    def get_cmds_by_group(self, groupname:str) -> list[Command]:
+        '''Get callable commands by group name'''
+        return self._commands.get_by_group(groupname)
+    
+    def get_cmds_by_user(self, user:User) -> list[Command]:
+        '''Get callable commands by user'''
+        return self._commands.get_by_user(user)
 
     @overload
     async def add_interface(self, interface:Interface) -> None:
@@ -113,14 +149,14 @@ class Handler:
     async def add_interface(self, *interfaces:Interface) -> None:
         '''Add interface to the handler'''
         for i in interfaces:
-            self.logger.debug("Adding interface %s - %s", i.id, i.character.name)
+            self.logger.debug("Adding interface %s - %s", i.id, i.user.name)
             if i in self._interfaces:
                 raise error.Existed(i, handler=self)
             self._interfaces.add(i)
             i.config = self.config['global']
             i.config.update(self.config['interface'][i.namespace])
             await i.init()
-        self.reload_commands()
+        self.reload()
 
     @overload
     async def rm_interface(self, interface:Interface) -> None:
@@ -136,13 +172,13 @@ class Handler:
             if param not in self._interfaces:
                 raise error.NotFound(param, handler=self)
             self._interfaces.remove(param)
-            self.reload_commands()
+            self.reload()
         elif isinstance(param, uuid.UUID):
             for i in self._interfaces:
                 if i.id == param:
                     await i.final()
                     self._interfaces.remove(i)
-                    self.reload_commands()
+                    self.reload()
                     return
             raise error.NotFound(param, handler=self)
         else:
@@ -155,11 +191,11 @@ class Handler:
                 return i
         raise error.NotFound(id, handler=self)
     
-    def get_interfaces(self, role:Role) -> set[Interface]:
-        '''Get interfaces by role'''
+    def get_interfaces(self, groupname:str) -> set[Interface]:
+        '''Get interfaces by Group name'''
         ret = set()
         for i in self._interfaces:
-            if i.role == role:
+            if i.user.in_group == groupname:
                 ret.add(i)
         return ret
     
@@ -180,18 +216,28 @@ class Handler:
         if cmd == None:
             raise error.CommandNotImplement(command, self)
         if from_:
-            if from_.character.role not in cmd.callable_roles:
+            if from_.user.in_group not in cmd.callable_groups:
                 raise error.PermissionDenied(from_, cmd, self)
         message.dest_interface = cmd.in_interface
         await cmd.call(session, message)
 
     def call_soon(self, session:session.Session, message:session.Message) -> None:
         '''Call a command soon'''
+
+        # Check Premission & valify availablity
+        if message.src_interface:
+            if message.dest_interface:
+                if message.src_interface.user.in_group not in message.dest_interface.check_cmd_support(message.cmd).callable_groups:
+                    raise error.PermissionDenied(message.cmd, interface=message.src_interface, handler=self)
+            else:
+                if message.src_interface.user.in_group not in self.get_cmd(message.cmd).callable_groups:
+                    raise error.PermissionDenied(message.cmd, interface=message.src_interface, handler=self)
+
         async def _handle_call():
             try:
                 await self.call(session, message)
             except KeyboardInterrupt:
-                self.on_keyboardinterrupt.trigger()
+                await self.on_keyboardinterrupt.trigger()
             except asyncio.CancelledError:
                 await self.close()
                 return

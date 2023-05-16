@@ -4,7 +4,7 @@ Base Objects for Interface of AutoDone-AI
 import uuid
 from abc import abstractmethod
 from enum import Enum, unique
-from typing import Optional
+from typing import Optional, TypeVar, overload
 
 import attr
 
@@ -15,38 +15,241 @@ from autodone.interface import command
 
 from .command import Command, CommandSet
 
-
-@unique
-class Role(Enum):
-    '''Interface Role'''
-    USER = 1
-    SYSTEM = 2
-    AGENT = 3
-
-User = Role.USER
-'''User Behind the interface'''
-System = Role.SYSTEM
-'''System Behind the interface'''
-Agent = Role.AGENT
-'''AI Agent Behind the interface'''
-
-@attr.s(auto_attribs=True, frozen=True, kw_only=True)
-class Character:
-    '''Interface Character'''
+@attr.s(auto_attribs=True, kw_only=True, hash=False)
+class User:
+    '''User'''
     name:str = ""
+    '''Name of the user'''
     id:uuid.UUID = uuid.uuid4()
-    description:str|None = None
-    role:Role = System
+    '''ID of the user'''
+    description:Optional[str] = None
+    '''Description of the user'''
+    in_group:str = ""
+    '''Main Group that the user in'''
+    # TODO: Add support for multiple groups
+    support:set[str] = set()
+    '''Supports of the user'''
 
-    support_text:bool = True
-    support_image:bool = False
-    support_audio:bool = False
+    @property
+    def support_text(self) -> bool:
+        '''Support text'''
+        return "text" in self.support
+    
+    @property
+    def support_image(self) -> bool:
+        '''Support image'''
+        return "image" in self.support
+    
+    @property
+    def support_audio(self) -> bool:
+        '''Support audio'''
+        return "audio" in self.support
+    
+    def __hash__(self) -> int:
+        return hash(self.id) + hash(self.name)
+
+class Group:
+    '''
+    Group
+    include:
+    - User
+    - System
+    - Agent
+    - ...
+    Like Linux User Group
+    '''
+    def __init__(self, name:str) -> None:
+        self.name:str = name
+        '''Name of the group'''
+        self._users:set[User] = set()
+        '''Users in the group'''
+
+    def __contains__(self, user:User) -> bool:
+        return user in self._users
+    
+    def __iter__(self):
+        return iter(self._users)
+    
+    def add(self, user:User) -> None:
+        '''Add user to the group'''
+        for u in self._users:
+            if u.name == user.name:
+                if u != user:
+                    raise error.Existed("User %s already in group %s" % (user.name, self.name))
+        self._users.add(user)
+            
+    def remove(self, user:User):
+        '''Remove user from the group'''
+        self._users.remove(user)
+
+    def clear(self):
+        '''Clear the group'''
+        self._users.clear()
+
+    def extend(self, users:set[User]):
+        '''Extend the group'''
+        for i in users:
+            self.add(i)
+
+    def __repr__(self) -> str:
+        return "<Group %s>" % self.name
+    
+    def __str__(self) -> str:
+        return self.name
+    
+    def __hash__(self) -> int:
+        return hash(self.name)
+    
+    @property
+    def users(self):
+        '''Users in the group'''
+        return self._users
+    
+class UserSet:
+    '''Set of User'''
+    def __init__(self) -> None:
+        self._set:set[User] = set()
+        '''Set of User'''
+    
+    @overload
+    def __contains__(self, user:User) -> bool:
+        pass
+
+    @overload
+    def __contains__(self, name:str) -> bool:
+        pass
+
+    def __contains__(self, user:User | str) -> bool:
+        if isinstance(user, User):
+            return user in self._set
+        else:
+            for i in self._set:
+                if i.name == user:
+                    return True
+            return False
+    
+    def has(self, name:str):
+        '''Check whether the set has the user by name'''
+        for i in self._set:
+            if i.name == name:
+                return True
+        return False
+    
+    def add(self, user:User):
+        '''Add user to the set'''
+        if self.has(user.name):
+            raise error.Existed("User %s already in the set" % user.name)
+        self._set.add(user)
+
+    @overload
+    def remove(self, user:User) -> None:
+        pass
+
+    @overload
+    def remove(self, name:str) -> None:
+        pass
+
+    def remove(self, user:User|str):
+        '''Remove user from the set'''
+        if user not in self:
+            raise error.NotFound("User %s not found in the set" % user)
+        if isinstance(user, User):
+            self._set.remove(user)
+        else:
+            for i in self._set:
+                if i.name == user:
+                    self._set.remove(i)
+                    break
+
+    def get(self, name:str):
+        '''Get user by name'''
+        for i in self._set:
+            if i.name == name:
+                return i
+        return None
+
+    def __iter__(self):
+        return iter(self._set)
+    
+    def clear(self):
+        '''Clear the set'''
+        self._set.clear()
+    
+class GroupSet:
+    '''Set of Group'''
+    def __init__(self) -> None:
+        self._set:set[Group] = set()
+        '''Set of Group'''
+
+    @overload
+    def __contains__(self, group:Group) -> bool:
+        pass
+
+    @overload
+    def __contains__(self, name:str) -> bool:
+        pass
+
+    def __contains__(self, group:Group | str) -> bool:
+        if isinstance(group, Group):
+            return group in self._set
+        else:
+            for i in self._set:
+                if i.name == group:
+                    return True
+            return False
+    
+    def has(self, name:str):
+        '''Check whether the set has the group by name'''
+        for i in self._set:
+            if i.name == name:
+                return True
+        return False
+    
+    def add(self, group:Group):
+        '''Add group to the set'''
+        if self.has(group.name):
+            raise error.Existed("Group %s already in the set" % group.name)
+        self._set.add(group)
+
+    @overload
+    def remove(self, group:Group) -> None:
+        pass
+
+    @overload
+    def remove(self, name:str) -> None:
+        pass
+
+    def remove(self, group:Group|str):
+        '''Remove group from the set'''
+        if group not in self:
+            raise error.NotFound("Group %s not found in the set" % group)
+        if isinstance(group, Group):
+            self._set.remove(group)
+        else:
+            for i in self._set:
+                if i.name == group:
+                    self._set.remove(i)
+                    break
+
+    def get(self, name:str):
+        '''Get group by name'''
+        for i in self._set:
+            if i.name == name:
+                return i
+        return None
+    
+    def __iter__(self):
+        return iter(self._set)
+    
+    def clear(self):
+        '''Clear the set'''
+        self._set.clear()
 
 class Interface:
     '''Interface of AutoDone-AI'''
     namespace:str = ""
-    def __init__(self, character:Character, namespace:Optional[str] = None,id:uuid.UUID = uuid.uuid4()):
-        self.character = character
+    def __init__(self, user:User, namespace:Optional[str] = None,id:uuid.UUID = uuid.uuid4()):
+        self.user = user
         '''Character of the interface'''
         self._closed:bool = False
         '''Closed'''
@@ -130,7 +333,7 @@ class Interface:
                      alias:list[str] = [], 
                      desc:str = "", 
                      format:Optional[command.CommandParamStruct] = None, 
-                     callable_roles:set[Role] = {Role.USER}, 
+                     callable_groups:set[str] = set(), 
                      override:bool = False,
                      expose:bool = True,
                      extra:dict = {},
@@ -141,7 +344,7 @@ class Interface:
             alias = alias,
             description = desc,
             format = format,
-            callable_roles = callable_roles,
+            callable_groups=callable_groups,
             overrideable = override,
             expose = expose,
             extra = extra,

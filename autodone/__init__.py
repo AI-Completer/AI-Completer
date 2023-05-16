@@ -33,8 +33,8 @@ from .session import (
 )
 from .interface import (
     Interface,
-    Character,
-    Role,
+    User,
+    Group,
     Command,
     CommandSet,
     CommandParamElement,

@@ -1,10 +1,9 @@
 from .base import (
-    Role,
     User,
-    System,
-    Agent,
     Interface,
-    Character,
+    Group,
+    UserSet,
+    GroupSet,
 )
 from .command import (
     Command,

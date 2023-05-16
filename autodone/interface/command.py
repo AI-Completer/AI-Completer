@@ -1,18 +1,19 @@
 '''
 Command Support For Interface
 '''
-from typing import (Any, Callable, Coroutine, Iterable, Iterator, Optional, TypeVar,
-                    overload)
+from typing import (Any, Callable, Coroutine, Iterable, Iterator, Optional,
+                    TypeVar, overload)
 
 import attr
 
 import autodone
-from autodone import log
 import autodone.error as error
-from autodone import session
-from autodone.session.base import Role
+from autodone import log, session
 
 Interface = TypeVar('Interface', bound='autodone.interface.Interface')
+User = TypeVar('User', bound='autodone.interface.User')
+Group = TypeVar('Group', bound='autodone.interface.Group')
+Handler = TypeVar('Handler', bound='autodone.handler.Handler')
 
 @attr.s(auto_attribs=True,frozen=True)
 class CommandParamElement:
@@ -99,8 +100,8 @@ class Command:
     '''Description For Command'''
     format:Optional[CommandParamStruct] = None
     '''Format For Command, if None, no format required'''
-    callable_roles:set[Role] = set()
-    '''Roles who can call this command'''
+    callable_groups:set[str] = set()
+    '''Groups who can call this command'''
     overrideable:bool = False
     '''Whether this command can be overrided by other command'''
     extra:dict = {}
@@ -128,8 +129,19 @@ class Command:
             else:
                 self.logger.setLevel(log.INFO)
     
+    def check_support(self, handler:Handler, user:User) -> bool:
+        '''Check whether the user is in callable_groups'''
+        for group in handler._groupset:
+            if group.name in self.callable_groups:
+                if user in group:
+                    return True
+        return False
+
     async def call(self, session:session.Session, message:session.Message) -> None:
         '''Call the command'''
+        if message.src_interface:
+            if not self.check_support(session.in_handler, message.src_interface.user):  
+                raise error.PermissionDenied(f"[Command <{self.cmd}>]user {message.src_interface.user} not in callable_groups: Command.call",message=message,interface=self.in_interface)
         self.logger.info(f"Call ({session.id}, {message.id}) {message.content}")
         message.dest_interface = self.in_interface
         if self.format != None:
@@ -160,7 +172,7 @@ class Command:
         # To fix the hash error
         return hash((
             self.cmd, (*self.alias,), self.description, self.format, 
-             (*self.callable_roles, ), 
+             (*self.callable_groups, ), 
             self.overrideable, tuple(self.extra.items()), 
             self.expose))
 
@@ -243,9 +255,13 @@ class CommandSet:
         '''Check if a command is in the set'''
         return cmd in [i.cmd for i in self._set] or cmd in [j for i in self._set for j in i.alias]
                 
-    def get_by_role(self, role:Role) -> set:
-        '''Get commands callable by a role'''
-        return {i for i in self._set if role in i.callable_roles}
+    def get_by_group(self, groupname:str) -> list[Command]:
+        '''Get commands callable by a user'''
+        return [i for i in self._set if groupname in i.callable_groups]
+    
+    def get_by_user(self, user:User) -> list[Command]:
+        '''Get commands callable by a user'''
+        return [i for i in self._set if user.in_group in i.callable_groups]
     
     def clear(self) -> None:
         '''Clear the set'''
@@ -273,3 +289,12 @@ class CommandSet:
         self.remove(cmd)
         self.add(value)
     
+    def register(self, value:Command):
+        '''
+        Decorator for registering a command
+        '''
+        def wrapper(func:Callable[[session.Session, session.Message], None]):
+            value.bind(func)
+            self.add(value)
+            return func
+        return wrapper

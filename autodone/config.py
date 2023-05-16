@@ -101,6 +101,12 @@ class EnhancedDict(defaultdict):
         return self.get(path)
         
     def setdefault(self, path:str, default:Any = None) -> Any:
+        '''
+        Set a value if not exists
+        param:
+            path: The path of the value
+            default: The default value
+        '''
         if self._readonly:
             raise AttributeError("The dict is not writeable")
         spilts = path.split('.', 1)
@@ -194,12 +200,18 @@ class Config(EnhancedDict):
             return Config(json.load(f))
         
     def require(self, path: str) -> Any:
+        '''
+        Require a value, raise ConfigureMissing if not found
+        '''
         try:
             return super().require(path)
         except KeyError as e:
             raise ConfigureMissing(f"Configure missing: {path}",origin=self, parent=e) from e
         
     def save(self, path:str) -> None:
+        '''
+        Save the configuration to file
+        '''
         with open(path, "w" ,encoding='utf-8') as f:
             json.dump(self, f, indent=4)
 

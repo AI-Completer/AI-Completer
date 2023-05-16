@@ -3,13 +3,15 @@ Console Interface Implement
 Provide a console interface for Autodone-AI
 '''
 import asyncio
-from typing import Optional
 import uuid
-from autodone import interface, error, utils
+from typing import Optional
+
+from autodone import error, interface, utils
 from autodone.config import Config
-from autodone.session import Session, Message
-from autodone.interface.base import Character, Role
+from autodone.interface.base import User, Group
+from autodone.session import Message, Session
 from autodone.session.base import MultiContent
+
 
 class ConsoleInterface(interface.Interface):
     '''
@@ -17,18 +19,18 @@ class ConsoleInterface(interface.Interface):
     Interactive with user in console
     '''
     namespace:str = "console"
-    def __init__(self,id: uuid.UUID = uuid.uuid4(), character: Optional[Character] = None):
-        character = character or Character(
+    def __init__(self,id: uuid.UUID = uuid.uuid4(), user:Optional[User] = None):
+        user = user or User(
             name="console",
-            role=Role.USER,
+            in_group="user",
         )
-        super().__init__(character,id = id)
+        super().__init__(user,id = id)
 
     async def ask_user(self, session:Session, message:Message):
         '''
         Ask user for input
         '''
-        await utils.aprint(f"The {message.src_interface.character.name} ask you: {message.content.text}")
+        await utils.aprint(f"The {message.src_interface.user.name} ask you: {message.content.text}")
         ret = await utils.ainput("Please input your answer: ")
         new_message = Message(
             content=MultiContent(ret),
@@ -43,7 +45,7 @@ class ConsoleInterface(interface.Interface):
         '''
         Reply to console interface
         '''
-        await utils.aprint(f"The {message.src_interface.character.name} reply you: {message.content.text}")
+        await utils.aprint(f"The {message.src_interface.user.name} reply you: {message.content.text}")
 
     async def init(self):
         '''
@@ -54,7 +56,7 @@ class ConsoleInterface(interface.Interface):
             interface.Command(
                 cmd="ask",
                 description="Ask user for question",
-                callable_roles={Role.SYSTEM, Role.AGENT},
+                callable_groups={"system", "agent"},
                 overrideable=True,
                 in_interface=self,
                 callback=self.ask_user,
@@ -62,7 +64,7 @@ class ConsoleInterface(interface.Interface):
             interface.Command(
                 cmd="reply",
                 description="Reply to user in console",
-                callable_roles={Role.SYSTEM, Role.AGENT},
+                callable_groups={"system", "agent"},
                 overrideable=True,
                 in_interface=self,
                 callback=self.reply,

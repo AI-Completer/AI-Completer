@@ -5,24 +5,25 @@ from typing import Optional
 from autodone import *
 from autodone.config import Config
 from autodone.implements.openai.api import EnterPoint
-from autodone.interface.base import Character
+from autodone.interface import Command, Interface, User, Group
+from autodone.session import Message, MultiContent, Session
 from autodone.utils import Struct
 
 from . import api
-
-from autodone.interface import Interface, Command, Role
-from autodone.session import Message, Session, MultiContent
 
 class OpenaichatInterface(Interface):
     '''
     OpenAI API Chat Interface
     '''
     namespace:str = "openaichat"
-    def __init__(self, character: Character, id: Optional[uuid.UUID] = None):
+    def __init__(self, user:Optional[User] = None, id: Optional[uuid.UUID] = None):
         super().__init__(
-            character,
-            namespace=self.namespace,
-            id=id if id is not None else uuid.uuid4(),
+            user=user or User(
+                name="openaichat",
+                in_group="agent",
+                support={"text"},
+            ),
+            id=id or uuid.uuid4(),
         )
 
     async def chat(self, session: Session, message: Message):
@@ -42,6 +43,17 @@ class OpenaichatInterface(Interface):
                 # name=message.src_interface.character.name,
                 )
             ]
+        if self.config['sys.prompt'] is not None:
+            param.messages.insert(0, api.Message(
+                    role='system',
+                    content=self.config['sys.prompt'],
+                    ))
+        if self.config['sys.max_history'] is not None:
+            param.messages = api.limitMessageToken(
+                self.config['chat.model'],
+                param.messages,
+                self.config['sys.max_input_tokens']
+            )
         enterpoiot:EnterPoint = session.extra['interface.openaichat.enterpoint']
         enterpoiot.proxy = self.proxy
         try:
@@ -58,6 +70,11 @@ class OpenaichatInterface(Interface):
                 content=nmessage['content'],
             )
         )
+        if self.config['sys.prompt'] is not None:
+            param.messages.pop(0) # Remove the first message
+        if self.config['sys.max_history'] is not None:
+            if len(param.messages) > self.config['sys.max_history']:
+                param.messages = param.messages[-self.config['sys.max_history']:]
         session.extra['interface.openaichat.history'] = param.messages
         session.extra['interface.openaichat.enterpoint'] = enterpoiot
         session.send(
@@ -74,7 +91,10 @@ class OpenaichatInterface(Interface):
         Init the session
         '''    
         session.extra['interface.openaichat.history'] = []
-        session.extra['interface.openaichat.enterpoint'] = api.EnterPoint(self.config['api-key'])
+        enterpoint = api.EnterPoint(self.config['api-key'])
+        enterpoint.proxy = self.proxy
+        session.extra['interface.openaichat.enterpoint'] = enterpoint
+        
 
     async def init(self):
         '''
@@ -92,11 +112,14 @@ class OpenaichatInterface(Interface):
             config.setdefault("chat.logit_bias", None)
             config.setdefault("chat.stream", None)
             config.setdefault("chat.user", None)
+            config.setdefault("sys.prompt", "You are ChatGPT created by OpenAI. Your task is to chat with user and assist him.")
+            config.setdefault("sys.max_history", None)
+            config.setdefault("sys.max_input_tokens", 2048)
             config.require("api-key")
         
         self.proxy:Optional[dict] = None
-        if config.has('interface.openaichat.proxy'):
-            proxy_config = config['interface.openaichat.proxy']
+        if config.has('proxy'):
+            proxy_config = config['proxy']
             if isinstance(proxy_config, str):
                 self.proxy = {
                     'http':proxy_config,
@@ -116,7 +139,7 @@ class OpenaichatInterface(Interface):
             Command(
                 cmd="chat",
                 description="Chat with OpenAI API",
-                callable_roles={Role.USER, Role.SYSTEM},
+                callable_groups={"user","system"},
                 overrideable=True,
                 in_interface=self,
                 callback=self.chat,

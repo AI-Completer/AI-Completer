@@ -1,11 +1,11 @@
 import asyncio
-from enum import Flag
 import json
 import uuid
+from enum import Flag
 from typing import Any, Optional
 
 from autodone import error, interface
-from autodone.interface.base import Character, Interface, Role
+from autodone.interface.base import User, Interface, Group
 from autodone.session import Message, Session
 from autodone.session.base import MultiContent
 from autodone.utils import Struct
@@ -17,13 +17,12 @@ class InitInterface(interface.Interface):
     Only used for initializing the session request
     '''
     namespace: str = "initializer"
-    def __init__(self, id: uuid.UUID = uuid.uuid4(), character: Optional[Character] = None):
-        character = character or Character(
+    def __init__(self, id: uuid.UUID = uuid.uuid4(), user: Optional[User] = None):
+        user = user or User(
             name="initializer",
-            role=Role.SYSTEM,
-            support_text=False,
+            in_group="system",
         )
-        super().__init__(character,id = id)
+        super().__init__(user,id = id)
 
         self.__init_called:bool = False
         '''Whether cmd_init is called'''
@@ -50,14 +49,14 @@ class InitInterface(interface.Interface):
         }).check(data):
             raise error.MessageNotUnderstood(message, self)
         for i in session.in_handler:
-            if i.character.name == data["interface-name"]:
+            if i.user.name == data["interface-name"]:
                 break
-        if i.character.name != data["interface-name"]:
+        if i.user.name != data["interface-name"]:
             raise error.NotFound("Interface Not Found",message=message, interface=self, data=data)
         if not i.commands.has(data["command"]):
             raise error.MessageNotUnderstood(message, self)
         cmd = i.commands.get(data["command"])
-        if not self.character.role in cmd.callable_roles:
+        if not self.user.in_group in cmd.callable_groups:
             raise error.PermissionDenied(message, self)
         message.cmd = cmd.cmd
         message.content = MultiContent(data["data"])
@@ -90,7 +89,7 @@ class InitInterface(interface.Interface):
             interface.Command(
                 cmd="init",
                 description="Initialize the session",
-                callable_roles=set(),
+                callable_groups={"system"},
                 # No one can call this command, it's only used for initializing
                 # and pass the message to the right interface
                 overrideable=True,
@@ -101,7 +100,7 @@ class InitInterface(interface.Interface):
             interface.Command(
                 cmd="reply",
                 description="Reply to initializer",
-                callable_roles={Role.SYSTEM, Role.USER},
+                callable_groups={"user", "system"},
                 overrideable=True,
                 expose=False,
                 in_interface=self,

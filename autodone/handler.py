@@ -7,7 +7,7 @@ from typing import Awaitable, Iterable, Iterator, Optional, overload
 
 from . import error, events, interface, log, session
 from .config import Config
-from .interface.base import Command, Interface, User, Group, UserSet, GroupSet
+from .interface import Command, Interface, User, Group, UserSet, GroupSet
 from .interface.command import CommandSet
 from .session.base import Session
 
@@ -105,12 +105,13 @@ class Handler:
         # Group
         groupnames:set[str] = set()
         for i in self._userset:
-            groupnames.add(i.in_group)
+            for j in i.all_groups:
+                groupnames.add(j)
         self._groupset.clear()
         for i in groupnames:
             _group = Group(i)
             for j in self._userset:
-                if j.in_group == i:
+                if i in j.all_groups:
                     _group.add(j)
             self._groupset.add(_group)
 

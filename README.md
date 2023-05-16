@@ -30,7 +30,7 @@ python3 -m autodone
 ## To-do List
 
 We are adding more support to this program and 
-- [x] Add ChatGPT chat support
+- [ ] Add Multi-Group Support
 - [ ] Add ChatGPT command support
 - [ ] Add POE support(for plugins)
 - [ ] Add logical structure for automatic task (important)

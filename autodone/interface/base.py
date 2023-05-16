@@ -4,7 +4,7 @@ Base Objects for Interface of AutoDone-AI
 import uuid
 from abc import abstractmethod
 from enum import Enum, unique
-from typing import Optional, TypeVar, overload
+from typing import Any, Optional, TypeVar, overload
 
 import attr
 
@@ -24,9 +24,10 @@ class User:
     '''ID of the user'''
     description:Optional[str] = None
     '''Description of the user'''
-    in_group:str = ""
+    in_group:str = attr.ib(default="",on_setattr=lambda self, attr, value: self.all_groups.add(value))
     '''Main Group that the user in'''
-    # TODO: Add support for multiple groups
+    all_groups:set[str] = set()
+    '''Groups that the user in'''
     support:set[str] = set()
     '''Supports of the user'''
 
@@ -47,6 +48,9 @@ class User:
     
     def __hash__(self) -> int:
         return hash(self.id) + hash(self.name)
+    
+    def __attrs_post_init__(self):
+        self.all_groups.add(self.in_group)
 
 class Group:
     '''
@@ -244,6 +248,14 @@ class GroupSet:
     def clear(self):
         '''Clear the set'''
         self._set.clear()
+
+    def finduser(self, username:str):
+        '''Find user by name'''
+        for i in self._set:
+            for j in i:
+                if j.name == username:
+                    return j
+        return None
 
 class Interface:
     '''Interface of AutoDone-AI'''

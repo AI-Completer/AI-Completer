@@ -13,7 +13,7 @@ from autodone import log, session
 Interface = TypeVar('Interface', bound='autodone.interface.Interface')
 User = TypeVar('User', bound='autodone.interface.User')
 Group = TypeVar('Group', bound='autodone.interface.Group')
-
+Handler = TypeVar('Handler', bound='autodone.handler.Handler')
 
 @attr.s(auto_attribs=True,frozen=True)
 class CommandParamElement:
@@ -129,10 +129,18 @@ class Command:
             else:
                 self.logger.setLevel(log.INFO)
     
+    def check_support(self, handler:Handler, user:User) -> bool:
+        '''Check whether the user is in callable_groups'''
+        for group in handler._groupset:
+            if group.name in self.callable_groups:
+                if user in group:
+                    return True
+        return False
+
     async def call(self, session:session.Session, message:session.Message) -> None:
         '''Call the command'''
-        if message.src_interface is not None:
-            if message.src_interface.user.in_group not in self.callable_groups:
+        if message.src_interface:
+            if not self.check_support(session.in_handler, message.src_interface.user):  
                 raise error.PermissionDenied(f"[Command <{self.cmd}>]user {message.src_interface.user} not in callable_groups: Command.call",message=message,interface=self.in_interface)
         self.logger.info(f"Call ({session.id}, {message.id}) {message.content}")
         message.dest_interface = self.in_interface

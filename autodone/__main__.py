@@ -62,7 +62,7 @@ loop = asyncio.new_event_loop()
 if os.name == "nt":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 try:
-    loop.run_until_complete(main())
+    loop.create_task(main())
     loop.run_forever()
 except KeyboardInterrupt:
     logger.info("KeyboardInterrupt")

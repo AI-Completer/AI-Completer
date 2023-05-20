@@ -90,3 +90,8 @@ class StopHandler(BaseException):
         self.message:Message  = message
         super().__init__(interface = interface, *args, **kwargs)
 
+class InvalidPath(BaseException):
+    '''Invalid Path'''
+    def __init__(self, path:str, *args: object, **kwargs: object) -> None:
+        self.path:str = path
+        super().__init__(*args, **kwargs)

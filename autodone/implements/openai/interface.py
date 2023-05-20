@@ -21,6 +21,7 @@ class OpenaichatInterface(Interface):
             user=user or User(
                 name="openaichat",
                 in_group="agent",
+                in_groups={"agent","command"},
                 support={"text"},
             ),
             id=id or uuid.uuid4(),
@@ -77,12 +78,21 @@ class OpenaichatInterface(Interface):
                 param.messages = param.messages[-self.config['sys.max_history']:]
         session.extra['interface.openaichat.history'] = param.messages
         session.extra['interface.openaichat.enterpoint'] = enterpoiot
-        session.send(
+        ret = await session.asend(
             Message(
                 src_interface=self,
                 cmd='ask',
                 last_message=message,
                 content=MultiContent(nmessage['content']),
+            )
+        )
+        # Call Self
+        session.send(
+            Message(
+                src_interface=self,
+                cmd='chat',
+                last_message=message,
+                content=MultiContent(ret),
             )
         )
 
@@ -139,7 +149,7 @@ class OpenaichatInterface(Interface):
             Command(
                 cmd="chat",
                 description="Chat with OpenAI API",
-                callable_groups={"user","system"},
+                callable_groups={"user","system","agent"},
                 overrideable=True,
                 in_interface=self,
                 callback=self.chat,

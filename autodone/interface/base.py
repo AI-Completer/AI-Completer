@@ -330,7 +330,8 @@ class Interface:
         Call the command
 
         *Note*: Handler Class has add the history, no need to add it again
-        Call by this method will skip the command check
+        Call by this method will skip the command check,
+        this command can return any type of value
         '''
         pass
     
@@ -340,26 +341,11 @@ class Interface:
         self.logger.debug("Interface %s closing" % self.id)
         await self.final()
 
-    def register_cmd(self, *, 
-                     cmd:str, 
-                     alias:list[str] = [], 
-                     desc:str = "", 
-                     format:Optional[command.CommandParamStruct] = None, 
-                     callable_groups:set[str] = set(), 
-                     override:bool = False,
-                     expose:bool = True,
-                     extra:dict = {},
-                     ):
+    def register_cmd(self, *args, **kwargs):
         '''Register a command'''
         return self.commands.register(Command(
-            cmd = cmd,
-            alias = alias,
-            description = desc,
-            format = format,
-            callable_groups=callable_groups,
-            overrideable = override,
-            expose = expose,
-            extra = extra,
             in_interface=self,
+            *args,
+            **kwargs
         ))
 

@@ -37,4 +37,4 @@ We are adding more support to this program and
 - [ ] Add OneBot operation support (optioanl)
 - [ ] Add System Interface
 - [ ] Add User Controls and Group Controls
-
+- [ ] Add Force awaitable for command (and relative return value) <br> for calling more conviniently and catch error

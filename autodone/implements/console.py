@@ -30,16 +30,8 @@ class ConsoleInterface(interface.Interface):
         '''
         Ask user for input
         '''
-        await utils.aprint(f"The {message.src_interface.user.name} ask you: {message.content.text}")
-        ret = await utils.ainput("Please input your answer: ")
-        new_message = Message(
-            content=MultiContent(ret),
-            session=session,
-            cmd="chat",
-            src_interface=self,
-            last_message=message,
-        )
-        session.in_handler.call_soon(session, new_message)
+        await utils.aprint(f"The {message.src_interface.user.name if message.src_interface else '[Unknown]'} ask you: {message.content.text}")
+        return await utils.ainput("Please input your answer: ")
 
     async def reply(self, session:Session, message:Message):
         '''
@@ -56,7 +48,7 @@ class ConsoleInterface(interface.Interface):
             interface.Command(
                 cmd="ask",
                 description="Ask user for question",
-                callable_groups={"system", "agent"},
+                callable_groups={"system", "command", "agent"},
                 overrideable=True,
                 in_interface=self,
                 callback=self.ask_user,
@@ -64,7 +56,7 @@ class ConsoleInterface(interface.Interface):
             interface.Command(
                 cmd="reply",
                 description="Reply to user in console",
-                callable_groups={"system", "agent"},
+                callable_groups={"system", "command"},
                 overrideable=True,
                 in_interface=self,
                 callback=self.reply,

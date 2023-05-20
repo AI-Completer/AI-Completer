@@ -42,14 +42,15 @@ class Event:
         self.last_active_time = time.time()
         for cb in self.callbacks:
             if (await cb(self, *args, **kwargs)):
-                break
+                return True
+        return False
 
     async def trigger(self, *args, **kwargs):
         '''
         Trigger the event
         When triggered, the callbacks will be called orderly unless one of them returns True
         '''
-        await self(*args, **kwargs)
+        return await self(*args, **kwargs)
 
     def add_callback(self, cb:Callable[[Event,*object],Coroutine[bool, None, None]]) -> None:
         '''Add callback function'''

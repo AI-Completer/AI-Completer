@@ -46,19 +46,19 @@ class Formatter(logging.Formatter):
         Format the record
         '''
         nrecord = record
-        nrecord.asctime = colorama.Fore.BLACK + colorama.Style.BRIGHT + self.formatTime(record, self.datefmt) + colorama.Fore.RESET
+        nrecord.message = record.getMessage()
+        nrecord.asctime = colorama.Fore.BLACK + colorama.Style.DIM + self.formatTime(record, self.datefmt) + colorama.Fore.RESET + colorama.Style.RESET_ALL
         nrecord.levelname = self.getColor(record.levelno) + record.levelname + colorama.Fore.RESET
-        nrecord.name = colorama.Fore.WHITE + record.name + colorama.Fore.RESET
+        nrecord.name = colorama.Fore.WHITE + colorama.Style.DIM + record.name + colorama.Fore.RESET + colorama.Style.RESET_ALL
         nrecord.message = colorama.Fore.WHITE + record.getMessage() + colorama.Fore.RESET
 
         self._fmt = "{asctime} - " + \
-            "{levelname:6}" + \
+            "{levelname:>6}" + \
             " [{name}]" + "".join([
-            f"[{sub}]" for sub in self.substruct
+            f"[{colorama.Fore.WHITE + colorama.Style.DIM + sub + colorama.Fore.RESET + colorama.Style.RESET_ALL}]" 
+                for sub in self.substruct
         ]) + " {message}"
 
-        record.message = record.getMessage()
-        record.asctime = self.formatTime(record, self.datefmt)
         return self._fmt.format(**nrecord.__dict__)
 
 ConsoleHandler = logging.StreamHandler

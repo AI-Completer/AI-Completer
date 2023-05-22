@@ -109,8 +109,10 @@ class MultiContent(Content):
     def __str__(self):
         return self.text
 
-    def __json__(self):
-        return self.text
+    @property
+    def json(self) -> dict:
+        '''Get json content.'''
+        return json.loads(self.pure_text)
 
 @enum.unique
 class MessageStatus(enum.Enum):
@@ -209,7 +211,7 @@ class Session:
     def closed(self) -> bool:
         return self._closed
     
-    def asend(self, message:Message) -> Coroutine[Any, Any, None]:
+    def asend(self, message:Message):
         '''Send a message.(async)'''
         if self._closed:
             raise RuntimeError("Session closed")
@@ -219,26 +221,26 @@ class Session:
         '''Send a message.'''
         if self._closed:
             raise RuntimeError("Session closed")
-        self.in_handler.send(self,message)
+        return self.in_handler.send(self,message)
 
-    async def start(self, interface:Interface, cmd:str, data:Any, awaitable:bool = True):
-        '''Start a session.'''
-        if self.closed:
-            raise RuntimeError("Session closed")
-        try:
-            message = Message(
-                content=MultiContent({
-                    "interface-name":interface.user.name,
-                    "command":cmd,
-                    "data":str(data)
-                }),
-                session=self,
-                cmd="init",
-                dest_interface=[i for i in self.in_handler.interfaces if i.user.name == 'initializer'][0]
-            )
-        except IndexError:
-            raise RuntimeError("Interface[Initializer] not found")
-        await self.asend(message) if awaitable else self.send(message)
+    # async def start(self, interface:Interface, cmd:str, data:Any, awaitable:bool = True):
+    #     '''Start a session.'''
+    #     if self.closed:
+    #         raise RuntimeError("Session closed")
+    #     try:
+    #         message = Message(
+    #             content=MultiContent({
+    #                 "interface-name":interface.user.name,
+    #                 "command":cmd,
+    #                 "data":str(data)
+    #             }),
+    #             session=self,
+    #             cmd="init",
+    #             dest_interface=[i for i in self.in_handler.interfaces if i.user.name == 'initializer'][0]
+    #         )
+    #     except IndexError:
+    #         raise RuntimeError("Interface[Initializer] not found")
+    #     return await self.asend(message) if awaitable else self.send(message)
 
     async def close(self):
         '''Close the session.'''

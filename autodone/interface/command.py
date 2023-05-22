@@ -1,6 +1,7 @@
 '''
 Command Support For Interface
 '''
+import json
 from typing import (Any, Callable, Coroutine, Iterable, Iterator, Optional,
                     TypeVar, overload)
 
@@ -88,6 +89,24 @@ class CommandParamStruct:
                         raise TypeError(f"data must be {struct.type}")
                     return True
         return _check(self._struct, data)
+    
+    def json_description(self):
+        '''
+        Get the json description of the struct
+        For example:
+            {"text":<what the user input>}
+        '''
+        def _json_description(struct:dict|list|CommandParamElement):
+            if isinstance(struct, dict):
+                ret = {}
+                for key,value in struct.items():
+                    ret[key] = _json_description(value)
+                return ret
+            elif isinstance(struct, list):
+                return [_json_description(struct[0])]
+            elif isinstance(struct, CommandParamElement):
+                return struct.description
+        return json.dumps(_json_description(self._struct))
 
 @attr.s(auto_attribs=True,hash=False)
 class Command:
@@ -111,11 +130,20 @@ class Command:
 
     in_interface:Interface|None = None
     '''Interface where the command is from'''
-    callback:Optional[Callable[[session.Session, session.Message], Coroutine[None, None, None]]] = None
+    callback:Optional[Callable[[session.Session, session.Message], Coroutine[Any, Any, Any]]] = None
     '''
     Call Function To Call The Command
     If None, the command will be called by in_interface
     '''
+    to_return:bool = False
+    '''
+    Whether the command will return a value
+    '''
+    force_await:bool = False
+    '''
+    Whether the command will force await
+    '''
+
     def __attrs_post_init__(self):
         self.logger:log.Logger = log.Logger("Command", log.INFO)
         formatter = log.Formatter([self.cmd])
@@ -137,22 +165,25 @@ class Command:
                     return True
         return False
 
-    async def call(self, session:session.Session, message:session.Message) -> None:
+    async def call(self, session:session.Session, message:session.Message):
         '''Call the command'''
         if message.src_interface:
             if not self.check_support(session.in_handler, message.src_interface.user):  
-                raise error.PermissionDenied(f"[Command <{self.cmd}>]user {message.src_interface.user} not in callable_groups: Command.call",message=message,interface=self.in_interface)
-        self.logger.info(f"Call ({session.id}, {message.id}) {message.content}")
+                raise error.PermissionDenied(f"user {message.src_interface.user} not in callable_groups: Command.call{str(self.callable_groups)}",message=message,interface=self.in_interface)
+        self.logger.debug(f"Call ({session.id}, {message.id}) {message.content}")
         message.dest_interface = self.in_interface
         if self.format != None:
             if not self.format.check(message.content.pure_text):
                 raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",message=message,interface=self.in_interface)
         if self.callback is not None:
-            return await self.callback(session, message)
+            ret = await self.callback(session, message)
         else:   
             if self.in_interface is None:
                 raise error.ParamRequired(f"[Command <{self.cmd}>]in_interface required: Command.call")
-            return await self.in_interface.call(session, message)
+            ret = await self.in_interface.call(session, message)
+        if ret is not None:
+            self.logger.debug("Command return value: %s" % str(ret))
+        return ret
         
     def bind(self, callback:Callable[[session.Session, session.Message], None]) -> None:
         '''

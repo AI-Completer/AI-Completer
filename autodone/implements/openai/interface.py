@@ -21,6 +21,7 @@ class OpenaichatInterface(Interface):
             user=user or User(
                 name="openaichat",
                 in_group="agent",
+                all_groups={"agent","command"},
                 support={"text"},
             ),
             id=id or uuid.uuid4(),
@@ -77,12 +78,22 @@ class OpenaichatInterface(Interface):
                 param.messages = param.messages[-self.config['sys.max_history']:]
         session.extra['interface.openaichat.history'] = param.messages
         session.extra['interface.openaichat.enterpoint'] = enterpoiot
-        session.send(
+        ret = await session.asend(
             Message(
                 src_interface=self,
                 cmd='ask',
                 last_message=message,
                 content=MultiContent(nmessage['content']),
+            )
+        )
+        # Call Self
+        session.send(
+            Message(
+                src_interface=self,
+                dest_interface=self,
+                cmd='chat',
+                last_message=message,
+                content=MultiContent(ret),
             )
         )
 
@@ -91,7 +102,7 @@ class OpenaichatInterface(Interface):
         Init the session
         '''    
         session.extra['interface.openaichat.history'] = []
-        enterpoint = api.EnterPoint(self.config['api-key'])
+        enterpoint = api.EnterPoint(self.config['openai.api-key'])
         enterpoint.proxy = self.proxy
         session.extra['interface.openaichat.enterpoint'] = enterpoint
         
@@ -115,7 +126,7 @@ class OpenaichatInterface(Interface):
             config.setdefault("sys.prompt", "You are ChatGPT created by OpenAI. Your task is to chat with user and assist him.")
             config.setdefault("sys.max_history", None)
             config.setdefault("sys.max_input_tokens", 2048)
-            config.require("api-key")
+            config.require("openai.api-key")
         
         self.proxy:Optional[dict] = None
         if config.has('proxy'):
@@ -139,7 +150,7 @@ class OpenaichatInterface(Interface):
             Command(
                 cmd="chat",
                 description="Chat with OpenAI API",
-                callable_groups={"user","system"},
+                callable_groups={"user","system","agent"},
                 overrideable=True,
                 in_interface=self,
                 callback=self.chat,

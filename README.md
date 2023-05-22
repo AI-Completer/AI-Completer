@@ -35,6 +35,6 @@ We are adding more support to this program and
 - [ ] Add POE support(for plugins)
 - [ ] Add logical structure for automatic task (important)
 - [ ] Add OneBot operation support (optioanl)
-- [ ] Add System Interface
-- [ ] Add User Controls and Group Controls
-
+- [x] Add System Interface (partial)
+- [x] Add User Controls and Group Controls
+- [ ] Add Force awaitable for command (and relative return value) <br> for calling more conviniently and catch error

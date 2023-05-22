@@ -167,3 +167,6 @@ config.toml
 
 # VSCode
 .vscode/
+
+# Temporary test scripts
+test_*.py

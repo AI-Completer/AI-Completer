@@ -26,9 +26,12 @@ else:
 _handler:Handler = None
 async def main():
     # Read Config
+    logger.info("Start Executing")
     if not os.path.exists("config.json"):
+        logger.debug("config.json Not Found. Use default config.")
         config = Config()
     else:
+        logger.debug("config.json Found. Reading config.json")
         config = Config.loadFromFile("config.json")
     config.setdefault("global.debug", False)
     if config["global.debug"]:
@@ -36,27 +39,28 @@ async def main():
         os.environ['DEBUG'] = "True"
     # Console Interface
     console_interface:Interface = implements.ConsoleInterface()
-    # Initialier Interface
-    initialier_interface:Interface = implements.InitInterface()
-    # Input AI name
-    if __DEBUG__:
-        name = "Debug"
-    else:
-        name = await ainput("AI Name: ")
-    # OpenAI Chat Interface
-    openaichat_interface:Interface = implements.openai.OpenaichatInterface(User(
-        name=name,
-        in_group="agent",
-        support={"text"},
-    ))
+    openaichat_interface:Interface = implements.openai.OpenaichatInterface()
     # Handler
     global _handler
     _handler = Handler(config)
-    await _handler.add_interface(console_interface, initialier_interface, openaichat_interface)
+    # await _handler.add_interface(console_interface, initialier_interface, openaichat_interface)
+    await _handler.add_interface(console_interface, openaichat_interface)
     # Session
     session:Session = await _handler.new_session()
     # Start
-    await session.start(console_interface, "ask", "Please Start your conversation with AI.", __DEBUG__)
+    ret = await session.asend(Message(
+        cmd='ask',
+        session=session,
+        dest_interface=console_interface,
+        content=MultiContent("Start Your Conversation"),
+    ))
+    session.send(Message(
+        cmd='chat',
+        session=session,
+        src_interface=console_interface,
+        dest_interface=openaichat_interface,
+        content=MultiContent(ret),
+    ))
 
 loop = asyncio.new_event_loop()
 if os.name == "nt":

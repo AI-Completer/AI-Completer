@@ -44,9 +44,11 @@ class Handler:
         self._groupset:GroupSet = GroupSet()
         '''Group Set of Handler'''
 
-        defaultExceptionHandler = lambda e,obj: self.logger.exception(e)
-        self.on_exception.add_callback(defaultExceptionHandler)
+        async def _default_exception_handler(e:Exception, obj:object):
+            self.logger.exception(e)
 
+        self.on_exception.add_callback(_default_exception_handler)
+        
         self.on_keyboardinterrupt.add_callback(lambda e,obj:self.close())
 
         self.logger:log.Logger = log.Logger("Handler")
@@ -205,34 +207,46 @@ class Handler:
         '''Get all interfaces'''
         return self._interfaces
     
-    async def call(self, session:session.Session, message:session.Message) -> None:
+    async def call(self, session:session.Session, message:session.Message):
         '''
         Call a command
         
         *Note*: If the destination interface is not specified, the command will be called on common command set.
         '''
         command = message.cmd
-        from_ = message.src_interface
+        # from_ = message.src_interface
         cmd = self.get_cmd(command, message.dest_interface)
         if cmd == None:
             raise error.CommandNotImplement(command, self)
-        if from_:
-            if from_.user.in_group not in cmd.callable_groups:
-                raise error.PermissionDenied(from_, cmd, self)
+        # if from_:
+        #     if any([i in cmd.callable_groups for i in from_.user.all_groups]) == False:
+        #         raise error.PermissionDenied(from_, cmd, self)
         message.dest_interface = cmd.in_interface
-        await cmd.call(session, message)
+        return await cmd.call(session, message)
 
-    def call_soon(self, session:session.Session, message:session.Message) -> None:
-        '''Call a command soon'''
+    def call_soon(self, session:session.Session, message:session.Message):
+        '''
+        Call a command soon
+        No Result will be returned
+        If the command is forced to be awaited, PermissionDenied will be raised
+        '''
 
         # Check Premission & valify availablity
         if message.src_interface:
             if message.dest_interface:
-                if message.src_interface.user.in_group not in message.dest_interface.check_cmd_support(message.cmd).callable_groups:
+                call_groups = message.dest_interface.check_cmd_support(message.cmd).callable_groups
+                if any([i in call_groups for i in message.src_interface.user.all_groups]) == False:
                     raise error.PermissionDenied(message.cmd, interface=message.src_interface, handler=self)
             else:
-                if message.src_interface.user.in_group not in self.get_cmd(message.cmd).callable_groups:
+                call_groups = self.get_cmd(message.cmd).callable_groups
+                if any([i in call_groups for i in message.src_interface.user.all_groups]) == False:
                     raise error.PermissionDenied(message.cmd, interface=message.src_interface, handler=self)
+        
+        cmd = self.get_cmd(message.cmd, message.dest_interface)
+        if cmd == None:
+            raise error.CommandNotImplement(message.cmd, self)
+        if cmd.force_await:
+            raise error.PermissionDenied("Command is forced to be awaited.", cmd = cmd.cmd , dest = message.dest_interface, interface=message.src_interface, handler=self)
 
         async def _handle_call():
             try:

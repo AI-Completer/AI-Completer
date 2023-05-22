@@ -1,3 +1,6 @@
 aiohttp
 colorama
 tiktoken
+shutil
+attr
+paramiko

@@ -3,3 +3,4 @@ colorama
 tiktoken
 shutil
 attr
+paramiko

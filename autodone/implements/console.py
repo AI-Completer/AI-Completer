@@ -23,6 +23,7 @@ class ConsoleInterface(interface.Interface):
         user = user or User(
             name="console",
             in_group="user",
+            all_groups={"user","command"},
         )
         super().__init__(user,id = id)
 

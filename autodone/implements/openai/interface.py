@@ -21,7 +21,7 @@ class OpenaichatInterface(Interface):
             user=user or User(
                 name="openaichat",
                 in_group="agent",
-                in_groups={"agent","command"},
+                all_groups={"agent","command"},
                 support={"text"},
             ),
             id=id or uuid.uuid4(),
@@ -90,6 +90,7 @@ class OpenaichatInterface(Interface):
         session.send(
             Message(
                 src_interface=self,
+                dest_interface=self,
                 cmd='chat',
                 last_message=message,
                 content=MultiContent(ret),
@@ -101,7 +102,7 @@ class OpenaichatInterface(Interface):
         Init the session
         '''    
         session.extra['interface.openaichat.history'] = []
-        enterpoint = api.EnterPoint(self.config['api-key'])
+        enterpoint = api.EnterPoint(self.config['openai.api-key'])
         enterpoint.proxy = self.proxy
         session.extra['interface.openaichat.enterpoint'] = enterpoint
         
@@ -125,7 +126,7 @@ class OpenaichatInterface(Interface):
             config.setdefault("sys.prompt", "You are ChatGPT created by OpenAI. Your task is to chat with user and assist him.")
             config.setdefault("sys.max_history", None)
             config.setdefault("sys.max_input_tokens", 2048)
-            config.require("api-key")
+            config.require("openai.api-key")
         
         self.proxy:Optional[dict] = None
         if config.has('proxy'):

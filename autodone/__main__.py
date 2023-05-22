@@ -39,19 +39,7 @@ async def main():
         os.environ['DEBUG'] = "True"
     # Console Interface
     console_interface:Interface = implements.ConsoleInterface()
-    # Initialier Interface (Deprecated)
-    # initialier_interface:Interface = implements.InitInterface()
-    # Input AI name
-    if __DEBUG__:
-        name = "Debug"
-    else:
-        name = await ainput("AI Name: ")
-    # OpenAI Chat Interface
-    openaichat_interface:Interface = implements.openai.OpenaichatInterface(User(
-        name=name,
-        in_group="agent",
-        support={"text"},
-    ))
+    openaichat_interface:Interface = implements.openai.OpenaichatInterface()
     # Handler
     global _handler
     _handler = Handler(config)

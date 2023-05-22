@@ -33,6 +33,12 @@ class WorkSpace:
         if path == self.path[:-1]:
             return True
         return os.path.abspath(path).startswith(self.path)
+    
+    def get_abspath(self, rela_path:str) -> str:
+        '''Get absolute path from relative path'''
+        if rela_path[0] == os.sep:
+            return os.path.abspath(os.path.join(self.path,rela_path[1:]))
+        return os.path.abspath(os.path.join(self.path,rela_path))
 
 @enum.unique
 class Type(enum.Enum):
@@ -115,7 +121,7 @@ class File:
             return self.premission.group
         return self.premission.other
 
-    def read(self, user:User, force:bool = False) -> None:
+    def read(self, user:User, force:bool = False) -> str:
         '''
         Read file
         :param user: User

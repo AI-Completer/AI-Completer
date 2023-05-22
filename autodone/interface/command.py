@@ -1,6 +1,7 @@
 '''
 Command Support For Interface
 '''
+import json
 from typing import (Any, Callable, Coroutine, Iterable, Iterator, Optional,
                     TypeVar, overload)
 
@@ -88,6 +89,24 @@ class CommandParamStruct:
                         raise TypeError(f"data must be {struct.type}")
                     return True
         return _check(self._struct, data)
+    
+    def json_description(self):
+        '''
+        Get the json description of the struct
+        For example:
+            {"text":<what the user input>}
+        '''
+        def _json_description(struct:dict|list|CommandParamElement):
+            if isinstance(struct, dict):
+                ret = {}
+                for key,value in struct.items():
+                    ret[key] = _json_description(value)
+                return ret
+            elif isinstance(struct, list):
+                return [_json_description(struct[0])]
+            elif isinstance(struct, CommandParamElement):
+                return struct.description
+        return json.dumps(_json_description(self._struct))
 
 @attr.s(auto_attribs=True,hash=False)
 class Command:

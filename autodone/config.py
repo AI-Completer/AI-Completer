@@ -38,32 +38,21 @@ class EnhancedDict(defaultdict):
         self.__update_dict()
 
     def __missing__(self, key):
-        if self._lock.locked():
-            return None
         self[key] = self.__class__()
         return super().__getitem__(key)
 
     @property
     def readonly(self) -> bool:
-        '''Get readonly'''
+        '''
+        Get readonly
+        This identifies whether the dict is occupied by a session
+        '''
         return self._lock.locked()
-    
-    @readonly.setter
-    def readonly(self, value:bool) -> None:
-        '''Set readonly'''
-        if self._lock.locked():
-            if not value:
-                self._lock.release()
-        else:
-            if value:
-                asyncio.get_event_loop().call_soon(self._lock.acquire)
 
     def set(self, path:str, value:Any):
         '''
         Set a value
         '''
-        if self._lock.locked():
-            raise AttributeError("EnhancedDict is not writeable")
         if '.' in path:
             spilts = path.split('.', 1)
             if spilts[0] not in self:
@@ -115,8 +104,6 @@ class EnhancedDict(defaultdict):
             path: The path of the value
             default: The default value
         '''
-        if self._lock.locked():
-            raise AttributeError("The dict is not writeable")
         spilts = path.split('.', 1)
         if len(spilts) == 1:
             return super().setdefault(path, default)
@@ -125,8 +112,6 @@ class EnhancedDict(defaultdict):
         
     def update(self, data:EnhancedDict):
         '''Update the dict'''
-        if self._lock.locked():
-            raise AttributeError("The dict is not writeable")
         for key, value in data.items():
             if isinstance(value, EnhancedDict):
                 if key not in self:
@@ -142,8 +127,6 @@ class EnhancedDict(defaultdict):
         return f"<Config {str(self)}>"
     
     def __delitem__(self, __key: Any) -> None:
-        if self._lock.locked():
-            raise AttributeError("The dict is not writeable")
         return super().__delitem__(__key)
     
     def __contains__(self, __key: str) -> bool:
@@ -176,21 +159,18 @@ class EnhancedDict(defaultdict):
             else:
                 self._dict = copy.deepcopy(dict)
         
-        def __enter__(self) -> EnhancedDict:
-            self.__old_readonly = self._dict.readonly
-            if self.locked and self.__old_readonly:
-                self._dict._lock.release()
+        async def __aenter__(self) -> EnhancedDict:
+            await self._dict._lock.acquire()
             return self._dict
         
-        def __exit__(self, exc_type, exc_value, traceback) -> None:
-            if self.__old_readonly and self.locked:
-                asyncio.get_event_loop().call_soon(self._dict._lock.acquire)
+        async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+            self._dict._lock.release()
 
     def session(self, locked:bool = True, save:bool = True) -> __Session:
         '''
         Open a session to modify the EnhancedDict
         param:
-            locked: Whether the session is locked
+            locked: Whether the session is locked, this will occupy the dict, if the save is False
             save: Whether to save the dict after the session
         '''
         return self.__Session(self, locked, save)

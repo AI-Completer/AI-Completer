@@ -53,7 +53,7 @@ class SSHInterface(Interface):
         await super().session_init(session)
         
         cfg:Config = session.config[self.namespace]
-        with cfg.session() as config:
+        async with cfg.session() as config:
             config.require('ssh.host')
             config.setdefault('ssh.port', 22)
             config.require('ssh.username')

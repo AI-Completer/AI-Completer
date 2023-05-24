@@ -1,6 +1,7 @@
 '''
 Base Objects for Interface of AutoDone-AI
 '''
+import os
 import uuid
 from abc import abstractmethod
 from enum import Enum, unique
@@ -271,9 +272,6 @@ class Interface:
         '''Extra information'''
         self.commands:CommandSet = CommandSet()
         '''Command Set of Interface'''
-        self.config:Config = Config()
-        self.config.readonly = True
-        '''Config of Interface(Not Writeable)'''
 
         if namespace != None:
             self.namespace = namespace
@@ -284,7 +282,7 @@ class Interface:
         _handler = log.ConsoleHandler()
         _handler.setFormatter(formatter)
         self.logger.addHandler(_handler)
-        if self.config['debug']:
+        if bool(os.environ.get('DEBUG', False)):
             self.logger.setLevel(log.DEBUG)
         else:
             self.logger.setLevel(log.INFO)
@@ -338,7 +336,6 @@ class Interface:
     async def close(self):
         '''Close the interface'''
         self._closed = True
-        self.logger.debug("Interface %s closing" % self.id)
         await self.final()
 
     def register_cmd(self, *args, **kwargs):

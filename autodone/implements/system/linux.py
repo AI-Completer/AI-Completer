@@ -6,6 +6,7 @@ from typing import Optional
 import uuid
 from autodone import *
 import paramiko
+from autodone.config import Config
 
 import autodone.session as session
 
@@ -47,25 +48,28 @@ class SSHInterface(Interface):
                 callable_groups={'system','agent'},
             )
         )
-        with self.config.session() as config:
+
+    async def session_init(self, session: Session):
+        await super().session_init(session)
+        
+        cfg:Config = session.config[self.namespace]
+        with cfg.session() as config:
             config.require('ssh.host')
             config.setdefault('ssh.port', 22)
             config.require('ssh.username')
             if config.get('ssh.password', None) is None:
                 config.require('ssh.private_key')
                 config.require('ssh.private_key_passphrase')
-
-    async def session_init(self, session: Session):
-        await super().session_init(session)
+        
         default_client = paramiko.SSHClient()
         default_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         default_client.connect(
-            self.config.get('ssh.host'),
-            port=self.config.get('ssh.port'),
-            username=self.config.get('ssh.username'),
-            password=self.config.get('ssh.password', None),
-            key_filename=self.config.get('ssh.private_key', None),
-            passphrase=self.config.get('ssh.private_key_passphrase', None),
+            cfg.get('ssh.host'),
+            port=cfg.get('ssh.port'),
+            username=cfg.get('ssh.username'),
+            password=cfg.get('ssh.password', None),
+            key_filename=cfg.get('ssh.private_key', None),
+            passphrase=cfg.get('ssh.private_key_passphrase', None),
         )
         session.extra['interface.ssh.client'] = default_client
 

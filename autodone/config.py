@@ -5,7 +5,7 @@ Description: Configuration file for autodone
 from __future__ import annotations
 import os
 import json
-from typing import Any, Self, TypeVar
+from typing import Any, Callable, Optional, Self, TypeVar
 from autodone.error import ConfigureMissing
 from .utils import defaultdict
 import copy
@@ -185,6 +185,17 @@ class EnhancedDict(defaultdict):
             save: Whether to save the dict after the session
         '''
         return self.__Session(self, locked, save)
+    
+    def each(self, func:Callable[[str, Any], Any], filter:Optional[Callable[[str, Any], bool]] = None) -> None:
+        '''
+        Call the function for each value
+        
+        :param func: The function to call
+        :param filter: The filter function
+        '''
+        for key, value in self.items():
+            if filter is None or filter(key, value):
+                func(key, value)
 
 class Config(EnhancedDict):
     '''Configuration Class'''

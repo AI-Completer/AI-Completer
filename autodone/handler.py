@@ -2,6 +2,7 @@
 Handler between the interfaces
 '''
 import asyncio
+import copy
 import uuid
 from typing import Awaitable, Iterable, Iterator, Optional, overload
 
@@ -33,8 +34,6 @@ class Handler:
         '''Closed'''
         self.config:Config = config
         '''Config of Handler'''
-        self.global_config:Config = config['global']
-        '''Global Config of Handler'''
         self.on_exception:events.Exception = events.Exception(Exception)
         '''Event of Exception'''
         self.on_keyboardinterrupt:events.Exception = events.Exception(KeyboardInterrupt)
@@ -156,8 +155,6 @@ class Handler:
             if i in self._interfaces:
                 raise error.Existed(i, handler=self)
             self._interfaces.add(i)
-            i.config = self.config['global']
-            i.config.update(self.config['interface'][i.namespace])
             await i.init()
         self.reload()
 
@@ -256,6 +253,9 @@ class Handler:
             except asyncio.CancelledError:
                 await self.close()
                 return
+            except error.ConfigureMissing as e:
+                self.logger.fatal("Configure missing: %s", e.configure)
+                await self.on_exception.trigger(e)
             except Exception as e:
                 await self.on_exception.trigger(e)
         asyncio.get_event_loop().create_task(_handle_call())
@@ -273,7 +273,9 @@ class Handler:
     async def new_session(self) -> session.Session:
         pass
 
-    async def new_session(self, interface:Optional[Interface] = None) -> session.Session:
+    async def new_session(self, 
+                          interface:Optional[Interface] = None,
+                          config:Optional[Config] = None) -> session.Session:
         '''
         Create a new session, will call all interfaces' session_init method
         param:
@@ -286,6 +288,13 @@ class Handler:
                 raise TypeError(f"Expected type Interface, got {type(interface)}")
             ret.src_interface = interface
         # Initialize session
+        ret.config = config
+        if config == None: 
+            ret.config = copy.deepcopy(self.config)
+            ret.config.each(
+                lambda key,value: value.update(ret.config['global']),
+                lambda key,value: key != 'global'
+            )
         for i in self._interfaces:
             await i.session_init(ret)
         return ret

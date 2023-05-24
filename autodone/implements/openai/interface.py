@@ -31,11 +31,12 @@ class OpenaichatInterface(Interface):
         '''
         Chat with User
         '''
+        cfg = session.config[self.namespace]
         if message.content.text == "":
             raise ValueError("Empty message")
         # Construct the json data
         param = api.ChatParameters()
-        param.from_json(self.config['chat'])
+        param.from_json(cfg['chat'])
         history:list[api.Message] = session.extra['interface.openaichat.history']
         param.messages = history + [
             api.Message(
@@ -44,19 +45,18 @@ class OpenaichatInterface(Interface):
                 # name=message.src_interface.character.name,
                 )
             ]
-        if self.config['sys.prompt'] is not None:
+        if cfg['sys.prompt'] is not None:
             param.messages.insert(0, api.Message(
                     role='system',
-                    content=self.config['sys.prompt'],
+                    content=cfg['sys.prompt'],
                     ))
-        if self.config['sys.max_history'] is not None:
+        if cfg['sys.max_history'] is not None:
             param.messages = api.limitMessageToken(
-                self.config['chat.model'],
+                cfg['chat.model'],
                 param.messages,
-                self.config['sys.max_input_tokens']
+                cfg['sys.max_input_tokens']
             )
         enterpoiot:EnterPoint = session.extra['interface.openaichat.enterpoint']
-        enterpoiot.proxy = self.proxy
         try:
             ret = await enterpoiot.chat(param)
         except Exception as e:
@@ -71,11 +71,11 @@ class OpenaichatInterface(Interface):
                 content=nmessage['content'],
             )
         )
-        if self.config['sys.prompt'] is not None:
+        if cfg['sys.prompt'] is not None:
             param.messages.pop(0) # Remove the first message
-        if self.config['sys.max_history'] is not None:
-            if len(param.messages) > self.config['sys.max_history']:
-                param.messages = param.messages[-self.config['sys.max_history']:]
+        if cfg['sys.max_history'] is not None:
+            if len(param.messages) > cfg['sys.max_history']:
+                param.messages = param.messages[-int(cfg['sys.max_history']):]
         session.extra['interface.openaichat.history'] = param.messages
         session.extra['interface.openaichat.enterpoint'] = enterpoiot
         ret = await session.asend(
@@ -101,17 +101,10 @@ class OpenaichatInterface(Interface):
         '''
         Init the session
         '''    
-        session.extra['interface.openaichat.history'] = []
-        enterpoint = api.EnterPoint(self.config['openai.api-key'])
-        enterpoint.proxy = self.proxy
-        session.extra['interface.openaichat.enterpoint'] = enterpoint
+        await super().session_init(session)
         
-
-    async def init(self):
-        '''
-        Init the interface
-        '''
-        with self.config.session() as config:
+        cfg:Config = session.config[self.namespace]
+        with cfg.session() as config:
             config.setdefault("chat.model", "gpt-3.5-turbo-0301")
             config.setdefault("chat.temperature", None)
             config.setdefault("chat.max_tokens", None)
@@ -128,11 +121,11 @@ class OpenaichatInterface(Interface):
             config.setdefault("sys.max_input_tokens", 2048)
             config.require("openai.api-key")
         
-        self.proxy:Optional[dict] = None
-        if config.has('proxy'):
+        proxy_config = None
+        if cfg.has('proxy'):
             proxy_config = config['proxy']
             if isinstance(proxy_config, str):
-                self.proxy = {
+                cfg['proxy'] = {
                     'http':proxy_config,
                     'https':proxy_config,
                     'socks5':proxy_config,
@@ -144,7 +137,17 @@ class OpenaichatInterface(Interface):
                     'socks5':str,
                 }).check(proxy_config):
                     raise ValueError("Invalid proxy")
-                self.proxy = proxy_config
+        
+        session.extra['interface.openaichat.history'] = []
+        enterpoint = api.EnterPoint(cfg['openai.api-key'])
+        enterpoint.proxy = proxy_config
+        session.extra['interface.openaichat.enterpoint'] = enterpoint
+
+    async def init(self):
+        '''
+        Init the interface
+        '''
+        await super().init()
 
         self.commands.add(
             Command(

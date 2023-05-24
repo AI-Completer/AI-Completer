@@ -92,7 +92,7 @@ class OpenAISubAgentInterface(Interface):
         await super().session_init(session)
 
         cfg:Config = session.config[self.namespace]
-        with cfg.session() as config:
+        async with cfg.session() as config:
             config.setdefault("chat.model", "gpt-3.5-turbo-0301")
             config.setdefault("chat.temperature", None)
             config.setdefault("chat.max_tokens", None)

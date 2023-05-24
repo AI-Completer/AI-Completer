@@ -3,6 +3,8 @@ Name: config.py
 Description: Configuration file for autodone
 '''
 from __future__ import annotations
+from asyncio import Lock
+import asyncio
 import os
 import json
 from typing import Any, Callable, Optional, Self, TypeVar
@@ -25,37 +27,32 @@ class EnhancedDict(defaultdict):
     def __update_dict(self) -> None:
         for key, value in self.items():
             if isinstance(value, dict):
-                self[key] = self.__class__(value, readonly=self._readonly)
+                self[key] = self.__class__(value, readonly=self._lock.locked())
     
     def __init__(self, *args, **kwargs) -> None:
-        self._readonly = kwargs.pop('readonly', False)
-        if not isinstance(self._readonly, bool):
+        self._lock:Lock = asyncio.Lock()
+        self._lock._locked = kwargs.pop('readonly', False)
+        if not isinstance(self._lock._locked, bool):
             raise TypeError("readonly must be bool")
         super().__init__(*args, **kwargs)
         self.__update_dict()
 
     def __missing__(self, key):
-        if self._readonly:
-            return None
         self[key] = self.__class__()
         return super().__getitem__(key)
 
     @property
     def readonly(self) -> bool:
-        '''Get readonly'''
-        return self._readonly
-    
-    @readonly.setter
-    def readonly(self, value:bool) -> None:
-        '''Set readonly'''
-        self._readonly = value
+        '''
+        Get readonly
+        This identifies whether the dict is occupied by a session
+        '''
+        return self._lock.locked()
 
     def set(self, path:str, value:Any):
         '''
         Set a value
         '''
-        if self._readonly:
-            raise AttributeError("EnhancedDict is not writeable")
         if '.' in path:
             spilts = path.split('.', 1)
             if spilts[0] not in self:
@@ -107,8 +104,6 @@ class EnhancedDict(defaultdict):
             path: The path of the value
             default: The default value
         '''
-        if self._readonly:
-            raise AttributeError("The dict is not writeable")
         spilts = path.split('.', 1)
         if len(spilts) == 1:
             return super().setdefault(path, default)
@@ -117,8 +112,6 @@ class EnhancedDict(defaultdict):
         
     def update(self, data:EnhancedDict):
         '''Update the dict'''
-        if self._readonly:
-            raise AttributeError("The dict is not writeable")
         for key, value in data.items():
             if isinstance(value, EnhancedDict):
                 if key not in self:
@@ -134,8 +127,6 @@ class EnhancedDict(defaultdict):
         return f"<Config {str(self)}>"
     
     def __delitem__(self, __key: Any) -> None:
-        if self._readonly:
-            raise AttributeError("The dict is not writeable")
         return super().__delitem__(__key)
     
     def __contains__(self, __key: str) -> bool:
@@ -168,20 +159,18 @@ class EnhancedDict(defaultdict):
             else:
                 self._dict = copy.deepcopy(dict)
         
-        def __enter__(self) -> EnhancedDict:
-            self.__old_readonly = self._dict._readonly
-            if self.locked:
-                self._dict._readonly = False
+        async def __aenter__(self) -> EnhancedDict:
+            await self._dict._lock.acquire()
             return self._dict
         
-        def __exit__(self, exc_type, exc_value, traceback) -> None:
-            self._dict._readonly = self.__old_readonly
+        async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+            self._dict._lock.release()
 
     def session(self, locked:bool = True, save:bool = True) -> __Session:
         '''
         Open a session to modify the EnhancedDict
         param:
-            locked: Whether the session is locked
+            locked: Whether the session is locked, this will occupy the dict, if the save is False
             save: Whether to save the dict after the session
         '''
         return self.__Session(self, locked, save)

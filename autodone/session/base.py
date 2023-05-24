@@ -14,8 +14,7 @@ import attr
 import autodone
 import autodone.session as session
 from autodone import log
-from autodone.config import EnhancedDict
-from autodone.utils import defaultdict
+from autodone.config import EnhancedDict, Config
 
 Handler = TypeVar('Handler', bound='autodone.handler.Handler')
 User = TypeVar('User', bound='autodone.interface.User')
@@ -143,6 +142,8 @@ class Session:
         '''In which handler'''
         self.src_interface:Interface|None = None
         '''Source interface'''
+        self.config:Config = Config()
+        '''Session Config'''
         self.extra:EnhancedDict = EnhancedDict()
         '''Extra information'''
 
@@ -152,7 +153,7 @@ class Session:
         _handler = log.ConsoleHandler()
         _handler.setFormatter(formatter)
         self.logger.addHandler(_handler)
-        if handler.global_config['debug']:
+        if handler.config['global.debug']:
             self.logger.setLevel(logging.DEBUG)
         else:
             self.logger.setLevel(logging.INFO)
@@ -222,25 +223,6 @@ class Session:
         if self._closed:
             raise RuntimeError("Session closed")
         return self.in_handler.send(self,message)
-
-    # async def start(self, interface:Interface, cmd:str, data:Any, awaitable:bool = True):
-    #     '''Start a session.'''
-    #     if self.closed:
-    #         raise RuntimeError("Session closed")
-    #     try:
-    #         message = Message(
-    #             content=MultiContent({
-    #                 "interface-name":interface.user.name,
-    #                 "command":cmd,
-    #                 "data":str(data)
-    #             }),
-    #             session=self,
-    #             cmd="init",
-    #             dest_interface=[i for i in self.in_handler.interfaces if i.user.name == 'initializer'][0]
-    #         )
-    #     except IndexError:
-    #         raise RuntimeError("Interface[Initializer] not found")
-    #     return await self.asend(message) if awaitable else self.send(message)
 
     async def close(self):
         '''Close the session.'''

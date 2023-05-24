@@ -8,6 +8,7 @@ import json
 from typing import Optional
 import uuid
 from autodone import *
+from autodone.error import Config
 from autodone.implements.openai import api
 import autodone.session as session
 from autodone.utils import Struct
@@ -89,11 +90,9 @@ class OpenAISubAgentInterface(Interface):
 
     async def session_init(self, session: Session):
         await super().session_init(session)
-        session.extra['interface.subagent.enterpoint'] = api.EnterPoint(self.config['chat.api_key'])
 
-    async def init(self):
-        await super().init()
-        with self.config.session() as config:
+        cfg:Config = session.config[self.namespace]
+        with cfg.session() as config:
             config.setdefault("chat.model", "gpt-3.5-turbo-0301")
             config.setdefault("chat.temperature", None)
             config.setdefault("chat.max_tokens", None)
@@ -110,12 +109,10 @@ class OpenAISubAgentInterface(Interface):
             config.setdefault("sys.max_input_tokens", 2048)
             config.require("openai.api-key")
 
-        # Proxy
-        self.proxy:Optional[dict] = None
-        if config.has('proxy'):
+        if cfg.has('proxy'):
             proxy_config = config['proxy']
             if isinstance(proxy_config, str):
-                self.proxy = {
+                cfg['proxy'] = {
                     'http':proxy_config,
                     'https':proxy_config,
                     'socks5':proxy_config,
@@ -127,7 +124,11 @@ class OpenAISubAgentInterface(Interface):
                     'socks5':str,
                 }).check(proxy_config):
                     raise ValueError("Invalid proxy")
-                self.proxy = proxy_config
+        
+        session.extra['interface.subagent.enterpoint'] = api.EnterPoint(self.config['chat.api_key'])
+
+    async def init(self):
+        await super().init()
 
         self.commands.add(
             Command(

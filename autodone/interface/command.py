@@ -6,7 +6,7 @@ from typing import (Any, Callable, Coroutine, Iterable, Iterator, Optional,
                     TypeVar, overload)
 
 import attr
-
+import os
 import autodone
 import autodone.error as error
 from autodone import log, session
@@ -151,11 +151,10 @@ class Command:
         _handler.setFormatter(formatter)
         self.logger.addHandler(_handler)
         self.logger.push(self.cmd)
-        if self.in_interface is not None:
-            if self.in_interface.config['debug']:
-                self.logger.setLevel(log.DEBUG)
-            else:
-                self.logger.setLevel(log.INFO)
+        if bool(os.environ.get("DEBUG",False)):
+            self.logger.setLevel(log.DEBUG)
+        else:
+            self.logger.setLevel(log.INFO)
     
     def check_support(self, handler:Handler, user:User) -> bool:
         '''Check whether the user is in callable_groups'''

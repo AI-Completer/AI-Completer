@@ -3,6 +3,8 @@ Name: config.py
 Description: Configuration file for autodone
 '''
 from __future__ import annotations
+from asyncio import Lock
+import asyncio
 import os
 import json
 from typing import Any, Callable, Optional, Self, TypeVar
@@ -25,17 +27,18 @@ class EnhancedDict(defaultdict):
     def __update_dict(self) -> None:
         for key, value in self.items():
             if isinstance(value, dict):
-                self[key] = self.__class__(value, readonly=self._readonly)
+                self[key] = self.__class__(value, readonly=self._lock.locked())
     
     def __init__(self, *args, **kwargs) -> None:
-        self._readonly = kwargs.pop('readonly', False)
-        if not isinstance(self._readonly, bool):
+        self._lock:Lock = asyncio.Lock()
+        self._lock._locked = kwargs.pop('readonly', False)
+        if not isinstance(self._lock._locked, bool):
             raise TypeError("readonly must be bool")
         super().__init__(*args, **kwargs)
         self.__update_dict()
 
     def __missing__(self, key):
-        if self._readonly:
+        if self._lock.locked():
             return None
         self[key] = self.__class__()
         return super().__getitem__(key)
@@ -43,18 +46,23 @@ class EnhancedDict(defaultdict):
     @property
     def readonly(self) -> bool:
         '''Get readonly'''
-        return self._readonly
+        return self._lock.locked()
     
     @readonly.setter
     def readonly(self, value:bool) -> None:
         '''Set readonly'''
-        self._readonly = value
+        if self._lock.locked():
+            if not value:
+                self._lock.release()
+        else:
+            if value:
+                asyncio.get_event_loop().call_soon(self._lock.acquire)
 
     def set(self, path:str, value:Any):
         '''
         Set a value
         '''
-        if self._readonly:
+        if self._lock.locked():
             raise AttributeError("EnhancedDict is not writeable")
         if '.' in path:
             spilts = path.split('.', 1)
@@ -107,7 +115,7 @@ class EnhancedDict(defaultdict):
             path: The path of the value
             default: The default value
         '''
-        if self._readonly:
+        if self._lock.locked():
             raise AttributeError("The dict is not writeable")
         spilts = path.split('.', 1)
         if len(spilts) == 1:
@@ -117,7 +125,7 @@ class EnhancedDict(defaultdict):
         
     def update(self, data:EnhancedDict):
         '''Update the dict'''
-        if self._readonly:
+        if self._lock.locked():
             raise AttributeError("The dict is not writeable")
         for key, value in data.items():
             if isinstance(value, EnhancedDict):
@@ -134,7 +142,7 @@ class EnhancedDict(defaultdict):
         return f"<Config {str(self)}>"
     
     def __delitem__(self, __key: Any) -> None:
-        if self._readonly:
+        if self._lock.locked():
             raise AttributeError("The dict is not writeable")
         return super().__delitem__(__key)
     
@@ -169,13 +177,14 @@ class EnhancedDict(defaultdict):
                 self._dict = copy.deepcopy(dict)
         
         def __enter__(self) -> EnhancedDict:
-            self.__old_readonly = self._dict._readonly
-            if self.locked:
-                self._dict._readonly = False
+            self.__old_readonly = self._dict.readonly
+            if self.locked and self.__old_readonly:
+                self._dict._lock.release()
             return self._dict
         
         def __exit__(self, exc_type, exc_value, traceback) -> None:
-            self._dict._readonly = self.__old_readonly
+            if self.__old_readonly and self.locked:
+                asyncio.get_event_loop().call_soon(self._dict._lock.acquire)
 
     def session(self, locked:bool = True, save:bool = True) -> __Session:
         '''

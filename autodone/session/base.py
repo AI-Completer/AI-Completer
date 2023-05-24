@@ -132,8 +132,6 @@ class Session:
         '''Last used time'''
         self.history:list[Message] = []
         '''History'''
-        self.lock: asyncio.Lock = asyncio.Lock()
-        '''Lock'''
         self._closed: bool = False
         '''Closed'''
         self._id:uuid.UUID = uuid.uuid4()
@@ -163,23 +161,7 @@ class Session:
     def id(self) -> uuid.UUID:
         '''ID'''
         return self._id
-
-    async def acquire(self) -> None:
-        '''Lock the session.'''
-        await self.lock.acquire()
-        self.last_used = time.time()
     
-    def release(self) -> None:
-        '''Release the session.'''
-        self.lock.release()
-    
-    async def __aenter__(self) -> Session:
-        await self.acquire()
-        return self
-    
-    async def __aexit__(self, exc_type, exc, tb) -> None:
-        self.release()
-
     @property
     def locked(self) -> bool:
         return self.lock.locked()
@@ -202,12 +184,6 @@ class Session:
     def __len__(self):
         return self.extra.__len__()
 
-    async def close(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
-        await self.http_session.close()
-    
     @property
     def closed(self) -> bool:
         return self._closed

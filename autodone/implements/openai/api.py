@@ -181,7 +181,7 @@ class EnterPoint:
     '''
     def __init__(self, api_key:str):
         self.api_key = api_key
-        self.proxy:Optional[dict] = None
+        self.proxy:Optional[str] = None
 
     async def _request(self, url:str, parameters:CommonParameters) -> dict:
         async with aiohttp.ClientSession() as session:

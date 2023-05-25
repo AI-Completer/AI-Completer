@@ -262,7 +262,7 @@ class Interface:
     '''Interface of AutoDone-AI'''
     namespace:str = ""
     def __init__(self, user:User, namespace:Optional[str] = None,id:uuid.UUID = uuid.uuid4()):
-        self.user = user
+        self._user = user
         '''Character of the interface'''
         self._closed:bool = False
         '''Closed'''
@@ -286,6 +286,15 @@ class Interface:
             self.logger.setLevel(log.DEBUG)
         else:
             self.logger.setLevel(log.INFO)
+
+    @property
+    def user(self) -> User:
+        '''
+        Character of the interface
+        (Read-only)
+        :rtype: User
+        '''
+        return self._user
 
     @property
     def id(self):

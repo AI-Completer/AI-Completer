@@ -130,17 +130,10 @@ class OpenaichatInterface(Interface):
                     'https':proxy_config,
                     'socks5':proxy_config,
                 }
-            else:
-                if not Struct({
-                    'http':str,
-                    'https':str,
-                    'socks5':str,
-                }).check(proxy_config):
-                    raise ValueError("Invalid proxy")
         
         session.extra['interface.openaichat.history'] = []
         enterpoint = api.EnterPoint(cfg['openai.api-key'])
-        enterpoint.proxy = proxy_config
+        enterpoint.proxy = cfg['proxy.http']
         session.extra['interface.openaichat.enterpoint'] = enterpoint
 
     async def init(self):

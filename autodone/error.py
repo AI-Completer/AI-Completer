@@ -95,3 +95,9 @@ class InvalidPath(BaseException):
     def __init__(self, path:str, *args: object, **kwargs: object) -> None:
         self.path:str = path
         super().__init__(*args, **kwargs)
+
+class Inited(BaseException):
+    '''Inited'''
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+    

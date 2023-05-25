@@ -328,3 +328,8 @@ class CommandSet:
             self.add(value)
             return func
         return wrapper
+
+    def each(self, func:Callable[[Command], None]) -> None:
+        '''Call a function for each command'''
+        for i in self._set:
+            func(i)

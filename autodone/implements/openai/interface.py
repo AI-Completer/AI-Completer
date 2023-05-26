@@ -133,7 +133,8 @@ class OpenaichatInterface(Interface):
         
         session.extra['interface.openaichat.history'] = []
         enterpoint = api.EnterPoint(cfg['openai.api-key'])
-        enterpoint.proxy = cfg['proxy.http']
+        if cfg['proxy.http']:
+            enterpoint.proxy = cfg['proxy.http']
         session.extra['interface.openaichat.enterpoint'] = enterpoint
 
     async def init(self):

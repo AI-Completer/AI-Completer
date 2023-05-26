@@ -1,10 +1,10 @@
 import os
 import uuid
 from typing import Optional
-from autodone import *
-from autodone.interface import User, Group
-import autodone.session as session
-from autodone.utils import Struct
+from aicompleter import *
+from aicompleter.interface import User, Group
+import aicompleter.session as session
+from aicompleter.utils import Struct
 import workspace
 
 class FileInterface(Interface):

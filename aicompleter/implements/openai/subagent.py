@@ -7,11 +7,11 @@ which can be recognized by python code.
 import json
 from typing import Optional
 import uuid
-from autodone import *
-from autodone.error import Config
-from autodone.implements.openai import api
-import autodone.session as session
-from autodone.utils import Struct
+from aicompleter import *
+from aicompleter.error import Config
+from aicompleter.implements.openai import api
+import aicompleter.session as session
+from aicompleter.utils import Struct
 
 class OpenAISubAgentInterface(Interface):
     '''

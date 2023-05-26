@@ -1,5 +1,5 @@
 '''
-Utils for autodone
+Utils for aicompleter
 '''
 from __future__ import annotations
 import sys

@@ -6,11 +6,11 @@ from typing import Optional
 
 import attr
 
-from autodone.handler import Handler
-from autodone.interface.base import Interface
-from autodone.session import Message, Session
-from autodone.interface import User, Group
-from autodone import error
+from aicompleter.handler import Handler
+from aicompleter.interface.base import Interface
+from aicompleter.session import Message, Session
+from aicompleter.interface import User, Group
+from aicompleter import error
 
 class WorkSpace:
     '''

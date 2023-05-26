@@ -11,16 +11,16 @@ from typing import Any, Coroutine, Optional, TypeVar, overload
 import aiohttp
 import attr
 
-import autodone
-import autodone.session as session
-from autodone import log
-from autodone.config import EnhancedDict, Config
+import aicompleter
+import aicompleter.session as session
+from aicompleter import log
+from aicompleter.config import EnhancedDict, Config
 
-Handler = TypeVar('Handler', bound='autodone.handler.Handler')
-User = TypeVar('User', bound='autodone.interface.User')
-Group = TypeVar('Group', bound='autodone.interface.Group')
-Character = TypeVar('Character', bound='autodone.interface.Character')
-Interface = TypeVar('Interface', bound='autodone.interface.Interface')
+Handler = TypeVar('Handler', bound='aicompleter.handler.Handler')
+User = TypeVar('User', bound='aicompleter.interface.User')
+Group = TypeVar('Group', bound='aicompleter.interface.Group')
+Character = TypeVar('Character', bound='aicompleter.interface.Character')
+Interface = TypeVar('Interface', bound='aicompleter.interface.Interface')
 
 class Content(object):
     '''Common content class.'''

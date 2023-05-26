@@ -9,10 +9,10 @@ from typing import Any, Optional, TypeVar, overload
 
 import attr
 
-import autodone.session as session
-from autodone import error, log
-from autodone.config import Config
-from autodone.interface import command
+import aicompleter.session as session
+from aicompleter import error, log
+from aicompleter.config import Config
+from aicompleter.interface import command
 
 from .command import Command, CommandSet
 

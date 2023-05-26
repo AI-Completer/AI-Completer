@@ -15,8 +15,8 @@ class SSHInterface(Interface):
     Linux Terminal (SSH) Interface for Autodone-AI
     '''
     namespace:str = 'linux'
-    def __init__(self, user: Optional[User] = None, id: Optional[uuid.UUID] = uuid.uuid4()):
-        user = user or User(
+    def __init__(self, id: Optional[uuid.UUID] = uuid.uuid4()):
+        user = User(
             name="linux",
             in_group="system",
             all_groups={"system","command"},
@@ -24,17 +24,6 @@ class SSHInterface(Interface):
         )
         super().__init__(user,id=id)
 
-    async def cmd_sh(self, session:Session, message:Message) -> tuple[str, str]:
-        '''
-        Command for running shell
-        This will directly run the shell command
-        '''
-        client:paramiko.SSHClient = session.extra['interface.ssh.client']
-        stdin, stdout, stderr = client.exec_command(message.content.json['cmd'])
-        return stdout.read().decode('utf-8'), stderr.read().decode('utf-8')
-
-    async def init(self):
-        await super().init()
         self.commands.add(
             Command(
                 name='sh',
@@ -48,6 +37,15 @@ class SSHInterface(Interface):
                 callable_groups={'system','agent'},
             )
         )
+
+    async def cmd_sh(self, session:Session, message:Message) -> tuple[str, str]:
+        '''
+        Command for running shell
+        This will directly run the shell command
+        '''
+        client:paramiko.SSHClient = session.extra['interface.ssh.client']
+        stdin, stdout, stderr = client.exec_command(message.content.json['cmd'])
+        return stdout.read().decode('utf-8'), stderr.read().decode('utf-8')
 
     async def session_init(self, session: Session):
         await super().session_init(session)

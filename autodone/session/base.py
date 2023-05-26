@@ -256,10 +256,10 @@ class Message:
             self.session.history.append(self)
 
     def __str__(self) -> str:
-        return f"{self.character.name}: {self.content.text}"
+        return f"Called by [{self.src_interface.user.name}]: {self.content.text}"
     
     def __repr__(self) -> str:
-        return f"Message({self.character.name}, {self.content.text}, {self.session.id}, {self.id})"
+        return f"Message({self.cmd}, {self.content.text}, {self.session.id}, {self.id})"
     
 class MessageQueue(asyncio.Queue[Message]):
     '''Message Queue'''

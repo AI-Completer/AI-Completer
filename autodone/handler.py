@@ -231,9 +231,12 @@ class Handler:
         # Check Premission & valify availablity
         if message.src_interface:
             if message.dest_interface:
-                call_groups = message.dest_interface.check_cmd_support(message.cmd).callable_groups
-                if any([i in call_groups for i in message.src_interface.user.all_groups]) == False:
-                    raise error.PermissionDenied(message.cmd, interface=message.src_interface, handler=self)
+                # Enable self interface command
+                if not message.src_interface == message.dest_interface:
+                    # Enable cross-interface command
+                    call_groups = message.dest_interface.check_cmd_support(message.cmd).callable_groups
+                    if any([i in call_groups for i in message.src_interface.user.all_groups]) == False:
+                        raise error.PermissionDenied(message.cmd, interface=message.src_interface, handler=self)
             else:
                 call_groups = self.get_cmd(message.cmd).callable_groups
                 if any([i in call_groups for i in message.src_interface.user.all_groups]) == False:

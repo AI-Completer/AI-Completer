@@ -46,4 +46,7 @@ from .interface import (
     CommandParamStruct,
 )
 
-from .layer import DiGraph
+from .layer import (
+    DiGraph,
+    InterfaceDiGraph,
+)

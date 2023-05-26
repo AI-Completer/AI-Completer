@@ -1,15 +1,16 @@
-from typing import Iterator, Self
+from typing import Generic, Iterator, Optional, Self, TypeVar, overload
 from . import *
 
-class DiGraph:
+_T = TypeVar('_T')
+
+class DiGraph(Generic[_T]):
     '''
-    Interface direct graph for calling commands.
+    Directed graph.
     '''
     def __init__(self):
-        self._src:dict[Interface, set[Interface]] = {}
-        self._structized = False
-
-    def add(self, src:Interface, dest:Interface):
+        self._src:dict[_T, set[_T]] = {}
+        
+    def add(self, src:_T, dest:_T):
         '''Add a edge'''
         if src not in self._src:
             self._src[src] = set()
@@ -17,28 +18,55 @@ class DiGraph:
         if dest not in self._src:
             self._src[dest] = set()
 
-    def remove(self, src:Interface, dest:Interface):
+    @overload
+    def remove(self, src:_T) -> None:
+        pass
+
+    @overload
+    def remove(self, src:_T, dest:_T) -> None:
+        pass
+
+    def remove(self, src:_T, dest:Optional[_T] = ...):
         '''Remove a edge'''
-        if src in self._src:
-            self._src[src].remove(dest)
-    
-    def get(self, src:Interface) -> set[Interface]:
+        if dest is ...:
+            if src in self._src:
+                self._src[src].remove(dest)
+        else:
+            if src in self._src:
+                self._src.pop(src)
+                for i in self._src:
+                    if src in self._src[i]:
+                        self._src[i].remove(src)
+
+    def get(self, src:_T) -> set[_T]:
         '''Get the dests of a src'''
         return self._src.get(src, set())
     
-    def rm_interface(self, interface:Interface):
-        '''Remove an interface'''
-        if interface in self._src:
-            del self._src[interface]
-        for i in self._src.values():
-            if interface in i:
-                i.remove(interface)
-
-    def __contains__(self, interface:Interface) -> bool:
-        return interface in self._src
+    def __contains__(self, src:_T) -> bool:
+        return src in self._src
     
-    def __iter__(self) -> Iterator[Interface]:
+    def __iter__(self) -> Iterator[_T]:
         return iter(self._src)
+    
+    def __len__(self) -> int:
+        return len(self._src)
+    
+    def __bool__(self) -> bool:
+        return bool(self._src)
+    
+    def __repr__(self) -> str:
+        return f'DiGraph({self._src})'
+    
+    def __str__(self) -> str:
+        return repr(self)
+
+class InterfaceDiGraph(DiGraph[Interface]):
+    '''
+    Interface direct graph for calling commands.
+    '''
+    def __init__(self):
+        super().__init__()
+        self._structized = False
 
     @property
     def allinterfaces(self) -> list[Interface]:
@@ -82,4 +110,16 @@ class DiGraph:
         await handler.add_interface(*self.allinterfaces)
         self._update_groups()
         handler.reload()
-        
+
+class CommandCallMap:
+    '''
+    map for command call permission management.
+    '''
+    def __init__(self):
+        self._src:dict[tuple[Interface, Interface], str] = {}
+        '''
+        :param tuple[Interface, Interface] src: (src, dest)
+        :param str dest: dest command name
+        '''
+
+    

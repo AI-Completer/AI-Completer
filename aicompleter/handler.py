@@ -4,7 +4,7 @@ Handler between the interfaces
 import asyncio
 import copy
 import uuid
-from typing import Awaitable, Iterable, Iterator, Optional, overload
+from typing import Iterator, Optional, overload
 
 from . import error, events, interface, log, session
 from .config import Config

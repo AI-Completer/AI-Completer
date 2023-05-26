@@ -5,7 +5,6 @@ import time
 import uuid
 import attr
 
-from abc import abstractmethod
 from enum import Enum, unique
 from typing import Callable, Coroutine
 

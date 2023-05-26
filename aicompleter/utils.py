@@ -2,7 +2,6 @@
 Utils for aicompleter
 '''
 from __future__ import annotations
-import sys
 import asyncio
 from typing import Any, Callable, Literal, TypeVar
 from concurrent.futures import ThreadPoolExecutor

@@ -5,13 +5,14 @@ which can be recognized by python code.
 '''
 
 import json
-from typing import Optional
 import uuid
+from typing import Optional
+
 from aicompleter import *
-from aicompleter.error import Config
+from aicompleter.config import Config
 from aicompleter.implements.openai import api
-import aicompleter.session as session
 from aicompleter.utils import Struct
+
 
 class OpenAISubAgentInterface(Interface):
     '''

@@ -6,11 +6,11 @@ import asyncio
 import uuid
 from typing import Optional
 
-from autodone import error, interface, utils
-from autodone.config import Config
-from autodone.interface.base import User, Group
-from autodone.session import Message, Session
-from autodone.session.base import MultiContent
+from aicompleter import error, interface, utils
+from aicompleter.config import Config
+from aicompleter.interface.base import User, Group
+from aicompleter.session import Message, Session
+from aicompleter.session.base import MultiContent
 
 
 class ConsoleInterface(interface.Interface):

@@ -7,14 +7,14 @@ from typing import (Any, Callable, Coroutine, Iterable, Iterator, Optional,
 
 import attr
 import os
-import autodone
-import autodone.error as error
-from autodone import log, session
+import aicompleter
+import aicompleter.error as error
+from aicompleter import log, session
 
-Interface = TypeVar('Interface', bound='autodone.interface.Interface')
-User = TypeVar('User', bound='autodone.interface.User')
-Group = TypeVar('Group', bound='autodone.interface.Group')
-Handler = TypeVar('Handler', bound='autodone.handler.Handler')
+Interface = TypeVar('Interface', bound='aicompleter.interface.Interface')
+User = TypeVar('User', bound='aicompleter.interface.User')
+Group = TypeVar('Group', bound='aicompleter.interface.Group')
+Handler = TypeVar('Handler', bound='aicompleter.handler.Handler')
 
 @attr.s(auto_attribs=True,frozen=True)
 class CommandParamElement:

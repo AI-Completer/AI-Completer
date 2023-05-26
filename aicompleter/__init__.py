@@ -5,7 +5,7 @@ AutoDone is a framework for interaction among AI, human and system.
 
 __version__ = "0.0.1beta"
 __author__ = "Li Yan"
-__package__ = "autodone"
+__package__ = "aicompleter"
 __license__ = "MIT"
 __description__ = "AutoDone-AI"
 # __url__ = ""

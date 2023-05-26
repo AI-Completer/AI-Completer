@@ -4,13 +4,13 @@ import os
 from ctypes import util
 from typing import TypeVar
 
-import autodone
+import aicompleter
 
 from . import log
 
-Interface = TypeVar('Interface', bound='autodone.interface.Interface')
-Message = TypeVar('Message', bound='autodone.session.Message')
-Config = TypeVar('Config', bound='autodone.config.Config')
+Interface = TypeVar('Interface', bound='aicompleter.interface.Interface')
+Message = TypeVar('Message', bound='aicompleter.session.Message')
+Config = TypeVar('Config', bound='aicompleter.config.Config')
 
 class BaseException(Exception):
     '''Base Exception for all Autodone-AI error'''

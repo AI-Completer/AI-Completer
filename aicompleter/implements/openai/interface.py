@@ -2,12 +2,12 @@ import asyncio
 import uuid
 from typing import Optional
 
-from autodone import *
-from autodone.config import Config
-from autodone.implements.openai.api import EnterPoint
-from autodone.interface import Command, Interface, User, Group
-from autodone.session import Message, MultiContent, Session
-from autodone.utils import Struct
+from aicompleter import *
+from aicompleter.config import Config
+from aicompleter.implements.openai.api import EnterPoint
+from aicompleter.interface import Command, Interface, User, Group
+from aicompleter.session import Message, MultiContent, Session
+from aicompleter.utils import Struct
 
 from . import api
 

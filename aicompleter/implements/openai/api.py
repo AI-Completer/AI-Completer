@@ -5,7 +5,7 @@ from typing import Any, Iterable, Literal, Optional, TypeVar
 import aiohttp
 import attr
 
-from autodone.implements import token
+from aicompleter.implements import token
 
 Model = str
 '''

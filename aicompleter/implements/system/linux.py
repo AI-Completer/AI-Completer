@@ -4,11 +4,11 @@ Linux system (ssh) implement
 
 from typing import Optional
 import uuid
-from autodone import *
+from aicompleter import *
 import paramiko
-from autodone.config import Config
+from aicompleter.config import Config
 
-import autodone.session as session
+import aicompleter.session as session
 
 class SSHInterface(Interface):
     '''

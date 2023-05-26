@@ -1,8 +1,8 @@
 import os
 import asyncio
-from autodone import *
-from autodone.config import Config
-from autodone.utils import ainput,aprint
+from aicompleter import *
+from aicompleter.config import Config
+from aicompleter.utils import ainput,aprint
 from . import log
 
 __DEBUG__:bool = False

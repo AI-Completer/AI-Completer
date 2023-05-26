@@ -9,11 +9,11 @@ import uuid
 from enum import Flag
 from typing import Any, Optional
 
-from autodone import error, interface
-from autodone.interface.base import User, Interface, Group
-from autodone.session import Message, Session
-from autodone.session.base import MultiContent
-from autodone.utils import Struct
+from aicompleter import error, interface
+from aicompleter.interface.base import User, Interface, Group
+from aicompleter.session import Message, Session
+from aicompleter.session.base import MultiContent
+from aicompleter.utils import Struct
 
 
 class InitInterface(interface.Interface):

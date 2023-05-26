@@ -1,6 +1,6 @@
 '''
 Name: config.py
-Description: Configuration file for autodone
+Description: Configuration file for aicompleter
 '''
 from __future__ import annotations
 from asyncio import Lock
@@ -8,7 +8,7 @@ import asyncio
 import os
 import json
 from typing import Any, Callable, Optional, Self, TypeVar
-from autodone.error import ConfigureMissing
+from aicompleter.error import ConfigureMissing
 from .utils import defaultdict
 import copy
 

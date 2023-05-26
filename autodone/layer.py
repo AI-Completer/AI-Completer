@@ -1,5 +1,6 @@
 from typing import Generic, Iterator, Optional, Self, TypeVar, overload
 from . import *
+import functools
 
 _T = TypeVar('_T')
 
@@ -116,10 +117,122 @@ class CommandCallMap:
     map for command call permission management.
     '''
     def __init__(self):
-        self._src:dict[tuple[Interface, Interface], str] = {}
+        self._src:dict[tuple[Interface, Interface], set(str)] = {}
         '''
         :param tuple[Interface, Interface] src: (src, dest)
         :param str dest: dest command name
         '''
 
+    def add(self, src:Interface, dest:Interface, dest_cmd:str):
+        '''Add a edge'''
+        if (src, dest) not in self._src:
+            self._src[(src, dest)] = set()
+        self._src[(src, dest)].add(dest_cmd)
+
+    @overload
+    def remove(self, src:Interface) -> None:
+        pass
+
+    @overload
+    def remove(self, src:Interface, dest:Interface) -> None:
+        pass
+
+    @overload
+    def remove(self, src:Interface, dest:Interface, dest_cmd:str) -> None:
+        pass
+
+    @functools.singledispatch
+    def remove(self, *args):
+        raise TypeError(f'Invalid args: {args}')
     
+    @remove.register
+    def _(self, src:Interface, dest:Interface, dest_cmd:str):
+        '''Remove a edge'''
+        if (src, dest) in self._src:
+            self._src[(src, dest)].remove(dest_cmd)
+
+    @remove.register
+    def _(self, src:Interface, dest:Interface):
+        '''Remove a edge'''
+        if (src, dest) in self._src:
+            self._src.pop((src, dest))
+
+    @remove.register
+    def _(self, src:Interface):
+        '''Remove a edge'''
+        for i in self._src:
+            if i[0] == src:
+                self._src.pop(i)
+
+    def get(self, src:Interface, dest:Interface) -> set[str]:
+        '''Get the dests of a src'''
+        return self._src.get((src, dest), set())
+    
+    def __contains__(self, src:Interface) -> bool:
+        for i in self._src:
+            if i[0] == src:
+                return True
+        return False
+    
+    def __iter__(self) -> Iterator[tuple[Interface, Interface]]:
+        return iter(self._src)
+    
+    def __len__(self) -> int:
+        return len(self._src)
+    
+    def __bool__(self) -> bool:
+        return bool(self._src)
+    
+    def __repr__(self) -> str:
+        return f'CommandCallMap({self._src})'
+    
+    def __str__(self) -> str:
+        return repr(self)
+    
+    def _update_group(self):
+        '''
+        Update the groups of interfaces and commands
+        '''
+        _interfaces:set[Interface] = set()
+        for i in self._src:
+            _interfaces.add(i[0])
+            _interfaces.add(i[1])
+        _interfaces = list(_interfaces)
+        for i in _interfaces:
+            for cmd in i.commands:
+                cmd.callable_groups.clear()
+        _group_map = dict(zip(
+            _interfaces,
+            [f'CommandCallMap-{index}' for index in range(len(_interfaces))]
+        ))
+        for src in _interfaces:
+            src._user.all_groups.add(_group_map[src])
+            for dest in _interfaces:
+                for cmd in self.get(src, dest):
+                    dest.commands[cmd].callable_groups.add(_group_map[src])
+
+    def unstructize(self):
+        '''Unstructize the DiGraph'''
+        if not self:
+            return
+        for i in self:
+            for group in i[0]._user.all_groups:
+                if group.startswith('CommandCallMap-'):
+                    i[0]._user.all_groups.remove(group)
+            for cmd in i[0].commands:
+                for group in cmd.callable_groups:
+                    if group.startswith('CommandCallMap-'):
+                        cmd.callable_groups.remove(group)
+        self._structized = False
+
+    async def setup(self, handler:Handler):
+        '''Setup the tree'''
+        handler._interfaces.clear()
+        _interfaces:set[Interface] = set()
+        for i in self._src:
+            _interfaces.add(i[0])
+            _interfaces.add(i[1])
+        await handler.add_interface(*_interfaces)
+        self._update_group()
+        handler.reload()
+

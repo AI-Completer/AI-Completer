@@ -282,6 +282,7 @@ class CommandSet:
             for j in i.alias:
                 if j == cmd:
                     return i
+        raise error.NotFound(cmd, cmd_set=self)
                 
     def has(self, cmd:str) -> bool:
         '''Check if a command is in the set'''

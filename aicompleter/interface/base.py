@@ -4,15 +4,12 @@ Base Objects for Interface of AutoDone-AI
 import os
 import uuid
 from abc import abstractmethod
-from enum import Enum, unique
-from typing import Any, Optional, TypeVar, overload
+from typing import Optional, overload
 
 import attr
 
 import aicompleter.session as session
 from aicompleter import error, log
-from aicompleter.config import Config
-from aicompleter.interface import command
 
 from .command import Command, CommandSet
 

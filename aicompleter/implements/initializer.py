@@ -3,10 +3,8 @@ Initializer Interface
 *Note*: Deprecated
 '''
 
-import asyncio
 import json
 import uuid
-from enum import Flag
 from typing import Any, Optional
 
 from aicompleter import error, interface

@@ -1,6 +1,5 @@
-import asyncio
 import json
-from typing import Any, Iterable, Literal, Optional, TypeVar
+from typing import Literal, Optional
 
 import aiohttp
 import attr

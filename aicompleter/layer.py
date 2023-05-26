@@ -1,6 +1,7 @@
-from typing import Generic, Iterator, Optional, Self, TypeVar, overload
-from . import *
 import functools
+from typing import Generic, Iterator, Optional, Self, TypeVar, overload
+
+from . import *
 
 _T = TypeVar('_T')
 

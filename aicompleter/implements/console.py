@@ -2,15 +2,11 @@
 Console Interface Implement
 Provide a console interface for Autodone-AI
 '''
-import asyncio
 import uuid
-from typing import Optional
 
-from aicompleter import error, interface, utils
-from aicompleter.config import Config
+from aicompleter import interface, utils
 from aicompleter.interface.base import User, Group
 from aicompleter.session import Message, Session
-from aicompleter.session.base import MultiContent
 
 
 class ConsoleInterface(interface.Interface):

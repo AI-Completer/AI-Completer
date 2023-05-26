@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from ctypes import util
 from typing import TypeVar
 
 import aicompleter

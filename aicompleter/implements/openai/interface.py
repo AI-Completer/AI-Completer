@@ -5,11 +5,11 @@ from typing import Optional
 from aicompleter import *
 from aicompleter.config import Config
 from aicompleter.implements.openai.api import EnterPoint
-from aicompleter.interface import Command, Interface, User, Group
+from aicompleter.interface import Command, Group, Interface, User
 from aicompleter.session import Message, MultiContent, Session
-from aicompleter.utils import Struct
 
 from . import api
+
 
 class OpenaichatInterface(Interface):
     '''

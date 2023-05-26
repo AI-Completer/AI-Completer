@@ -3,14 +3,17 @@ Name: config.py
 Description: Configuration file for aicompleter
 '''
 from __future__ import annotations
-from asyncio import Lock
+
 import asyncio
-import os
-import json
-from typing import Any, Callable, Optional, Self, TypeVar
-from aicompleter.error import ConfigureMissing
-from .utils import defaultdict
 import copy
+import json
+import os
+from asyncio import Lock
+from typing import Any, Callable, Optional
+
+from .error import ConfigureMissing
+
+from .utils import defaultdict
 
 Pointer = list
 '''

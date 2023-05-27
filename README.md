@@ -11,8 +11,8 @@ Now it supports OpenAI API only for model.
 1. Clone the Repositry
 
 ```shell
-git clone https://github.com/AutoDone-AI/AutoDone-AI.git
-cd AutoDone-AI
+git clone https://github.com/AI-Completer/AI-Completer.git
+cd AI-Completer
 ```
 
 2. Modify the config file

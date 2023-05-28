@@ -114,7 +114,6 @@ class Conversation:
     time: float = time.time()
     'Creation time of conversation'
 
-@attr.s(auto_attribs=True)
 class ChatTransformer(Transformer):
     '''
     Abstract class for Chatable transformer
@@ -131,7 +130,7 @@ class ChatTransformer(Transformer):
         raise NotImplementedError(f"generate_many() is not implemented in {self.__class__.__name__}")
     
     @abstractmethod
-    async def ask(self, *args, message:Message, **kwargs):
+    async def ask(self, *args, history:Conversation, message:Message, **kwargs) -> Conversation:
         '''
         Ask a question
         '''

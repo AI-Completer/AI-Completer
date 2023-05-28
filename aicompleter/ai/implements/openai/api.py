@@ -62,7 +62,6 @@ class Chater(ChatTransformer,OpenAIGPT):
             raise ValueError(f'Unknown parameters: {set(config.keys()) - self.REQUIRE_PARAMS}')
         self.proxy:Optional[str] = self.config.get('proxy', None)
         self.api_key:str = self.config.require('openai.api-key')
-        self.conversation:Conversation = Conversation()
 
     @property
     def stream(self):
@@ -135,15 +134,13 @@ class Chater(ChatTransformer,OpenAIGPT):
                         ]
                 full_text = lines[-1]
     
-    async def ask(self, message: Message):
+    async def ask(self, history:Conversation, message: Message):
         '''
         Ask the message
         '''
-        utils.typecheck(message, Message)
-        self.conversation.messages.append(message)
-        ret = await self.generate_text(self.conversation)
-        self.conversation.messages.append(Message(content=ret, role='agent'))
-        return ret
+        new_his = history
+        new_his.messages.append(message)
+        ret = await self.generate_text(new_his)
     
 class Completer(TextTransformer,OpenAIGPT):
     '''

@@ -42,16 +42,16 @@ class AI:
         '''
         raise NotImplementedError(f"generate() is not implemented in {self.__class__.__name__}")
     
-class GPT(AI):
+class Transformer(AI):
     '''
-    Abstract class for GPT
+    Abstract class for transformer
     '''
     support = {'text'}
-    'Supported types of AI'
+    'Supported types of transformer'
     encoding: str
-    'Encoding of GPT'
+    'Encoding of transformer'
     max_tokens: int = 2048
-    'Max tokens of GPT'
+    'Max tokens of transformer'
 
     @abstractmethod
     async def generate_many(self, *args, num:int,  **kwargs) -> Coroutine[list[str], Any, None]:
@@ -115,9 +115,9 @@ class Conversation:
     'Creation time of conversation'
 
 @attr.s(auto_attribs=True)
-class ChatGPT(GPT):
+class ChatTransformer(Transformer):
     '''
-    Abstract class for Chat GPT
+    Abstract class for Chatable transformer
     '''
     @abstractmethod
     async def generate(self, *args, conversation:Conversation, **kwargs) -> Coroutine[str, Any, None]:
@@ -137,9 +137,9 @@ class ChatGPT(GPT):
         '''
         raise NotImplementedError(f"ask() is not implemented in {self.__class__.__name__}")
 
-class TextGPT(GPT):
+class TextTransformer(Transformer):
     '''
-    Abstract class for Text GPT
+    Abstract class for Text transformer
     '''
     @abstractmethod
     async def generate(self, *args, prompt: str, **kwargs) -> Coroutine[str, Any, None]:

@@ -7,11 +7,11 @@ from .token import (
 
 from .ai import (
     AI,
-    GPT,
+    Transformer,
     Message,
     Conversation,
-    ChatGPT,
-    TextGPT,
+    ChatTransformer,
+    TextTransformer,
 )
 
 from .implements import (

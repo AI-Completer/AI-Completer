@@ -6,7 +6,6 @@ import attr
 
 from aicompleter import utils
 from aicompleter.ai import *
-from aicompleter.ai.ai import Conversation, Message
 from aicompleter.config import Config, EnhancedDict
 
 BASE_URL:str = 'https://api.openai.com/v1/'
@@ -16,7 +15,7 @@ COMPLETIONS_URL:str = f'{BASE_URL}completions'
 CHAT_URL:str = f'{BASE_URL}chat/completions'
 'URL of OpenAI API chat completions'
 
-class OpenAIGPT(ai.ChatGPT):
+class OpenAIGPT(Transformer):
     '''
     OpenAI GPT
     '''
@@ -34,7 +33,7 @@ class OpenAIGPT(ai.ChatGPT):
         '''
         self.config['chat']['stream'] = bool(value)
 
-class Chater(OpenAIGPT):
+class Chater(ChatTransformer,OpenAIGPT):
     '''
     Chater
     '''
@@ -147,7 +146,7 @@ class Chater(OpenAIGPT):
         self.conversation.messages.append(Message(content=ret, role='agent'))
         return ret
     
-class Completer(OpenAIGPT):
+class Completer(TextTransformer,OpenAIGPT):
     '''
     Completer
     '''

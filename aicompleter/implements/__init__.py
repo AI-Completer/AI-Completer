@@ -1,3 +1,3 @@
 from .console import ConsoleInterface
 from .initializer import InitInterface
-from . import openai, token
+from . import openai

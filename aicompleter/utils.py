@@ -35,6 +35,13 @@ async def aprint(string: str) -> None:
     print(string)
     _on_reading.release()
 
+def typecheck(value:Any, type_:type):
+    '''
+    Check the type of value. If not, raise TypeError
+    '''
+    if not isinstance(value, type_):
+        raise TypeError(f'{value} is not {type_}')
+
 StructType = TypeVar('StructType', dict, list, type, Callable, tuple)
 '''
 Struct Type

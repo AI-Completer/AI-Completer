@@ -4,11 +4,11 @@ from typing import Optional
 
 from aicompleter import *
 from aicompleter.config import Config
-from aicompleter.implements.openai.api import EnterPoint
+from aicompleter.ai.implements.openai._api import EnterPoint
 from aicompleter.interface import Command, Group, Interface, User
 from aicompleter.session import Message, MultiContent, Session
 
-from . import api
+from ...ai.implements.openai import _api
 
 
 class OpenaichatInterface(Interface):
@@ -45,23 +45,23 @@ class OpenaichatInterface(Interface):
         if message.content.text == "":
             raise ValueError("Empty message")
         # Construct the json data
-        param = api.ChatParameters()
+        param = _api.ChatParameters()
         param.from_json(cfg['chat'])
-        history:list[api.Message] = session.extra['interface.openaichat.history']
+        history:list[_api.Message] = session.extra['interface.openaichat.history']
         param.messages = history + [
-            api.Message(
+            _api.Message(
                 role='user',
                 content=message.content.text,
                 # name=message.src_interface.character.name,
                 )
             ]
         if cfg['sys.prompt'] is not None:
-            param.messages.insert(0, api.Message(
+            param.messages.insert(0, _api.Message(
                     role='system',
                     content=cfg['sys.prompt'],
                     ))
         if cfg['sys.max_history'] is not None:
-            param.messages = api.limitMessageToken(
+            param.messages = _api.limitMessageToken(
                 cfg['chat.model'],
                 param.messages,
                 cfg['sys.max_input_tokens']
@@ -76,7 +76,7 @@ class OpenaichatInterface(Interface):
         # Construct the message
         nmessage = ret['choices'][0]['message']
         param.messages.append(
-            api.Message(
+            _api.Message(
                 role=nmessage['role'],
                 content=nmessage['content'],
             )
@@ -142,7 +142,7 @@ class OpenaichatInterface(Interface):
                 }
         
         session.extra['interface.openaichat.history'] = []
-        enterpoint = api.EnterPoint(cfg['openai.api-key'])
+        enterpoint = _api.EnterPoint(cfg['openai.api-key'])
         if cfg['proxy.http']:
             enterpoint.proxy = cfg['proxy.http']
         session.extra['interface.openaichat.enterpoint'] = enterpoint

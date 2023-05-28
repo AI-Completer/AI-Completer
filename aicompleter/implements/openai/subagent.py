@@ -10,7 +10,7 @@ from typing import Optional
 
 from aicompleter import *
 from aicompleter.config import Config
-from aicompleter.implements.openai import api
+from aicompleter.ai.implements.openai import _api
 from aicompleter.utils import Struct
 
 
@@ -44,24 +44,24 @@ class OpenAISubAgentInterface(Interface):
             for i in session.in_handler.get_cmds_by_group('command')
         ])
         # Construct the json data
-        param = api.ChatParameters()
+        param = _api.ChatParameters()
         param.from_json(self.config['chat'])
         param.messages = [
-            api.Message(
+            _api.Message(
                 role='system',
                 content=self.config['sys.prompt'] + f'\n{command_str}',
             ),
-            api.Message(
+            _api.Message(
                 role='user',
                 content=message.content.text,
             ),
-            api.Message(
+            _api.Message(
                 role='system',
                 content='Reply in this json format:\n' + \
                     '[{"command":<command>, "data":<data>},<other commands(if existed)>]'
             )
         ]
-        enterpoint:api.EnterPoint = session.extra['interface.subagent.enterpoint']
+        enterpoint:_api.EnterPoint = session.extra['interface.subagent.enterpoint']
         try:
             result = await enterpoint.chat(param)
         except Exception as e:
@@ -126,7 +126,7 @@ class OpenAISubAgentInterface(Interface):
                 }).check(proxy_config):
                     raise ValueError("Invalid proxy")
         
-        session.extra['interface.subagent.enterpoint'] = api.EnterPoint(self.config['chat.api_key'])
+        session.extra['interface.subagent.enterpoint'] = _api.EnterPoint(self.config['chat.api_key'])
 
     async def init(self):
         await super().init()

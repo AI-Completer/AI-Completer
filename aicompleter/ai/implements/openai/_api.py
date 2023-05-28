@@ -1,10 +1,15 @@
+'''
+OpenAI API
+Depreciated
+'''
+
 import json
 from typing import Literal, Optional
 
 import aiohttp
 import attr
 
-from aicompleter.implements import token
+from aicompleter.ai import token
 
 Model = str
 '''
@@ -206,6 +211,6 @@ class EnterPoint:
         return self
     
     async def __aexit__(self, exc_type, exc, tb):
-        await self.session.close()
+        'Do nothing'
 
 

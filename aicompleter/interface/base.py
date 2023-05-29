@@ -11,7 +11,7 @@ import attr
 import aicompleter.session as session
 from aicompleter import error, log
 
-from .command import Command, CommandSet
+from .command import Command, Commands
 
 @attr.s(auto_attribs=True, kw_only=True, hash=False)
 class User:
@@ -267,8 +267,8 @@ class Interface:
         '''ID'''
         self.extra:dict = {}
         '''Extra information'''
-        self.commands:CommandSet = CommandSet()
-        '''Command Set of Interface'''
+        self.commands:Commands = Commands()
+        '''Commands of Interface'''
 
         if namespace != None:
             self.namespace = namespace

@@ -12,4 +12,5 @@ from .aio import (
 from .etype import (
     Struct,
     StructType,
+    typecheck,
 )

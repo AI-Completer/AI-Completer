@@ -1,5 +1,7 @@
 
-from typing import Any, Callable, Literal, TypeVar
+from typing import Any, Callable, Literal, TypeVar, Self
+import typing
+import inspect
 
 def typecheck(value:Any, type_:type):
     '''
@@ -108,7 +110,8 @@ class overload_func:
     '''
     Overload decorator
     '''
-    raise NotImplementedError('Overload is not fully implemented yet')
+    def __new__(cls) -> Self:
+        raise NotImplementedError('Overload is not fully implemented yet')
 
     def __init__(self, func:Callable) -> None:
         self.func = func

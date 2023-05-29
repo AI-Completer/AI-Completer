@@ -3,6 +3,7 @@ Utils for aicompleter
 '''
 from .endict import (
     defaultdict,
+    EnhancedDict,
 )
 from .aio import (
     ainput,

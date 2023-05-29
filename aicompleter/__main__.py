@@ -3,6 +3,7 @@ import asyncio
 from aicompleter import *
 from aicompleter.config import Config
 from aicompleter.utils import ainput,aprint
+from aicompleter.implements import ConsoleInterface
 from . import log
 
 __DEBUG__:bool = False
@@ -37,30 +38,32 @@ async def main():
     if config["global.debug"]:
         __DEBUG__ = True
         os.environ['DEBUG'] = "True"
-    # Console Interface
-    console_interface:Interface = implements.ConsoleInterface()
-    openaichat_interface:Interface = implements.openai.OpenaichatInterface()
-    # Handler
-    global _handler
-    _handler = Handler(config)
-    # await _handler.add_interface(console_interface, initialier_interface, openaichat_interface)
-    await _handler.add_interface(console_interface, openaichat_interface)
-    # Session
-    session:Session = await _handler.new_session()
-    # Start
-    ret = await session.asend(Message(
-        cmd='ask',
-        session=session,
-        dest_interface=console_interface,
-        content=MultiContent("Start Your Conversation"),
-    ))
-    session.send(Message(
-        cmd='chat',
-        session=session,
-        src_interface=console_interface,
-        dest_interface=openaichat_interface,
-        content=MultiContent(ret),
-    ))
+
+    config['openaichat'].update(config['global'])
+    
+    consoleinterface:ConsoleInterface = ConsoleInterface()
+    chater = ai.openai.Chater('gpt-3.5-turbo-0301', config['openaichat'])
+    chatinterface:ai.ChatInterface = ai.ChatInterface(ai=chater, namespace='openaichat')
+    hand:Handler = Handler(config)
+
+    await hand.add_interface(consoleinterface, chatinterface)
+    session:Session = await hand.new_session()
+    ret = None
+    while True:
+        text = await session.asend(Message(
+            cmd='ask',
+            session=session,
+            dest_interface=consoleinterface,
+            content=MultiContent(ret if ret else "Start Your Conversation"),
+        ))
+        ret = await session.asend(Message(
+            cmd='ask',
+            session=session,
+            src_interface=chatinterface,
+            dest_interface=chatinterface,
+            content=MultiContent(text),
+        ))
+
 
 loop = asyncio.new_event_loop()
 if os.name == "nt":

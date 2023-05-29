@@ -9,7 +9,7 @@ from typing import Iterator, Optional, overload
 from . import error, events, interface, log, session
 from .config import Config
 from .interface import Command, Interface, User, Group, UserSet, GroupSet
-from .interface.command import CommandSet
+from .interface.command import CommandSet, Commands
 from .session.base import Session
 
 class Handler:
@@ -28,7 +28,7 @@ class Handler:
 
     def __init__(self, config:Optional[Config] = Config()) -> None:
         self._interfaces:set[Interface] = set()
-        self._commands:CommandSet = CommandSet()
+        self._commands:Commands = Commands()
         # self._call_queues:list[tuple[session.Session, session.Message]] = []
         self._closed:asyncio.Event = asyncio.Event()
         '''Closed'''
@@ -130,15 +130,12 @@ class Handler:
         if interface == None:
             return self._commands.get(cmd)
         else:
+            if interface not in self._interfaces:
+                raise error.NotFound(interface, handler=self, content='Interface Not In Handler')
             return interface.commands.get(cmd)
     
-    def get_cmds_by_group(self, groupname:str) -> list[Command]:
-        '''Get callable commands by group name'''
-        return self._commands.get_by_group(groupname)
-    
-    def get_cmds_by_user(self, user:User) -> list[Command]:
-        '''Get callable commands by user'''
-        return self._commands.get_by_user(user)
+    def get_executable_cmds(self, *args, **wargs):
+        return self._commands.get_executable(*args, **wargs)
 
     @overload
     async def add_interface(self, interface:Interface) -> None:

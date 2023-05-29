@@ -1,8 +1,10 @@
 '''
 Command Support For Interface
 '''
+from __future__ import annotations
+import functools
 import json
-from typing import (Any, Callable, Coroutine, Iterable, Iterator, Optional,
+from typing import (Any, Callable, Coroutine, Iterable, Iterator, Optional, Self,
                     TypeVar, overload)
 
 import attr
@@ -10,6 +12,7 @@ import os
 import aicompleter
 import aicompleter.error as error
 from aicompleter import log, session
+from aicompleter import utils
 
 Interface = TypeVar('Interface', bound='aicompleter.interface.Interface')
 User = TypeVar('User', bound='aicompleter.interface.User')
@@ -128,7 +131,7 @@ class Command:
     expose:bool = True
     '''Whether this command can be exposed to handlers'''
 
-    in_interface:Interface|None = None
+    in_interface:Optional[Interface] = None
     '''Interface where the command is from'''
     callback:Optional[Callable[[session.Session, session.Message], Coroutine[Any, Any, Any]]] = None
     '''
@@ -150,6 +153,7 @@ class Command:
         _handler = log.ConsoleHandler()
         _handler.setFormatter(formatter)
         self.logger.addHandler(_handler)
+        self.logger.push(self.in_interface.user.name if self.in_interface else 'Unknown')
         self.logger.push(self.cmd)
         if bool(os.environ.get("DEBUG",False)):
             self.logger.setLevel(log.DEBUG)
@@ -210,6 +214,7 @@ class Command:
 
 class CommandSet:
     def __init__(self) -> None:
+        raise DeprecationWarning("CommandSet is deprecated, use Commands instead")
         self._set:set[Command] = set()
 
     @overload
@@ -224,28 +229,27 @@ class CommandSet:
         '''Add a command to the set(not overrideable)'''
         for cmd in cmds:
             if not isinstance(cmd, Command):
-                raise TypeError("cmd must be a Command instance or an iterable object")
+                raise TypeError("cmd must be a Command instance")
             if cmd in self._set:
-                raise error.Existed(cmd, cmd_set=self)
-            if cmd.cmd in self:
-                to_raise:bool = True
-                if not cmd.overrideable:
-                    for i in self._set:
-                        if i.overrideable:
-                            if i.cmd == cmd.cmd:
-                                self._set.remove(i)
-                                to_raise = False
-                                break
-                            if cmd.cmd in i.alias:
-                                i.alias.remove(cmd.cmd)
-                                to_raise = False
-                                break
-                else:
-                    to_raise = False
-                    # Preserve the first command ? To be discussed
-                if to_raise:
-                    raise error.AliasConflict(cmd.cmd, cmd_set=self)
-            self._set.add(cmd)
+                # Existed
+                continue
+            if not cmd.cmd in self:
+                # Not existed
+                self._set.add(cmd)
+                continue
+            
+            existed_cmd = self.get(cmd.cmd)
+            if existed_cmd.overrideable:
+                # Existed and overrideable
+                self.remove(cmd.cmd)
+                self._set.add(cmd)
+                continue
+            # Existed and not overrideable
+            if cmd.overrideable:
+                # Existed and not overrideable and overrideable
+                continue
+            # Existed and not overrideable and not overrideable
+            raise error.Existed(cmd.cmd, cmd_set=self)
 
     def set(self, cmd:Command) -> None:
         '''Add a command to the set(overrideable)'''
@@ -299,9 +303,18 @@ class CommandSet:
     def clear(self) -> None:
         '''Clear the set'''
         self._set.clear()
-                
-    def __contains__(self, cmd:str) -> bool:
+    
+    @functools.singledispatchmethod
+    def __contains__(self, *args, **kwargs) -> bool:
+        raise TypeError("cmd must be a string instance or a Command instance")
+    
+    @__contains__.register(str)
+    def _(self, cmd:str) -> bool:    
         return cmd in [i.cmd for i in self._set] or cmd in [j for i in self._set for j in i.alias]
+    
+    @__contains__.register(Command)
+    def _(self, cmd:Command) -> bool:
+        return cmd in self._set
     
     def __iter__(self) -> Iterator[Command]:
         return iter(self._set)
@@ -336,3 +349,134 @@ class CommandSet:
         '''Call a function for each command'''
         for i in self._set:
             func(i)
+
+class Commands(dict[str,Command]):
+    '''
+    Commands Dict
+    '''
+    @overload
+    def add(self, cmd:Command) -> None:
+        ...
+
+    @overload
+    def add(self, *cmds:Command) -> None:
+        ...
+
+    def add(self, *cmds:Command) -> None:
+        '''Add a command to the set(not overrideable)'''
+        for cmd in cmds:
+            utils.typecheck(cmd, Command)
+        for cmd in cmds:
+            if not cmd.cmd in self:
+                self.__setitem__(cmd.cmd, cmd)
+                continue
+            # Existed
+            old_cmd = self.__getitem__(cmd.cmd)
+            if old_cmd.overrideable:
+                # Existed and overrideable
+                self.__setitem__(cmd.cmd, cmd)
+                continue
+            # Existed and not overrideable
+            if cmd.overrideable:
+                # Existed and not overrideable and overrideable
+                continue
+            # Existed and not overrideable and not overrideable
+            raise error.Existed(cmd.cmd, cmd_set=self)
+
+    def __setitem__(self, __key: str, __value: Command) -> None:
+        utils.typecheck(__key, str)
+        utils.typecheck(__value, Command)
+        if __key != __value.cmd:
+            raise ValueError(f"Key {__key} must be the same as __value.cmd {__value.cmd}")
+        return super().__setitem__(__key, __value)
+    
+    @overload
+    def __contains__(self, __key: str) -> bool:
+        ...
+
+    @overload
+    def __contains__(self, __key: Command) -> bool:
+        ...
+
+    @functools.singledispatchmethod
+    def __contains__(self, *args, **kwargs) -> bool:
+        raise TypeError("cmd must be a string instance or a Command instance")
+    
+    @__contains__.register(str)
+    def _(self, __key: str) -> bool:
+        return super().__contains__(__key)
+    
+    @__contains__.register(Command)
+    def _(self, __key: Command) -> bool:
+        return super().__contains__(__key.cmd)
+    
+    @overload
+    def remove(self, cmd:str) -> None:
+        ...
+
+    @overload
+    def remove(self, cmd:Command) -> None:
+        ...
+
+    def remove(self, cmd:object) -> None:
+        '''Remove a command from the set'''
+        if isinstance(cmd, str):
+            if cmd in self:
+                return super().__delitem__(cmd)
+            raise error.NotFound(cmd, cmd_set=self)
+        elif isinstance(cmd, Command):
+            for i in self.values():
+                if i == cmd:
+                    super().__delitem__(i.cmd)
+            raise error.NotFound(cmd.cmd, cmd_set=self)
+        raise TypeError("cmd must be a string instance or a Command instance")
+
+    def each(self, func:Callable[[Command], None]) -> None:
+        '''Call a function for each command'''
+        for i in self.values():
+            func(i)
+
+    def register(self, value:Command):
+        '''
+        Decorator for registering a command
+        '''
+        @functools.wraps(value)
+        def wrapper(func:Callable[[session.Session, session.Message], None]):
+            value.bind(func)
+            self.add(value)
+            return func
+        return wrapper
+
+    @overload
+    def get_executable(self, user:User):
+        ...
+
+    @overload
+    def get_executable(self, groupnmae:str):
+        ...
+
+    @overload
+    def get_executable(self, group:Group):
+        ...
+
+    def get_executable(self, arg:object):
+        '''
+        Get commands executable by a user or a group
+        '''
+        if isinstance(arg, User):
+            for grp in arg.all_groups:
+                yield from self.get_executable(grp)
+        elif isinstance(arg, Group):
+            return self.get_executable(arg.name)
+        elif isinstance(arg, str):
+            for i in self.values():
+                if arg in i.callable_groups:
+                    yield i
+        raise TypeError("arg must be a User or a Group or a string instance")
+
+
+    def __repr__(self) -> str:
+        return f"Commands({super().__repr__()})"
+
+    def __iter__(self) -> Command:
+        return self.values().__iter__()

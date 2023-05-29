@@ -19,6 +19,7 @@ from . import (
     config,
     utils,
     log,
+    ai,
 )
 
 from .config import (

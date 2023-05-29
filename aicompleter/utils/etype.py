@@ -1,39 +1,5 @@
-'''
-Utils for aicompleter
-'''
-from __future__ import annotations
-import asyncio
+
 from typing import Any, Callable, Literal, TypeVar
-from concurrent.futures import ThreadPoolExecutor
-
-class defaultdict(dict):
-    '''
-    Dict that can automatically create new keys
-    '''
-    def __missing__(self, key):
-        self[key] = defaultdict()
-        return self[key]
-
-_on_reading:asyncio.Lock = asyncio.Lock()
-'''
-Global asyncio lock for console input
-'''
-
-async def ainput(prompt: str = "") -> str:
-    '''
-    Async input
-    '''
-    async with _on_reading:
-        with ThreadPoolExecutor(1, "AsyncInput") as executor:
-            return (await asyncio.get_event_loop().run_in_executor(executor, input, prompt)).rstrip()
-
-async def aprint(string: str) -> None:
-    '''
-    Async print
-    '''
-    await _on_reading.acquire()
-    print(string)
-    _on_reading.release()
 
 def typecheck(value:Any, type_:type):
     '''
@@ -137,5 +103,66 @@ class Struct:
             raise TypeError('struct must be dict or list or type or callable')
         
         return _check(self.struct, data)
-
     
+class overload_func:
+    '''
+    Overload decorator
+    '''
+    raise NotImplementedError('Overload is not fully implemented yet')
+
+    def __init__(self, func:Callable) -> None:
+        self.func = func
+        '''Function to overload'''
+        self.__doc__ = func.__doc__
+        self.__name__ = func.__name__
+        self.__qualname__ = func.__qualname__
+        self.__annotations__ = func.__annotations__
+
+        self.regs:list[Callable] = []
+        '''Overload register'''
+        typing.overload(func)
+        # Add Overload Register
+
+    def register(self, func:Callable) -> None:
+        '''
+        Register a function
+        '''
+        self.regs.append(func)
+        return self
+
+    def __call__(self, *args:Any, **kwargs:Any) -> Callable:
+        '''
+        Call the function
+        '''
+        def _check_instance(value:Any, type_name:str) -> bool:
+            if hasattr(value, '__bases__'):
+                for base in value.__bases__:
+                    if base.__name__ == type_name:
+                        return True
+                    if _check_instance(base, type_name):
+                        return True
+            return value.__class__.__name__ == type_name
+        
+        check_match = lambda value: info.parameters[name].annotation not in (Any, inspect._empty) and not _check_instance(value, info.parameters[name].annotation)
+        
+        for func in self.regs:
+            info = inspect.signature(func)
+            # Match func and args,kwargs with annotation
+            is_match:bool = True
+            typing.get_type_hints(func)
+            for i, arg in enumerate(args):
+                name = tuple(info.parameters.keys())[i]
+                if check_match(name):
+                    is_match = False
+                    break
+            if not is_match:
+                continue
+            for key, value in kwargs.items():
+                if check_match(value):
+                    is_match = False
+                    break
+            if not is_match:
+                continue
+            return func(*args, **kwargs)
+        return self.func(*args, **kwargs)
+

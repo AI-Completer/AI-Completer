@@ -1,3 +1,4 @@
+import copy
 import json
 from typing import Any, Generator, Iterator, Optional
 
@@ -7,6 +8,7 @@ import attr
 from aicompleter import utils
 from aicompleter.ai import *
 from aicompleter.config import Config, EnhancedDict
+from aicompleter.ai.token import Encoder
 
 BASE_URL:str = 'https://api.openai.com/v1/'
 'BASE URL of OpenAI API'
@@ -62,13 +64,7 @@ class Chater(ChatTransformer,OpenAIGPT):
             raise ValueError(f'Unknown parameters: {set(config.keys()) - self.REQUIRE_PARAMS}')
         self.proxy:Optional[str] = self.config.get('proxy', None)
         self.api_key:str = self.config.require('openai.api-key')
-
-    @property
-    def stream(self):
-        '''
-        Is stream mode
-        '''
-        return self.config['chat'].get('stream', False)
+        self.config.setdefault('sys.max_token', 2048)
     
     async def _request(self, conversation: Conversation) -> Generator[str, Any, None]:
         '''
@@ -77,15 +73,20 @@ class Chater(ChatTransformer,OpenAIGPT):
         utils.typecheck(conversation, Conversation)
 
         async with aiohttp.ClientSession() as session:
+            messages = []
+            for message in conversation.messages:
+                messages.append(
+                    attr.asdict(message,
+                                filter=lambda atr,value:value != None and atr.name in {"role","content"}
+                                )
+                )
+                if message.user is not None:
+                    messages[-1]['name'] = message.user
+
             async with session.post(
                 url=self.location,
                 json=dict(
-                    messages =[
-                        attr.asdict(message,
-                                    filter=lambda atr,value:value != None and atr.name in {"role","content","user"}
-                                    )
-                                    for message in conversation.messages
-                    ],
+                    messages= messages,
                     **self.config['chat'],
                     model = self.name,
                 ),
@@ -134,13 +135,65 @@ class Chater(ChatTransformer,OpenAIGPT):
                         ]
                 full_text = lines[-1]
     
-    async def ask(self, history:Conversation, message: Message):
+    async def ask(self, history:Conversation, message: Message) -> Conversation:
         '''
         Ask the message
         '''
         new_his = history
         new_his.messages.append(message)
+        new_his = self.limit_token(new_his, self.config['sys.max_token'])
         ret = await self.generate_text(new_his)
+        new_his.messages.append(Message(
+            content=ret,
+            role='assistant',
+        ))
+        return new_his
+    
+    def limit_token(self, history:Conversation, max_token:int = 2048, ignore_system:bool = True):
+        '''
+        Limit the tokens
+        :param history: The history
+        :param max_token: The max token
+        :param ignore_system: Whether to ignore system message, this flag will ignore its length and will forbid to cut the system message
+        '''
+        if len(history.messages) == 0:
+            return history
+        encoder = Encoder(model = self.name)
+        totallen = sum(encoder.getTokenLength(message.content) for message in history.messages)
+        systemlen = sum(encoder.getTokenLength(message.content) for message in history.messages if message.role == 'system')
+        if totallen <= max_token:
+            return history
+        if ignore_system:
+            if totallen - systemlen <= max_token:
+                return history
+        # Cut needed
+        new_his = copy.deepcopy(history)
+        for index in range(len(new_his.messages)):
+            totallen -= encoder.getTokenLength(new_his.messages[index].content)
+            if ignore_system and new_his.messages[index].role == 'system':
+                continue
+            if totallen <= max_token:
+                break
+        add_msg = None
+        for rv in range(index, -1, -1):
+            if ignore_system and new_his.messages[rv].role == 'system':
+                continue
+            add_msg = new_his.messages[rv]
+            break
+        add_msg.content = encoder.decode(encoder.encode(add_msg.content)[totallen-max_token:])
+        ret_messages = []
+        for i, message in enumerate(new_his.messages):
+            if ignore_system and message.role == 'system':
+                    ret_messages.append(message)
+                    continue
+            if i == rv:
+                ret_messages.append(add_msg)
+                continue
+            if i < index:
+                continue
+            ret_messages.append(message)
+        new_his.messages = ret_messages
+        return new_his
     
 class Completer(TextTransformer,OpenAIGPT):
     '''

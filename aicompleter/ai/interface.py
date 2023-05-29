@@ -11,6 +11,7 @@ import uuid
 from aicompleter import *
 from aicompleter.ai import Transformer, ChatTransformer, Conversation
 from aicompleter.config import Config
+from aicompleter.interface import Command
 
 from aicompleter.interface import Interface
 from aicompleter.interface import User
@@ -47,7 +48,7 @@ class ChatInterface(TransformerInterface):
             Command(
                 cmd='ask',
                 description='Ask the AI',
-                expose=False,
+                expose=True,
                 in_interface=self,
                 to_return=True,
                 force_await=True,
@@ -57,10 +58,10 @@ class ChatInterface(TransformerInterface):
 
     async def session_init(self, session: Session):
         await super().session_init(session)
-        session.extra[f'interface.{self.namespace}.conversation'] = ai.Conversation(
+        session.extra[f'{self.namespace}.conversation'] = ai.Conversation(
             messages=[
                 ai.Message(
-                    content=session.config[self.namespace]['sys.prompt'],
+                    content=session.config[self.namespace].get('sys.prompt',"You are ChatGPT, a chatbot.\nYour task is to assist the user."),
                     role='system',
                 )
             ]
@@ -71,11 +72,11 @@ class ChatInterface(TransformerInterface):
         Ask the AI
         '''
         self.ai.config = session.config[self.namespace]
-        conversation:Conversation = session.extra[f'interface.{self.namespace}.conversation']
+        conversation:Conversation = session.extra[f'{self.namespace}.conversation']
         conversation = await self.ai.ask(history=conversation,message=ai.Message(
             content=message.content.text,
             role='user',
-            user=message.user,
+            user=session.id.hex,
         ))
         session.extra[f'interface.{self.namespace}.conversation'] = conversation
         return conversation.messages[-1].content

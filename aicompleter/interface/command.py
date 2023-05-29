@@ -4,7 +4,7 @@ Command Support For Interface
 from __future__ import annotations
 import functools
 import json
-from typing import (Any, Callable, Coroutine, Iterable, Iterator, Optional, Self,
+from typing import (Any, Callable, Coroutine, Generator, Iterable, Iterator, Optional, Self,
                     TypeVar, overload)
 
 import attr
@@ -38,6 +38,13 @@ class CommandParamElement:
     '''Whether the parameter is optional'''
     tooltip:str = ""
     '''Tooltip of the parameter'''
+
+    @property
+    def json_text(self):
+        '''
+        Get the json description of the parameter
+        '''
+        return f"<{self.type.__name__ if isinstance(self.type,type) else ''} {self.name}{' = %s' % str(self.default) if self.default else ''}>"
 
 class CommandParamStruct:
     '''
@@ -93,7 +100,8 @@ class CommandParamStruct:
                     return True
         return _check(self._struct, data)
     
-    def json_description(self):
+    @property
+    def json_text(self):
         '''
         Get the json description of the struct
         For example:
@@ -108,7 +116,9 @@ class CommandParamStruct:
             elif isinstance(struct, list):
                 return [_json_description(struct[0])]
             elif isinstance(struct, CommandParamElement):
-                return struct.description
+                return struct.json_text
+            else:
+                raise TypeError("struct must be a dict, list or CommandParamElement instance")
         return json.dumps(_json_description(self._struct))
 
 @attr.s(auto_attribs=True,hash=False)
@@ -459,7 +469,7 @@ class Commands(dict[str,Command]):
     def get_executable(self, group:Group):
         ...
 
-    def get_executable(self, arg:object):
+    def get_executable(self, arg:object) -> Generator[Command, None, None]:
         '''
         Get commands executable by a user or a group
         '''

@@ -4,7 +4,7 @@ Handler between the interfaces
 import asyncio
 import copy
 import uuid
-from typing import Iterator, Optional, overload
+from typing import Generator, Iterator, Optional, overload
 
 from . import error, events, interface, log, session
 from .config import Config
@@ -134,7 +134,7 @@ class Handler:
                 raise error.NotFound(interface, handler=self, content='Interface Not In Handler')
             return interface.commands.get(cmd)
     
-    def get_executable_cmds(self, *args, **wargs):
+    def get_executable_cmds(self, *args, **wargs) -> Generator[Command, None, None]:
         return self._commands.get_executable(*args, **wargs)
 
     @overload

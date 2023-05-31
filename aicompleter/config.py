@@ -56,4 +56,8 @@ def loadConfig(path:str) -> Config:
     '''Load configuration from file'''
     return Config.loadFromFile(path)
 
-
+__all__ = (
+    'Pointer',
+    'Config',
+    'loadConfig',
+)

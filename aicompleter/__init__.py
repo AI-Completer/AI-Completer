@@ -42,7 +42,7 @@ from .interface import (
     User,
     Group,
     Command,
-    CommandSet,
+    Commands,
     CommandParamElement,
     CommandParamStruct,
 )

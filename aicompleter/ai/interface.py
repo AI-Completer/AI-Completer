@@ -36,7 +36,7 @@ class TransformerInterface(Interface):
         )
         self.ai:Transformer = ai
 
-class ChatInterface(TransformerInterface):
+class ChatInterface(TransformerInterface, ChatTransformer):
     '''
     Chat interface
     '''
@@ -44,17 +44,18 @@ class ChatInterface(TransformerInterface):
         super().__init__(ai=ai, user=user, id=id)
         self.namespace = namespace
 
-        self.commands.add(
-            Command(
-                cmd='ask',
-                description='Ask the AI',
-                expose=True,
-                in_interface=self,
-                to_return=True,
-                force_await=True,
-                callback=self.cmd_ask,
+        if self.__class__ == ChatInterface:
+            self.commands.add(
+                Command(
+                    cmd='ask',
+                    description='Ask the AI',
+                    expose=True,
+                    in_interface=self,
+                    to_return=True,
+                    force_await=True,
+                    callback=self.cmd_ask,
+                )
             )
-        )
 
     async def session_init(self, session: Session):
         await super().session_init(session)
@@ -66,6 +67,12 @@ class ChatInterface(TransformerInterface):
                 )
             ]
         )
+
+    async def set_conversation(self, session: Session, conversation:Conversation):
+        '''
+        Set the conversation for ask command
+        '''
+        session.extra[f'{self.namespace}.conversation'] = conversation
     
     async def cmd_ask(self, session:Session, message:Message):
         '''
@@ -81,4 +88,6 @@ class ChatInterface(TransformerInterface):
         session.extra[f'interface.{self.namespace}.conversation'] = conversation
         return conversation.messages[-1].content
 
-    
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        del cls.cmd_ask

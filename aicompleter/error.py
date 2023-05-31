@@ -134,3 +134,7 @@ class AI_InvalidConfig(AIGenerateError):
     AI is not in a valid config
     This is an exception that caused by configure error
     '''
+
+__all__ = (
+    i.__class__.__name__ for i in globals().values() if isinstance(i, BaseException)
+)

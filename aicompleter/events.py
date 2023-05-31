@@ -71,3 +71,9 @@ class Exception(Event):
     def reraise(self):
         '''Reraise the exception'''
         raise self.exception
+
+__all__ = (
+    'Type',
+    'Event',
+    'Exception',
+)

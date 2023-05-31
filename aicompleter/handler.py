@@ -298,3 +298,7 @@ class Handler:
         for i in self._interfaces:
             await i.session_init(ret)
         return ret
+
+__all__ = (
+    'Handler',
+)

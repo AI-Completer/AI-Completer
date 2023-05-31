@@ -142,8 +142,8 @@ class Session:
         '''Source interface'''
         self.config:Config = Config()
         '''Session Config'''
-        self.extra:EnhancedDict = EnhancedDict()
-        '''Extra information'''
+        self.data:EnhancedDict = EnhancedDict()
+        '''Data'''
 
         self.logger:log.Logger=log.Logger('session')
         '''Logger'''
@@ -161,6 +161,14 @@ class Session:
     def id(self) -> uuid.UUID:
         '''ID'''
         return self._id
+    
+    @property
+    def extra(self) -> EnhancedDict:
+        '''
+        Extra information.
+        Warning: This will be deprecated in the future.
+        '''
+        return self.data
     
     @property
     def locked(self) -> bool:
@@ -212,14 +220,14 @@ class Session:
 @attr.s(auto_attribs=True, kw_only=True)
 class Message:
     '''A normal message from the Interface.'''
-    content:MultiContent
+    content:MultiContent = attr.ib(factory=MultiContent, converter=MultiContent)
     '''Content of the message'''
     session:Session = session
     '''Session of the message'''
     id:uuid.UUID = uuid.uuid4()
     '''ID of the message'''
-    extra:dict = {}
-    '''Extra information'''
+    data:EnhancedDict = attr.ib(factory=EnhancedDict, converter=EnhancedDict, alias='extra')
+    '''Data / Extra information'''
     last_message:Message|None = None
     '''Last message'''
     cmd:str

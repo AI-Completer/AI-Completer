@@ -130,7 +130,7 @@ class Command:
     '''Alias Names'''
     description:str = ""
     '''Description For Command'''
-    format:Optional[CommandParamStruct] = None
+    format:Optional[CommandParamStruct | CommandParamElement] = None
     '''Format For Command, if None, no format required'''
     callable_groups:set[str] = set()
     '''Groups who can call this command'''

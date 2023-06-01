@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, overload
 
 
 class defaultdict(dict):
@@ -93,18 +93,38 @@ class EnhancedDict(defaultdict):
             raise KeyError(f"Key not found: {path}")
         return self.get(path)
         
+    @overload
     def setdefault(self, path:str, default:Any = None) -> Any:
+        ...
+
+    @overload
+    def setdefault(self, structdict:dict) -> Any:
+        ...
+
+    def setdefault(self, path:str | dict, default:Any = None) -> Any:
         '''
         Set a value if not exists
         param:
             path: The path of the value
             default: The default value
+            structdict: The dict of the values
         '''
         spilts = path.split('.', 1)
         if len(spilts) == 1:
             return super().setdefault(path, default)
+        if isinstance(path, dict):
+            for key, value in path.items():
+                self.setdefault(key, value)
+            return
+        elif isinstance(path, str):
+            spilts = path.split('.', 1)
+            if len(spilts) == 1:
+                return super().setdefault(path, default)
+            else:
+                return self[spilts[0]].setdefault(spilts[1], default)
         else:
             return self[spilts[0]].setdefault(spilts[1], default)
+            raise TypeError("path must be str or dict")
         
     def update(self, data:EnhancedDict):
         '''Update the dict'''

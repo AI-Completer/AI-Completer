@@ -144,6 +144,7 @@ class Session:
         '''Session Config'''
         self.data:EnhancedDict = EnhancedDict()
         '''Data'''
+        self._running_tasks:list[asyncio.Task] = []
 
         self.logger:log.Logger=log.Logger('session')
         '''Logger'''
@@ -213,9 +214,19 @@ class Session:
         if self.closed:
             return
         self.logger.debug(f"Session closing")
+        for task in self._running_tasks:
+            task.cancel()
+        result = await asyncio.gather(*self._running_tasks, return_exceptions=True)
+        if any([isinstance(r, Exception) for r in result]):
+            self.logger.exception(f"Error when closing session" + "\n".join([str(r) for r in result if isinstance(r, Exception)]))
         for interface in self.in_handler._interfaces:
             await interface.session_final(self)
         self._closed = True
+
+    async def _update_tasks(self):
+        for task in self._running_tasks:
+            if task.done() or task.cancelled():
+                self._running_tasks.remove(task)
 
 @attr.s(auto_attribs=True, kw_only=True)
 class Message:

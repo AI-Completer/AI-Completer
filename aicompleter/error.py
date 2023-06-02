@@ -107,6 +107,12 @@ class SessionClosed(BaseException):
         self.session:Session = session
         super().__init__(*args, **kwargs)
 
+class ConversationTimeOut(BaseException):
+    '''Conversation Time Out'''
+
+class ReachedMaxMessage(BaseException):
+    '''Reached Max Message'''
+
 ################## AI Generate Error ##################
 # AI Generate Error (or possiblily human input error)
 

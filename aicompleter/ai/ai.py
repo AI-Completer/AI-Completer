@@ -50,8 +50,8 @@ class Transformer(AI):
     'Supported types of transformer'
     encoding: str
     'Encoding of transformer'
-    max_tokens: int = 2048
-    'Max tokens of transformer'
+    max_tokens: Optional[int] = None
+    'Max tokens of transformer, will limit the length of generated content'
 
     @abstractmethod
     async def generate_many(self, *args, num:int,  **kwargs) -> Coroutine[list[str], Any, None]:
@@ -93,6 +93,8 @@ class Message:
     'User of message'
     time: float = time.time()
     'Time of message'
+    data: dict = {}
+    'Extra data of message'
 
     def __str__(self):
         return self.content
@@ -113,6 +115,10 @@ class Conversation:
     'User of conversation'
     time: float = time.time()
     'Creation time of conversation'
+    timeout: Optional[float] = None
+    'Timeout of conversation'
+    data: dict = {}
+    'Extra data of conversation'
 
 class ChatTransformer(Transformer):
     '''
@@ -130,11 +136,20 @@ class ChatTransformer(Transformer):
         raise NotImplementedError(f"generate_many() is not implemented in {self.__class__.__name__}")
     
     @abstractmethod
-    async def ask(self, *args, history:Conversation, message:Message, **kwargs) -> Conversation:
+    async def ask(self, *args, id:uuid.UUID, message:Message, **kwargs) -> Coroutine[Message, Any, None]:
         '''
-        Ask a question
+        Ask the AI
         '''
         raise NotImplementedError(f"ask() is not implemented in {self.__class__.__name__}")
+    
+    async def ask_once(self, *args, id:uuid.UUID, message:Message, **kwargs) -> Message:
+        '''
+        Ask the AI once
+        '''
+        rvalue = ''
+        async for value in self.ask(*args, id=id, message=message, **kwargs):
+            rvalue = value
+        return rvalue
 
 class TextTransformer(Transformer):
     '''

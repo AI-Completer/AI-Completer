@@ -4,3 +4,4 @@ tiktoken
 shutil
 attr
 paramiko
+EdgeGPT

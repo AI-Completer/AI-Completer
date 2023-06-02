@@ -135,7 +135,7 @@ class Chater(ChatTransformer,OpenAIGPT):
                         ]
                 full_text = lines[-1]
     
-    async def ask(self, history:Conversation, message: Message) -> Conversation:
+    async def update_conversation(self, history:Conversation, message: Message) -> Conversation:
         '''
         Ask the message
         '''

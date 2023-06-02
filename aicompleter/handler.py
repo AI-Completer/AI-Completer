@@ -226,6 +226,9 @@ class Handler:
         '''
 
         # Check Premission & valify availablity
+        if session.closed:
+            raise error.SessionClosed(session, handler=self)
+
         if message.src_interface:
             if message.dest_interface:
                 # Enable self interface command

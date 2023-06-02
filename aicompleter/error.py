@@ -10,6 +10,7 @@ from . import log
 Interface = TypeVar('Interface', bound='aicompleter.interface.Interface')
 Message = TypeVar('Message', bound='aicompleter.session.Message')
 Config = TypeVar('Config', bound='aicompleter.config.Config')
+Session = TypeVar('Session', bound='aicompleter.session.Session')
 
 class BaseException(Exception):
     '''Base Exception for all Autodone-AI error'''
@@ -100,6 +101,11 @@ class Inited(BaseException):
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)
     
+class SessionClosed(BaseException):
+    '''Session Closed'''
+    def __init__(self, session:Session, *args: object, **kwargs: object) -> None:
+        self.session:Session = session
+        super().__init__(*args, **kwargs)
 
 ################## AI Generate Error ##################
 # AI Generate Error (or possiblily human input error)

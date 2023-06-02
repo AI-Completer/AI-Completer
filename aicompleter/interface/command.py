@@ -2,6 +2,7 @@
 Command Support For Interface
 '''
 from __future__ import annotations
+import asyncio
 import functools
 import json
 from typing import (Any, Callable, Coroutine, Generator, Iterable, Iterator, Optional, Self,
@@ -193,11 +194,25 @@ class Command:
             if not self.format.check(message.content.pure_text):
                 raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",message=message,interface=self.in_interface)
         if self.callback is not None:
-            ret = await self.callback(session, message)
+            task = asyncio.get_event_loop().create_task(self.callback(session, message))
+            session._running_tasks.append(task)
+            try:
+                ret = await task
+            except Exception as e:
+                session._running_tasks.remove(task)
+                raise e
+            session._running_tasks.remove(task)
         else:   
             if self.in_interface is None:
                 raise error.ParamRequired(f"[Command <{self.cmd}>]in_interface required: Command.call")
-            ret = await self.in_interface.call(session, message)
+            task = asyncio.get_event_loop().create_task(self.in_interface.call(session, message))
+            session._running_tasks.append(task)
+            try:
+                ret = await task
+            except Exception as e:
+                session._running_tasks.remove(task)
+                raise e
+            session._running_tasks.remove(task)
         if ret is not None:
             self.logger.debug("Command return value: %s" % str(ret))
         return ret

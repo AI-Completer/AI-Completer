@@ -66,4 +66,3 @@ class MemoryConfigure:
     def check_initial_memory(self, attribute: str, value: Optional[Memory]) -> None:
         if value != None and self.factory != value.__class__ and self.factory != None:
             raise ValueError(f"Initial memory must be {self.factory.__name__}.")
-        self.factory = value.__class__

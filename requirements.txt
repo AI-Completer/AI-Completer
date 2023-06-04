@@ -5,3 +5,4 @@ shutils
 attr
 paramiko
 EdgeGPT
+pandas

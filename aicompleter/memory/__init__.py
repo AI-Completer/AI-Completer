@@ -11,5 +11,7 @@ from .base import (
 from .utils import (
     Model,
     VectexTransformer,
+    getMemoryItem,
+    MemoryConfigure,
 )
 

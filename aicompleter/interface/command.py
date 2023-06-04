@@ -14,6 +14,7 @@ import aicompleter
 import aicompleter.error as error
 from aicompleter import log, session
 from aicompleter import utils
+from aicompleter.memory.base import MemoryItem
 
 Interface = TypeVar('Interface', bound='aicompleter.interface.Interface')
 User = TypeVar('User', bound='aicompleter.interface.User')
@@ -193,6 +194,14 @@ class Command:
         if self.format != None:
             if not self.format.check(message.content.pure_text):
                 raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",message=message,interface=self.in_interface)
+        
+        # Add Memory
+        session._memory.put(MemoryItem(
+            vertex=session._vertex_model.transform_text(message.content.pure_text),
+            class_=f"cmd-{self.cmd}",
+            data=message.content.pure_text,
+        ))
+        
         if self.callback is not None:
             task = asyncio.get_event_loop().create_task(self.callback(session, message))
             session._running_tasks.append(task)

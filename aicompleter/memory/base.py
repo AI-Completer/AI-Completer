@@ -2,13 +2,17 @@
 Base Class for abstracting memory layer
 This provide a vertex database interface for the project
 '''
+from __future__ import annotations
+
+import json
 import time
 import uuid
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any, Callable, Iterable, Iterator, Optional, Self, overload
 
 import attr
 import numpy as np
+
 
 class MemoryClass:
     '''
@@ -39,16 +43,58 @@ class MemoryItem:
     '''
     Memory Item
     '''
-    id: uuid.UUID = attr.ib(default=uuid.uuid4(), converter=uuid.UUID)
+    id: uuid.UUID = attr.ib(default=uuid.uuid4(), factory=uuid.UUID)
     'The unique id of the item'
     vertex: np.ndarray = attr.ib(converter=np.array)
     'The vertex of the item'
-    class_: MemoryClass = attr.ib(default=MemoryClass('default'), converter=MemoryClass, factory=MemoryClass)
+    class_: MemoryClass = attr.ib(default=MemoryClass('default'), factory=MemoryClass)
     'The class of the item, usually used for classification for different types of items'
     data: Any = attr.ib()
     'The data of the item'
-    timestamp: float = attr.ib(default=time.time())
+    timestamp: float = attr.ib(default=time.time(), factory=float)
     'The timestamp of the item'
+
+    @staticmethod
+    def from_dict(self, src: dict) -> Self:
+        '''
+        Get a MemoryItem from a dict
+        '''
+        ret = MemoryItem(id=uuid.UUID(src['id']),
+                        vertex=np.array(src['vertex']),
+                        class_=MemoryClass(src['class']),
+                        timestamp=src['timestamp'])
+        if 'data' in src:
+            ret.data = src['data']
+            try:
+                ret.data = json.loads(ret.data)
+            except json.JSONDecodeError:
+                pass
+        return ret
+    
+    @classmethod
+    def to_dict(self) -> dict:
+        '''
+        Get a dict from a MemoryItem
+        '''
+        ret = {
+            'id': self.id.hex,
+            'vertex': self.vertex.tolist(),
+            'class': self.class_.class_,
+            'timestamp': self.timestamp,
+        }
+        if self.data == None:
+            return ret
+        if isinstance(self.data, (dict, list)):
+            ret['data'] = json.dumps(self.data)
+            return ret
+        try:
+            if hasattr(self.data, 'to_dict'):
+                ret['data'] = json.dumps(self.data.to_dict())
+            else:
+                ret['data'] = str(self.data)
+        except AttributeError:
+            ret['data'] = str(self.data)
+        return ret
 
 @attr.s
 class Query:
@@ -74,9 +120,25 @@ class Memory:
         pass
 
     @abstractmethod
+    @overload
     def put(self, item: MemoryItem) -> None:
         '''
         Put a memory item into memory
+        '''
+        pass
+
+    @abstractmethod
+    @overload
+    def put(self, items: Iterable[MemoryItem]) -> None:
+        '''
+        Put a list of memory items into memory
+        '''
+        pass
+
+    @abstractmethod
+    def put(self, param: MemoryItem | Iterable[MemoryItem]) -> None:
+        '''
+        Put a memory item or a list of memory items into memory
         '''
         pass
 
@@ -88,15 +150,28 @@ class Memory:
         pass
 
     @abstractmethod
-    def query(self, query:Query) -> list[MemoryItem]:
+    def query(self, query:Query) -> Iterator[MemoryItem]:
         '''
         Query memory items by vertex and class
         '''
         pass
 
-    @abstractmethod
     def count(self, query:Query) -> int:
         '''
         Count memory items by vertex and class
+        '''
+        return len(self.query(query))
+
+    def each(self, func: Callable[[MemoryItem],None]) -> None:
+        '''
+        Iterate all memory items
+        '''
+        for item in self.all():
+            func(item)
+
+    @abstractmethod
+    def all(self) -> Iterator[MemoryItem]:
+        '''
+        Get all memory items
         '''
         pass

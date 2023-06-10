@@ -20,6 +20,7 @@ from . import (
     utils,
     log,
     ai,
+    memory,
 )
 
 from .config import (

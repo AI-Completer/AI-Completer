@@ -6,6 +6,7 @@ from .base import (
     MemoryItem,
     Query,
     Memory,
+    MemoryClass,
 )
 
 from .utils import (
@@ -15,3 +16,10 @@ from .utils import (
     MemoryConfigure,
 )
 
+from .faissimp import (
+    FaissMemory,
+)
+
+from .history import (
+    HistoryFile,
+)

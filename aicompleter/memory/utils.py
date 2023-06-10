@@ -14,7 +14,7 @@ class VectexTransformer:
     def __init__(self, model:Model):
         self.model = model
 
-    def transform_text(self, text:str, batch_size: int = 32, device: str = None) -> torch.Tensor:
+    def transform_text(self, text:str, batch_size: int = 32, device: str = None) -> np.ndarray:
         '''
         This method is used to transform the text into vectors.
         '''

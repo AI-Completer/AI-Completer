@@ -31,13 +31,12 @@ This normally will start a conversation with ChatGPT, we're adding more function
 
 ```python
 from aicompleter import *
-from aicompleter import ai
 from aicompleter.implements import *
 import asyncio
 
 cfg = config.loadConfig('config.json')
 # load config
-cfg['openaichat'].update(cfg['global'])
+cfg['openaichat'].setdefault(cfg['global'])
 # load global config to overwrite openaichat config
 chater = ai.openai.Chater('gpt-3.5-turbo-0301', cfg['openaichat'])
 # ChatAI, use openai model gpt-3.5-turbo-0301

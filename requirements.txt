@@ -5,3 +5,6 @@ shutils
 attr
 paramiko
 EdgeGPT
+pandas
+sentence_transformers
+torch

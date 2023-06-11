@@ -6,7 +6,7 @@ AutoDone is a framework for interaction among AI, human and system.
 __version__ = "0.0.1beta"
 __author__ = "Li Yan"
 __package__ = "aicompleter"
-__license__ = "MIT"
+__license__ = "GPLv3"
 __description__ = "AutoDone-AI"
 # __url__ = ""
 # Unknown yet
@@ -20,6 +20,7 @@ from . import (
     utils,
     log,
     ai,
+    memory,
 )
 
 from .config import (

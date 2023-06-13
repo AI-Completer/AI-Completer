@@ -41,6 +41,28 @@ class CommandParamElement:
     tooltip:str = ""
     '''Tooltip of the parameter'''
 
+    def __to_json__(self):
+        return {
+            "name":self.name,
+            "type":self.type.__name__ if isinstance(self.type,type) else '',
+            "default":self.default,
+            "description":self.description,
+            "optional":self.optional,
+            "tooltip":self.tooltip,
+        }
+    
+    @staticmethod
+    def __from_json__(data:dict):
+        return CommandParamElement(
+            name=data['name'],
+            type=eval(data['type']) if data['type'] else str,
+            # TODO: fix the eval problem
+            default=data['default'],
+            description=data['description'],
+            optional=data['optional'],
+            tooltip=data['tooltip'],
+        )
+
     @property
     def json_text(self):
         '''
@@ -101,6 +123,43 @@ class CommandParamStruct:
                         raise TypeError(f"data must be {struct.type}")
                     return True
         return _check(self._struct, data)
+    
+    def __to_json__(self):
+        '''
+        Get the json description of the struct
+        '''
+        def _json(struct:dict|list|CommandParamElement):
+            if isinstance(struct, dict):
+                ret = {}
+                for key,value in struct.items():
+                    ret[key] = _json(value)
+                return ret
+            elif isinstance(struct, list):
+                return [_json(struct[0])]
+            elif isinstance(struct, CommandParamElement):
+                return json.dumps(struct.__to_json__())
+            else:
+                raise TypeError("struct must be a dict, list or CommandParamElement instance")
+        return json.dumps(_json(self._struct))
+    
+    @staticmethod
+    def __from_json__(data:dict):
+        '''
+        Get the struct from json description
+        '''
+        def _from_json(struct:dict|list|str):
+            if isinstance(struct, dict):
+                ret = {}
+                for key,value in struct.items():
+                    ret[key] = _from_json(value)
+                return ret
+            elif isinstance(struct, list):
+                return [_from_json(struct[0])]
+            elif isinstance(struct, str):
+                return CommandParamElement.__from_json__(json.loads(struct))
+            else:
+                raise TypeError("struct must be a dict, list or CommandParamElement instance")
+        return CommandParamStruct(_from_json(data))
     
     @property
     def json_text(self):
@@ -247,6 +306,31 @@ class Command:
              (*self.callable_groups, ), 
             self.overrideable, tuple(self.extra.items()), 
             self.expose))
+    
+    def __to_json__(self):
+        return {
+            "cmd":self.cmd,
+            "alias":list(self.alias),
+            "description":self.description,
+            "format":self.format.__to_json__() if self.format else None,
+            "callable_groups":list(self.callable_groups),
+            "overrideable":self.overrideable,
+            "extra":self.extra,
+            "expose":self.expose,
+        }
+    
+    @staticmethod
+    def __from_json__(data:dict):
+        return Command(
+            cmd=data['cmd'],
+            alias=set(data.get('alias',[])),
+            description=data.get('description',''),
+            format=CommandParamStruct.__from_json__(data['format']) if data['format'] else None,
+            callable_groups=set(data.get('callable_groups',[])),
+            overrideable=bool(data.get('overrideable',False)),
+            extra=data.get('extra',{}),
+            expose=data.get('expose',True),
+        )
 
 class CommandSet:
     def __init__(self) -> None:

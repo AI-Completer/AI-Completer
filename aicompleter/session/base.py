@@ -287,6 +287,32 @@ class Message:
     def __repr__(self) -> str:
         return f"Message({self.cmd}, {self.content.text}, {self.session.id}, {self.id})"
     
+    def __to_json__(self):
+        return {
+            'content': self.content.pure_text,
+            'session': self.session.id.hex,
+            'id': self.id.hex,
+            'data': self.data,
+            'last_message': self.last_message.id.hex if self.last_message is not None else None,
+            'cmd': self.cmd,
+            'src_interface': self.src_interface.namespace if self.src_interface is not None else None,
+            'dest_interface': self.dest_interface.namespace if self.dest_interface is not None else None,
+        }
+    
+    @staticmethod
+    def __from_json__(self, data:dict):
+        # TODO: add session
+        return Message(
+            content = MultiContent(data['content']),
+            session = None,
+            id = uuid.UUID(data['id']),
+            data = EnhancedDict(data['data']),
+            last_message = uuid.UUID(data['last_message']) if data['last_message'] is not None else None,
+            cmd = data['cmd'],
+            src_interface = None,
+            dest_interface = None,
+        )
+    
 class MessageQueue(asyncio.Queue[Message]):
     '''Message Queue'''
     def __init__(self, id:uuid.UUID = uuid.uuid4()):

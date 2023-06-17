@@ -1,3 +1,4 @@
+from __future__ import annotations
 import json
 from typing import Optional
 from .base import *
@@ -12,11 +13,27 @@ class jsonconnection(connection):
         self._code = encode
         self._lock = Lock()
 
+    class __conversation:
+        def __init__(self, jc:jsonconnection):
+            self._jc = jc
+
+        async def __aenter__(self):
+            await self._jc._lock.acquire()
+            return self._jc
+        
+        async def __aexit__(self, exc_type, exc, tb):
+            self._jc._lock.release()
+
+    async def conversation(self):
+        '''
+        Get a conversation
+        '''
+        return self.__conversation(self)
+
     async def send(self, data:dict) -> None:
         '''
         Send data
         '''
-        await self.wait_for_request()
         if not self._open:
             raise RuntimeError('Connection not open')
         self._writer.write(json.dumps(data).encode(self._code) + b'\n')
@@ -26,7 +43,6 @@ class jsonconnection(connection):
         '''
         Receive data
         '''
-        await self.wait_for_request()
         if not self._open:
             raise RuntimeError('Connection not open')
         content = await self._reader.readline()

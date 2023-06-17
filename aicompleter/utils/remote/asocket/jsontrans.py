@@ -71,6 +71,12 @@ class jsonconnection(connection):
         async with self._lock:
             await self.send(data)
             return await self.recv()
+        
+    def at_eof(self) -> bool:
+        '''
+        Whether the connection is at eof
+        '''
+        return self._reader.at_eof()
 
 class jsonserver(server):
     '''

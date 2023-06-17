@@ -1,6 +1,7 @@
 import json
 from typing import Optional
 from .base import *
+from asyncio import Lock
 
 class jsonconnection(connection):
     '''
@@ -9,11 +10,13 @@ class jsonconnection(connection):
     def __init__(self, encode:str = 'utf-8'):
         super().__init__()
         self._code = encode
+        self._lock = Lock()
 
     async def send(self, data:dict) -> None:
         '''
         Send data
         '''
+        await self.wait_for_request()
         if not self._open:
             raise RuntimeError('Connection not open')
         self._writer.write(json.dumps(data).encode(self._code) + b'\n')
@@ -23,12 +26,35 @@ class jsonconnection(connection):
         '''
         Receive data
         '''
+        await self.wait_for_request()
         if not self._open:
             raise RuntimeError('Connection not open')
         content = await self._reader.readline()
         while content == b'\n':
             content = await self._reader.readline()
         return json.loads(content, encoding=self._code)
+    
+    @property
+    def on_requesting(self) -> bool:
+        '''
+        Whether the connection is requesting
+        '''
+        return not self._lock.locked()
+    
+    async def wait_for_request(self) -> None:
+        '''
+        Wait for the connection to stop requesting
+        '''
+        await self._lock.acquire()
+        self._lock.release()
+    
+    async def request(self, data:dict) -> dict:
+        '''
+        Send data and receive data
+        '''
+        async with self._lock:
+            await self.send(data)
+            return await self.recv()
 
 class jsonserver(server):
     '''

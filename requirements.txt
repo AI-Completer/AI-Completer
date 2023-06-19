@@ -8,3 +8,5 @@ EdgeGPT
 pandas
 sentence_transformers
 torch
+jieba
+keybert

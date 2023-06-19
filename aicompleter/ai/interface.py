@@ -3,6 +3,7 @@ Implement the interface of the AI
 Will generate a interface by the specified AI class
 '''
 from __future__ import annotations
+import copy
 from typing import (
     Optional,
     TypeVar,
@@ -36,7 +37,7 @@ class TransformerInterface(Interface):
         )
         self.ai:Transformer = ai
 
-class ChatInterface(TransformerInterface, ChatTransformer):
+class ChatInterface(TransformerInterface):
     '''
     Chat interface
     '''
@@ -80,14 +81,24 @@ class ChatInterface(TransformerInterface, ChatTransformer):
         '''
         self.ai.config = session.config[self.namespace]
         conversation:Conversation = session.extra[f'{self.namespace}.conversation']
-        conversation = await self.ai.ask(history=conversation,message=ai.Message(
+        new_conversion = copy.copy(conversation)
+        new_conversion.messages.append(ai.Message(
             content=message.content.text,
             role='user',
             user=session.id.hex,
         ))
-        session.extra[f'interface.{self.namespace}.conversation'] = conversation
+        # Generate
+        ret = await self.ai.generate_text(conversation=new_conversion)
+        new_conversion.messages.append(ai.Message(
+            content=ret,
+            role='assistant',
+        ))
+        session.data[f'interface.{self.namespace}.conversation'] = new_conversion
         return conversation.messages[-1].content
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
         del cls.cmd_ask
+
+    def __hash__(self):
+        return hash(self.id)

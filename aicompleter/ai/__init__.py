@@ -16,6 +16,7 @@ from .ai import (
 
 from .implements import (
     openai,
+    microsoft,
 )
 
 from .interface import (

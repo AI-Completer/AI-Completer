@@ -189,7 +189,7 @@ class Command:
             if message.src_interface != message.dest_interface:
                 if not self.check_support(session.in_handler, message.src_interface.user):  
                     raise error.PermissionDenied(f"user {message.src_interface.user} not in callable_groups: Command.call{str(self.callable_groups)}",message=message,interface=self.in_interface)
-        self.logger.debug(f"Call ({session.id}, {message.id}) {message.content}")
+        self.logger.info(f"Call ({session.id}, {message.id}) {message.content}")
         message.dest_interface = self.in_interface
         if self.format != None:
             if not self.format.check(message.content.pure_text):

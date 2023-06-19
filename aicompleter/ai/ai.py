@@ -1,3 +1,4 @@
+import copy
 import time
 import uuid
 from abc import abstractmethod
@@ -13,15 +14,15 @@ class AI:
     '''
     Abstract class for AI
     '''
-    name: str
+    name: str = attr.ib(default="AI", converter=str)
     'AI name'
-    islocal: bool = False
+    islocal: bool = attr.ib(default=True, converter=bool)
     'Is AI local or remote'
-    isenabled: bool = True
+    isenabled: bool = attr.ib(default=True, converter=bool)
     'Is AI enabled'
-    support:set[str] = {}
+    support:set[str] = attr.ib(default={'text'}, converter=set)
     'Supported types of AI'
-    location: str = None
+    location: Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
     'Location of AI'
 
     config:Config = attr.ib(factory=Config, on_setattr=attr.setters.convert)
@@ -109,9 +110,9 @@ class Conversation:
     '''
     messages:list[Message] = []
     'Messages of conversation'
-    id:Optional[uuid.UUID] = None
+    id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
     'ID of conversation'
-    user:Optional[str] = None
+    user: Optional[str] = None
     'User of conversation'
     time: float = time.time()
     'Creation time of conversation'
@@ -136,18 +137,22 @@ class ChatTransformer(Transformer):
         raise NotImplementedError(f"generate_many() is not implemented in {self.__class__.__name__}")
     
     @abstractmethod
-    async def ask(self, *args, id:uuid.UUID, message:Message, **kwargs) -> Coroutine[Message, Any, None]:
+    async def ask(self, *args, history:Conversation, message:Message, **kwargs) -> Coroutine[Message, Any, None]:
         '''
         Ask the AI
         '''
-        raise NotImplementedError(f"ask() is not implemented in {self.__class__.__name__}")
+        # If this function is not inherited, it will use generate() instead
+        new_conversation = copy.copy(history)
+        new_conversation.messages.append(message)
+        async for value in self.generate(*args, conversation=new_conversation, **kwargs):
+            yield value
     
-    async def ask_once(self, *args, id:uuid.UUID, message:Message, **kwargs) -> Message:
+    async def ask_once(self, *args,history:Conversation, message:Message, **kwargs) -> Message:
         '''
         Ask the AI once
         '''
         rvalue = ''
-        async for value in self.ask(*args, id=id, message=message, **kwargs):
+        async for value in self.ask(*args, history=history, message=message, **kwargs):
             rvalue = value
         return rvalue
 

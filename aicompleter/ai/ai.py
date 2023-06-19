@@ -13,15 +13,15 @@ class AI:
     '''
     Abstract class for AI
     '''
-    name: str
+    name: str = attr.ib(default="AI", converter=str)
     'AI name'
-    islocal: bool = False
+    islocal: bool = attr.ib(default=True, converter=bool)
     'Is AI local or remote'
-    isenabled: bool = True
+    isenabled: bool = attr.ib(default=True, converter=bool)
     'Is AI enabled'
-    support:set[str] = {}
+    support:set[str] = attr.ib(default={'text'}, converter=set)
     'Supported types of AI'
-    location: str = None
+    location: Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
     'Location of AI'
 
     config:Config = attr.ib(factory=Config, on_setattr=attr.setters.convert)
@@ -136,18 +136,18 @@ class ChatTransformer(Transformer):
         raise NotImplementedError(f"generate_many() is not implemented in {self.__class__.__name__}")
     
     @abstractmethod
-    async def ask(self, *args, id:uuid.UUID, message:Message, **kwargs) -> Coroutine[Message, Any, None]:
+    async def ask(self, *args, message:Message, **kwargs) -> Coroutine[Message, Any, None]:
         '''
         Ask the AI
         '''
         raise NotImplementedError(f"ask() is not implemented in {self.__class__.__name__}")
     
-    async def ask_once(self, *args, id:uuid.UUID, message:Message, **kwargs) -> Message:
+    async def ask_once(self, *args, message:Message, **kwargs) -> Message:
         '''
         Ask the AI once
         '''
         rvalue = ''
-        async for value in self.ask(*args, id=id, message=message, **kwargs):
+        async for value in self.ask(*args, message=message, **kwargs):
             rvalue = value
         return rvalue
 

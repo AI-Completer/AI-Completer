@@ -10,12 +10,8 @@ from aicompleter.ai import *
 from aicompleter.config import Config, EnhancedDict
 from aicompleter.ai.token import Encoder
 
-BASE_URL:str = 'https://api.openai.com/v1/'
+DEFAULT_API_URL:str = 'https://api.openai.com/v1/'
 'BASE URL of OpenAI API'
-COMPLETIONS_URL:str = f'{BASE_URL}completions'
-'URL of OpenAI API completions'
-CHAT_URL:str = f'{BASE_URL}chat/completions'
-'URL of OpenAI API chat completions'
 
 class OpenAIGPT(Transformer):
     '''
@@ -55,15 +51,23 @@ class Chater(ChatTransformer,OpenAIGPT):
         super().__init__(
             name=model,
             support={"text"},
-            location=CHAT_URL,
             config=config,
         )
         if not isinstance(self.config['chat'], EnhancedDict):
             raise ValueError(f'Invalid config: {self.config}')
         if not set(self.config['chat'].keys()) <= self.REQUIRE_PARAMS:
             raise ValueError(f'Unknown parameters: {set(config.keys()) - self.REQUIRE_PARAMS}')
-        self.proxy:Optional[str] = self.config.get('proxy', None)
+        self.update_config(config)
+
+    def update_config(self, config:Config):
+        '''
+        Update the config
+        '''
+        self.config = config
         self.api_key:str = self.config.require('openai.api-key')
+        self.proxy:Optional[str] = self.config.get('proxy', None)
+        self.api_url = self.config.get('openai.api-url', DEFAULT_API_URL)
+        self.location = self.api_url + 'chat/completions'
         self.config.setdefault('sys.max_token', 2048)
     
     async def _request(self, conversation: Conversation) -> Generator[str, Any, None]:
@@ -221,15 +225,24 @@ class Completer(TextTransformer,OpenAIGPT):
         super().__init__(
             name=model,
             support={"text"},
-            location=CHAT_URL,
             config=config,
         )
         if not isinstance(self.config['chat'], EnhancedDict):
             raise ValueError(f'Invalid config: {self.config}')
         if not set(self.config['chat'].keys()) <= self.REQUIRE_PARAMS:
             raise ValueError(f'Unknown parameters: {set(config.keys()) - self.REQUIRE_PARAMS}')
+        self.update_config(config)
+
+    def update_config(self, config:Config):
+        '''
+        Update the config
+        '''
+        self.config = config
+        self.api_key:str = self.config.require('openai.api-key')
         self.proxy:Optional[str] = self.config.get('proxy', None)
-        self.api_key:str = self.config.require('openai.api_key')
+        self.api_url = self.config.get('openai.api-url', DEFAULT_API_URL)
+        self.location = self.api_url + 'completions'
+        self.config.setdefault('sys.max_token', 2048)
 
     async def _request(self, prompt: str) -> Generator[str, Any, None]:
         '''

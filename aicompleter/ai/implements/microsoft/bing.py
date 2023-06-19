@@ -6,8 +6,7 @@ from typing import Any, Coroutine, Optional
 from EdgeGPT import Chatbot, ConversationStyle
 
 from aicompleter import *
-from aicompleter.ai import Conversation
-
+from aicompleter.ai import Conversation, ChatTransformer, Message
 
 @enum.unique
 class Style(enum.Enum):
@@ -19,11 +18,11 @@ class Style(enum.Enum):
     precise=ConversationStyle.precise
     'Precise'
 
-class BingAI(ai.ChatTransformer):
+class BingAI(ChatTransformer):
     '''
     Microsoft Bing AI
     '''
-    def __init__(self, config:Config) -> None:
+    def __init__(self, config:config.Config) -> None:
         super().__init__()
         self._bot_map:dict[uuid.UUID, Chatbot] = {}
         self.update_config(config)
@@ -37,7 +36,7 @@ class BingAI(ai.ChatTransformer):
         '''
         return Conversation(user=user, id=id or uuid.uuid4(), time=time.time(), timeout=60*60*3, data={'num':0,'continue':True})
     
-    async def ask(self, message: ai.Message, history: Conversation, style:Style = Style.balanced, search_result:bool = True) -> Coroutine[ai.Message, Any, None]:
+    async def ask(self, message: Message, history: Conversation, style:Style = Style.balanced, search_result:bool = True) -> Coroutine[Message, Any, None]:
         '''
         Ask the AI
         '''

@@ -54,14 +54,14 @@ async def main():
             cmd='ask',
             session=session,
             dest_interface=consoleinterface,
-            content=MultiContent(ret if ret else "Start Your Conversation"),
+            content=ret if ret else "Start Your Conversation",
         ))
         ret = await session.asend(Message(
             cmd='ask',
             session=session,
             src_interface=chatinterface,
             dest_interface=chatinterface,
-            content=MultiContent(text),
+            content=text,
         ))
 
 

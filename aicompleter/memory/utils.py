@@ -45,13 +45,13 @@ class MemoryConfigure:
     '''
     Configure of the memory
     '''
-    factory: type = attr.ib(default=Memory, validator=attr.validators.instance_of(Memory))
+    factory: type = attr.ib(default=Memory)
     'The factory of the memory'
     factory_args: tuple = attr.ib(default=(), validator=attr.validators.instance_of(tuple))
     'The args of the factory'
     factory_kwargs: dict = attr.ib(default={}, validator=attr.validators.instance_of(dict))
     'The kwargs of the factory'
-    vertex_model: Model = attr.ib(default=st.SentenceTransformer(), validator=attr.validators.instance_of(Model))
+    vertex_model: Model = attr.ib(factory=lambda : st.SentenceTransformer('paraphrase-MiniLM-L6-v2'), validator=attr.validators.instance_of(Model))
     'The vertex model of the memory'
 
     initial_memory: Optional[Memory] = attr.ib(default=None)
@@ -61,6 +61,11 @@ class MemoryConfigure:
         if self.initial_memory is None:
             self.initial_memory = self.factory(*self.factory_args, **self.factory_kwargs)
     
+    @factory.validator
+    def check_factory(self, attribute: str, value: type) -> None:
+        if not issubclass(value, Memory):
+            raise ValueError(f"Factory must be a subclass of Memory.")
+
     # Check the type of the initial memory
     @initial_memory.validator
     def check_initial_memory(self, attribute: str, value: Optional[Memory]) -> None:

@@ -43,15 +43,15 @@ class MemoryItem:
     '''
     Memory Item
     '''
-    id: uuid.UUID = attr.ib(default=uuid.uuid4(), factory=uuid.UUID)
+    id: uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
     'The unique id of the item'
-    vertex: np.ndarray = attr.ib(converter=np.array)
+    vertex: np.ndarray = attr.ib(factory=np.array)
     'The vertex of the item'
-    class_: MemoryClass = attr.ib(default=MemoryClass('default'), factory=MemoryClass)
+    class_: MemoryClass = attr.ib(default=MemoryClass('default'), converter=MemoryClass)
     'The class of the item, usually used for classification for different types of items'
-    data: Any = attr.ib()
+    data: Any = attr.ib(default=None)
     'The data of the item'
-    timestamp: float = attr.ib(default=time.time(), factory=float)
+    timestamp: float = attr.ib(factory=time.time, converter=float)
     'The timestamp of the item'
 
     @staticmethod

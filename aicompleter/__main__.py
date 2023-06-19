@@ -27,8 +27,6 @@ else:
 
 _handler:Handler = None
 
-logger.info("Start Executing")
-
 __help__='''
 AI Completer
 python3 -m aicompleter [subcommands/options]
@@ -50,7 +48,7 @@ AI Completer is still in development, so it may not work well.
 parser = argparse.ArgumentParser(description=__help__)
 parser.add_argument('--debug', action='store_true', help='Enable debug mode, default: False, if the environment variable DEBUG is set to True, this option will be ignored')
 parser.add_argument('--config', type=str, default='config.json', help='Specify the config file, default: config.json')
-subparsers = parser.add_subparsers(dest='subcommand', help='subcommands')
+subparsers = parser.add_subparsers(dest='subcommand', help='subcommands', description='subcommands, including:\n\ttalk: Talk with the AI\n\thelper: The helper of AI Completer, this will launcher a AI assistant to help you solve the problem')
 subparsers.required = True
 talk_pareser = subparsers.add_parser('talk', help='Talk with the AI')
 talk_pareser.add_argument('--ai', type=str, default='openaichat', help='The AI to use, default: openaichat, options: openaichat, bingai')
@@ -80,6 +78,7 @@ __AI_map__ = {
 
 async def main():
     # Analyse args
+    logger.info("Start Executing")
     match args.subcommand:
         case 'talk':
             ai_name = args.ai

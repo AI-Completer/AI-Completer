@@ -514,5 +514,5 @@ class Commands(dict[str,Command]):
     def __repr__(self) -> str:
         return f"Commands({super().__repr__()})"
 
-    def __iter__(self) -> Command:
+    def __iter__(self) -> Iterator[Command]:
         return self.values().__iter__()

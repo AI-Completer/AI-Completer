@@ -11,18 +11,6 @@ __description__ = "AutoDone-AI"
 # __url__ = ""
 # Unknown yet
 
-from . import (
-    implements,
-    interface,
-    session,
-    error,
-    config,
-    utils,
-    log,
-    ai,
-    memory,
-)
-
 from .config import (
     Config,
     EnhancedDict,
@@ -52,3 +40,16 @@ from .layer import (
     DiGraph,
     InterfaceDiGraph,
 )
+
+from . import (
+    implements,
+    interface,
+    session,
+    error,
+    config,
+    utils,
+    log,
+    ai,
+    memory,
+)
+

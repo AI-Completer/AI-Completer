@@ -23,3 +23,7 @@ from .interface import (
     TransformerInterface,
     ChatInterface,
 )
+
+from . import (
+    prompts,
+)

@@ -12,17 +12,6 @@ __description__ = "AutoDone-AI"
 # Unknown yet
 import os
 
-from . import (
-    implements,
-    interface,
-    session,
-    error,
-    config,
-    utils,
-    log,
-    ai,
-)
-
 if bool(os.environ.get("DISABLE_MEMORY", False)) == False:
     from . import (
         memory,
@@ -57,4 +46,17 @@ from .layer import (
     DiGraph,
     InterfaceDiGraph,
 )
+
+
+from . import (
+    interface,
+    session,
+    error,
+    config,
+    utils,
+    log,
+    ai,
+    implements,
+)
+
 del os

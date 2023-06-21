@@ -74,7 +74,7 @@ class MultiContent(Content):
         elif isinstance(param, list):
             self.contents.extend(param)
         elif isinstance(param, dict):
-            self.contents.append(Text(json.dumps(param)))
+            self.contents.append(Text(json.dumps(param, ensure_ascii=False)))
         elif param is None:
             pass
         else:

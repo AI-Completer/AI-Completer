@@ -25,8 +25,6 @@ if __DEBUG__:
 else:
     logger.setLevel(log.INFO)
 
-_handler:Handler = None
-
 __help__='''
 AI Completer
 python3 -m aicompleter [subcommands/options]
@@ -39,6 +37,7 @@ python3 -m aicompleter [subcommands/options]
         --ai: The AI to use, default: openaichat, options: openaichat, bingai
     helper: The helper of AI Completer, this will launcher a AI assistant to help you solve the problem
         --ai: The AI to use, default: openaichat, options: openaichat, bingai
+        --usage: The usage of the helper, default: simple, options: simple, complex
 
 AI Completer is a tool to help you complete your work with AI.
 It can be used to complete your code, complete your text, etc.
@@ -51,9 +50,10 @@ parser.add_argument('--config', type=str, default='config.json', help='Specify t
 subparsers = parser.add_subparsers(dest='subcommand', help='subcommands', description='subcommands, including:\n\ttalk: Talk with the AI\n\thelper: The helper of AI Completer, this will launcher a AI assistant to help you solve the problem')
 subparsers.required = True
 talk_pareser = subparsers.add_parser('talk', help='Talk with the AI')
-talk_pareser.add_argument('--ai', type=str, default='openaichat', help='The AI to use, default: openaichat, options: openaichat, bingai')
+talk_pareser.add_argument('--ai', type=str, default='openaichat', choices=('openaichat', 'bingai'), help='The AI to use, default: openaichat, options: openaichat, bingai')
 helper_pareser = subparsers.add_parser('helper', help='The helper of AI Completer, this will launcher a AI assistant to help you solve the problem')
-helper_pareser.add_argument('--ai', type=str, default='openaichat', help='The AI to use, default: openaichat, options: openaichat, bingai')
+helper_pareser.add_argument('--ai', type=str, default='openaichat', choices=('openaichat', 'bingai'), help='The AI to use, default: openaichat, options: openaichat, bingai')
+helper_pareser.add_argument('--usage', type=str, default='simple', choices=('simple', 'complex'), help='The usage of the helper, default: simple, options: simple, complex')
 
 args = parser.parse_args()
 if args.debug:
@@ -105,7 +105,35 @@ async def main():
                 ))
                 await aprint(ret)
         case 'helper':
-            raise NotImplementedError("Helper is not implemented yet")
+            _handler = Handler(config_)
+            ai_name = args.ai
+            if ai_name not in __AI_map__:
+                logger.fatal(f"AI {ai_name} not found.")
+                return
+            ai_cls, ai_config = __AI_map__[ai_name]
+            ai_config.setdefault(config_.global_)
+            ai_ = ai_cls(config=ai_config)
+            ai_interface = implements.logical.StateExecutor(ai=ai_, namespace=ai_name)
+            console_interface = ConsoleInterface()
+            graph = layer.InterfaceDiGraph()
+            graph.add(ai_interface, console_interface)
+
+            if args.usage == 'complex':
+                raise NotImplementedError("Complex helper is not implemented yet")
+
+            await graph.setup(_handler)
+            new_session = await _handler.new_session()
+
+            ret = await new_session.asend(Message(
+                content = 'Please Start Your Conversation',
+                cmd = 'ask',
+                dest_interface=console_interface,
+            ))
+            await new_session.asend(Message(
+                content = {'role':'user', 'content':ret},
+                cmd = 'agent',
+                dest_interface=ai_interface,
+            ))
 
 loop = asyncio.new_event_loop()
 if os.name == "nt":

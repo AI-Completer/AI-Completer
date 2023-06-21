@@ -6,7 +6,6 @@ import numpy as np
 
 from .base import Memory, MemoryItem, Query
 
-
 class FaissMemory(Memory):
     '''
     Faiss Memory

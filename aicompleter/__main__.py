@@ -61,10 +61,10 @@ if args.debug:
     os.environ['DEBUG'] = "True"
 
 if not os.path.exists(args.config):
-    logger.debug("config.json Not Found. Use default config.")
+    logger.info("config.json Not Found. Use default config.")
     config_ = Config()
 else:
-    logger.debug(f"{args.config} Found. Reading configure")
+    logger.info(f"{args.config} Found. Reading configure")
     config_ = Config.loadFromFile(args.config)
 config_.setdefault("global.debug", False)
 if config_["global.debug"]:
@@ -73,7 +73,7 @@ if config_["global.debug"]:
 
 __AI_map__ = {
     'openaichat': (ai.openai.Chater, config_['openaichat']),
-    'bingai': (ai.bing.BingAI, config_['bingai']),
+    'bingai': (ai.microsoft.BingAI, config_['bingai']),
 }
 
 async def main():
@@ -87,7 +87,7 @@ async def main():
                 return
             ai_cls, ai_config = __AI_map__[ai_name]
             ai_config.setdefault(config_.global_)
-            ai_ = ai_cls(ai_config)
+            ai_ = ai_cls(config=ai_config)
             ai_interface = ai.ChatInterface(ai=ai_, namespace=ai_name)
             con_interface = ConsoleInterface()
             handler_ = Handler(config_)
@@ -98,7 +98,7 @@ async def main():
             await aprint("Please Start Your Conversation")
             while True:
                 usercontent = await ainput(">>> ")
-                ret:str = await session_.send(Message(
+                ret:str = await session_.asend(Message(
                     content = usercontent,
                     cmd = 'ask',
                     dest_interface=ai_interface,
@@ -114,7 +114,7 @@ try:
     loop.create_task(main())
     loop.run_forever()
 except KeyboardInterrupt:
-    logger.warn("KeyboardInterrupt")
+    logger.critical("KeyboardInterrupt")
     loop.stop()
     for task in asyncio.all_tasks(loop):
         task.cancel()

@@ -37,9 +37,10 @@ class AI:
         return 'image' in self.support
     
     @abstractmethod
-    async def generate(self, *args, **kwargs):
+    def generate(self, *args, **kwargs):
         '''
         Generate content
+        *Require Coroutine*, this abstract method will raise NotImplementedError if not implemented
         '''
         raise NotImplementedError(f"generate() is not implemented in {self.__class__.__name__}")
     
@@ -55,7 +56,7 @@ class Transformer(AI):
     'Max tokens of transformer, will limit the length of generated content'
 
     @abstractmethod
-    async def generate_many(self, *args, num:int,  **kwargs) -> Coroutine[list[str], Any, None]:
+    def generate_many(self, *args, num:int,  **kwargs) -> Coroutine[list[str], Any, None]:
         '''
         Generate many possible content (if supported)
         '''
@@ -125,19 +126,28 @@ class ChatTransformer(Transformer):
     '''
     Abstract class for Chatable transformer
     '''
+    def new_conversation(self, user:Optional[str] = None, id:Optional[uuid.UUID] = None) -> Conversation:
+        '''
+        Create a new conversation
+        '''
+        return Conversation(user=user, id=id or uuid.uuid4())
+
     @abstractmethod
-    async def generate(self, *args, conversation:Conversation, **kwargs) -> Coroutine[str, Any, None]:
+    def generate(self, *args, conversation:Conversation, **kwargs) -> Coroutine[str, Any, None]:
+        '''
+        Generate content
+        '''
         return super().generate(*args, conversation = conversation, **kwargs)
     
     @abstractmethod
-    async def generate_many(self, *args, conversation:Conversation, num:int,  **kwargs) -> Coroutine[list[str], Any, None]:
+    def generate_many(self, *args, conversation:Conversation, num:int,  **kwargs) -> Coroutine[list[str], Any, None]:
         '''
         Generate many possible content (if supported)
         '''
         raise NotImplementedError(f"generate_many() is not implemented in {self.__class__.__name__}")
     
     @abstractmethod
-    async def ask(self, *args, history:Conversation, message:Message, **kwargs) -> Coroutine[Message, Any, None]:
+    async def ask(self, *args, history:Conversation, message:Message, **kwargs) -> Coroutine[str, Any, None]:
         '''
         Ask the AI
         '''
@@ -146,6 +156,8 @@ class ChatTransformer(Transformer):
         new_conversation.messages.append(message)
         async for value in self.generate(*args, conversation=new_conversation, **kwargs):
             yield value
+        history.messages.append(message)
+        history.messages.append(Message(content=value, role='assistant', user=history.user))
     
     async def ask_once(self, *args,history:Conversation, message:Message, **kwargs) -> Message:
         '''

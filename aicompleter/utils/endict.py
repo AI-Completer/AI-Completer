@@ -109,9 +109,6 @@ class EnhancedDict(defaultdict):
             default: The default value
             structdict: The dict of the values
         '''
-        spilts = path.split('.', 1)
-        if len(spilts) == 1:
-            return super().setdefault(path, default)
         if isinstance(path, dict):
             for key, value in path.items():
                 self.setdefault(key, value)
@@ -123,7 +120,6 @@ class EnhancedDict(defaultdict):
             else:
                 return self[spilts[0]].setdefault(spilts[1], default)
         else:
-            return self[spilts[0]].setdefault(spilts[1], default)
             raise TypeError("path must be str or dict")
         
     def update(self, data:EnhancedDict):

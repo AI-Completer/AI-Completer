@@ -47,7 +47,7 @@ class Chater(ChatTransformer,OpenAIGPT):
         'logit_bias',
         'user',
     }
-    def __init__(self, model:str, config:Config):
+    def __init__(self, config:Config, model:str = 'gpt-3.5-turbo'):
         super().__init__(
             name=model,
             support={"text"},
@@ -122,6 +122,9 @@ class Chater(ChatTransformer,OpenAIGPT):
                 for line in lines[:-1]:
                     yield json.loads(line)['choices'][0]['message']['content']
                 full_text = lines[-1]
+        # Last line
+        if full_text:
+            yield json.loads(full_text)['choices'][0]['message']['content']
 
     async def generate_many(self, conversation: Conversation) -> Generator[list[str], Any, None]:
         '''
@@ -138,6 +141,12 @@ class Chater(ChatTransformer,OpenAIGPT):
                         for i in range(len(json.loads(line)['choices']))
                         ]
                 full_text = lines[-1]
+        # Last line
+        if full_text:
+            yield [
+                json.loads(full_text)['choices'][i]['message']['content']
+                for i in range(len(json.loads(full_text)['choices']))
+                ]
     
     async def update_conversation(self, history:Conversation, message: Message) -> Conversation:
         '''

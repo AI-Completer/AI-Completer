@@ -108,9 +108,5 @@ class ChatInterface(TransformerInterface):
         
         return ret_message
 
-    def __init_subclass__(cls) -> None:
-        super().__init_subclass__()
-        del cls.ask
-
     def __hash__(self):
         return hash(self.id)

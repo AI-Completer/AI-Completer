@@ -26,15 +26,15 @@ class ConsoleInterface(interface.Interface):
         self.commands.add(
             interface.Command(
                 cmd="ask",
-                description="Ask user for question",
+                description="Ask for user input. User will be able to reply.",
                 callable_groups={"system", "command", "agent"},
                 overrideable=True,
                 in_interface=self,
                 callback=self.ask_user,
             ),
             interface.Command(
-                cmd="reply",
-                description="Reply to user in console",
+                cmd="echo",
+                description="Show a message to the user. User will not be able to reply.",
                 callable_groups={"system", "command"},
                 overrideable=True,
                 in_interface=self,
@@ -47,7 +47,7 @@ class ConsoleInterface(interface.Interface):
         Ask user for input
         '''
         await utils.aprint(f"The {message.src_interface.user.name if message.src_interface else '[Unknown]'} ask you: {message.content.text}")
-        return await utils.ainput("Please input your answer: ")
+        return await utils.ainput(">>> ")
 
     async def reply(self, session:Session, message:Message):
         '''

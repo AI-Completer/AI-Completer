@@ -499,17 +499,17 @@ class Commands(dict[str,Command]):
         '''
         Get commands executable by a user or a group
         '''
-        if isinstance(arg, User):
+        if isinstance(arg, aicompleter.User):
             for grp in arg.all_groups:
                 yield from self.get_executable(grp)
-        elif isinstance(arg, Group):
+        elif isinstance(arg, aicompleter.Group):
             return self.get_executable(arg.name)
         elif isinstance(arg, str):
             for i in self.values():
                 if arg in i.callable_groups:
                     yield i
-        raise TypeError("arg must be a User or a Group or a string instance")
-
+        else:
+            raise TypeError("arg must be a User or a Group or a string instance")
 
     def __repr__(self) -> str:
         return f"Commands({super().__repr__()})"

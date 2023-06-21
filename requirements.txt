@@ -1,6 +1,12 @@
 aiohttp
 colorama
 tiktoken
-shutil
+shutils
 attr
 paramiko
+EdgeGPT
+pandas
+sentence_transformers
+torch
+jieba
+keybert

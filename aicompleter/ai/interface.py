@@ -44,6 +44,8 @@ class ChatInterface(TransformerInterface):
     def __init__(self, *, ai: ChatTransformer, namespace:str, user:Optional[str] = None, id: Optional[uuid.UUID] = None):
         super().__init__(ai=ai, user=user, id=id)
         self.namespace = namespace
+        self.ai:ChatTransformer
+        utils.typecheck(self.ai, ChatTransformer)
 
         if self.__class__ == ChatInterface:
             self.commands.add(
@@ -54,20 +56,13 @@ class ChatInterface(TransformerInterface):
                     in_interface=self,
                     to_return=True,
                     force_await=True,
-                    callback=self.cmd_ask,
+                    callback=self.ask,
                 )
             )
 
     async def session_init(self, session: Session):
         await super().session_init(session)
-        session.extra[f'{self.namespace}.conversation'] = ai.Conversation(
-            messages=[
-                ai.Message(
-                    content=session.config[self.namespace].get('sys.prompt',"You are ChatGPT, a chatbot.\nYour task is to assist the user."),
-                    role='system',
-                )
-            ]
-        )
+        session.extra[f'{self.namespace}.conversation'] = self.ai.new_conversation(user=session.id.hex)
 
     async def set_conversation(self, session: Session, conversation:Conversation):
         '''
@@ -75,30 +70,47 @@ class ChatInterface(TransformerInterface):
         '''
         session.extra[f'{self.namespace}.conversation'] = conversation
     
-    async def cmd_ask(self, session:Session, message:Message):
+    # async def generate(self, session:Session, message:Message):
+    #     '''
+    #     Ask the AI
+    #     '''
+    #     raise NotImplementedError("generate() is not implemented in ChatInterface, will be implemented in the future")
+    #     self.ai.config = session.config[self.namespace]
+    #     conversation:Conversation = session.extra[f'{self.namespace}.conversation']
+    #     new_conversion = copy.copy(conversation)
+    #     new_conversion.messages.append(ai.Message(
+    #         content=message.content.text,
+    #         role='user',
+    #         user=session.id.hex,
+    #     ))
+    #     # Generate
+    #     ret = await self.ai.generate_text(conversation=new_conversion)
+    #     new_conversion.messages.append(ai.Message(
+    #         content=ret,
+    #         role='assistant',
+    #     ))
+    #     session.data[f'interface.{self.namespace}.conversation'] = new_conversion
+    #     return conversation.messages[-1].content
+    
+    async def ask(self, session:Session, message:Message):
         '''
         Ask the AI
         '''
         self.ai.config = session.config[self.namespace]
-        conversation:Conversation = session.extra[f'{self.namespace}.conversation']
-        new_conversion = copy.copy(conversation)
-        new_conversion.messages.append(ai.Message(
+        conversation:Conversation = session.data[f'{self.namespace}.conversation']
+        
+        async for i in self.ai.ask(message=ai.Message(
             content=message.content.text,
             role='user',
             user=session.id.hex,
-        ))
-        # Generate
-        ret = await self.ai.generate_text(conversation=new_conversion)
-        new_conversion.messages.append(ai.Message(
-            content=ret,
-            role='assistant',
-        ))
-        session.data[f'interface.{self.namespace}.conversation'] = new_conversion
-        return conversation.messages[-1].content
+        ), history=conversation):
+            ret_message = i
+        
+        return ret_message
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
-        del cls.cmd_ask
+        del cls.ask
 
     def __hash__(self):
         return hash(self.id)

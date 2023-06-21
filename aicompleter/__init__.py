@@ -10,6 +10,23 @@ __license__ = "GPLv3"
 __description__ = "AutoDone-AI"
 # __url__ = ""
 # Unknown yet
+import os
+
+from . import (
+    implements,
+    interface,
+    session,
+    error,
+    config,
+    utils,
+    log,
+    ai,
+)
+
+if bool(os.environ.get("DISABLE_MEMORY", False)) == False:
+    from . import (
+        memory,
+    )
 
 from .config import (
     Config,
@@ -40,16 +57,4 @@ from .layer import (
     DiGraph,
     InterfaceDiGraph,
 )
-
-from . import (
-    implements,
-    interface,
-    session,
-    error,
-    config,
-    utils,
-    log,
-    ai,
-    memory,
-)
-
+del os

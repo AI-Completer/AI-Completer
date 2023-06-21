@@ -3,6 +3,7 @@ Implement the interface of the AI
 Will generate a interface by the specified AI class
 '''
 from __future__ import annotations
+import copy
 from typing import (
     Optional,
     TypeVar,
@@ -80,7 +81,7 @@ class ChatInterface(TransformerInterface):
         '''
         self.ai.config = session.config[self.namespace]
         conversation:Conversation = session.extra[f'{self.namespace}.conversation']
-        new_conversion = conversation
+        new_conversion = copy.copy(conversation)
         new_conversion.messages.append(ai.Message(
             content=message.content.text,
             role='user',

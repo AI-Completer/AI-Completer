@@ -42,6 +42,8 @@ class Handler:
         '''User Set of Handler'''
         self._groupset:GroupSet = GroupSet()
         '''Group Set of Handler'''
+        self._running_sessions:set[Session] = set()
+        '''Running Sessions of Handler'''
 
         async def _default_exception_handler(e:Exception, obj:object):
             self.logger.exception(e)
@@ -78,11 +80,16 @@ class Handler:
         self.logger.debug("Closing handler")
         for i in self._interfaces:
             await i.close()
+        for i in self._running_sessions:
+            if not i.closed:
+                await i.close()
         self._closed.set()
 
     async def close_session(self, session:Session):
         '''Close the session'''
         await session.close()
+        self._running_sessions.remove(session)
+        self._update_running_sessions()
     
     def reload_commands(self) -> None:
         '''Reload commands from interfaces'''
@@ -215,6 +222,7 @@ class Handler:
         # if from_:
         #     if any([i in cmd.callable_groups for i in from_.user.all_groups]) == False:
         #         raise error.PermissionDenied(from_, cmd, self)
+        message.session = session
         message.dest_interface = cmd.in_interface
         return await cmd.call(session, message)
 
@@ -241,7 +249,7 @@ class Handler:
                 call_groups = self.get_cmd(message.cmd).callable_groups
                 if any([i in call_groups for i in message.src_interface.user.all_groups]) == False:
                     raise error.PermissionDenied(message.cmd, interface=message.src_interface, handler=self)
-        
+        message.session = session
         cmd = self.get_cmd(message.cmd, message.dest_interface)
         if cmd == None:
             raise error.CommandNotImplement(message.cmd, self)
@@ -261,12 +269,21 @@ class Handler:
                 await self.on_exception.trigger(e)
             except Exception as e:
                 await self.on_exception.trigger(e)
+
+            # This is not necessary
+            self._update_running_sessions()
+
         asyncio.get_event_loop().create_task(_handle_call())
 
     asend = call
     '''Alias of call'''
     send = call_soon
     '''Alias of call_soon'''
+
+    def _update_running_sessions(self):
+        for i in self._running_sessions:
+            if i.closed:
+                self._running_sessions.remove(i)
 
     @overload
     async def new_session(self, interface:Interface) -> session.Session:
@@ -300,6 +317,7 @@ class Handler:
             )
         for i in self._interfaces:
             await i.session_init(ret)
+        self._running_sessions.add(ret)
         return ret
 
 __all__ = (

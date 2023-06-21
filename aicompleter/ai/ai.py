@@ -1,3 +1,4 @@
+import copy
 import time
 import uuid
 from abc import abstractmethod
@@ -109,9 +110,9 @@ class Conversation:
     '''
     messages:list[Message] = []
     'Messages of conversation'
-    id:Optional[uuid.UUID] = None
+    id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
     'ID of conversation'
-    user:Optional[str] = None
+    user: Optional[str] = None
     'User of conversation'
     time: float = time.time()
     'Creation time of conversation'
@@ -136,18 +137,22 @@ class ChatTransformer(Transformer):
         raise NotImplementedError(f"generate_many() is not implemented in {self.__class__.__name__}")
     
     @abstractmethod
-    async def ask(self, *args, message:Message, **kwargs) -> Coroutine[Message, Any, None]:
+    async def ask(self, *args, history:Conversation, message:Message, **kwargs) -> Coroutine[Message, Any, None]:
         '''
         Ask the AI
         '''
-        raise NotImplementedError(f"ask() is not implemented in {self.__class__.__name__}")
+        # If this function is not inherited, it will use generate() instead
+        new_conversation = copy.copy(history)
+        new_conversation.messages.append(message)
+        async for value in self.generate(*args, conversation=new_conversation, **kwargs):
+            yield value
     
-    async def ask_once(self, *args, message:Message, **kwargs) -> Message:
+    async def ask_once(self, *args,history:Conversation, message:Message, **kwargs) -> Message:
         '''
         Ask the AI once
         '''
         rvalue = ''
-        async for value in self.ask(*args, message=message, **kwargs):
+        async for value in self.ask(*args, history=history, message=message, **kwargs):
             rvalue = value
         return rvalue
 

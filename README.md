@@ -21,8 +21,13 @@ You can use either vim or your editor to modify the file `config-example.json`, 
 
 3. Run and enjoy yourself
 
+*Note*: Use Python 3.11+ to run this program.
+
 ```shell
-python3 -m aicompleter
+python3 -m aicompleter talk --ai bingai
+# This will start a conversation with bing ai.
+python3 -m aicompleter helper --usage simple
+# This will start a helper with OpenAI API
 ```
 
 This normally will start a conversation with ChatGPT, we're adding more functions for this program.
@@ -49,7 +54,7 @@ hand:Handler = Handler(cfg)
 
 async def main():
     await hand.add_interface(consoleinterface, chatinterface)
-    # Add Interfaces to the handler, you can also use aicompleter.graph to manage rights
+    # Add Interfaces to the handler, you can also use aicompleter.layer module to manage rights
     session:Session = await hand.new_session()
     # Start a new session
     ret = None
@@ -79,7 +84,9 @@ asyncio.run(main())
 
 We are adding more support to this program.
 - [x] Add ChatGPT command support
-- [ ] Add logical structure for automatic task (important)
-- [x] Add Commands Intergation with AI model.
-- [ ] Add more logical structure
+- [x] Add logical structure for automatic task
+  - [ ] Add subagent support
+- [ ] Add Commands Intergation with AI model.
+- [x] Add more logical structure
 - [ ] Add memory system
+- [ ] Add Namespace support

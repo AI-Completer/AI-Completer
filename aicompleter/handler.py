@@ -9,8 +9,10 @@ from typing import Generator, Iterator, Optional, overload
 from . import error, events, interface, log, session
 from .config import Config
 from .interface import Command, Interface, User, Group, UserSet, GroupSet
-from .interface.command import CommandSet, Commands
+from .interface.command import Commands
 from .session.base import Session
+
+from .namespace import Namespace
 
 class Handler:
     '''
@@ -28,12 +30,9 @@ class Handler:
 
     def __init__(self, config:Optional[Config] = Config()) -> None:
         self._interfaces:set[Interface] = set()
-        self._commands:Commands = Commands()
-        # self._call_queues:list[tuple[session.Session, session.Message]] = []
+        '''Interfaces of Handler'''
         self._closed:asyncio.Event = asyncio.Event()
         '''Closed'''
-        self.config:Config = config
-        '''Config of Handler'''
         self.on_exception:events.Exception = events.Exception(Exception)
         '''Event of Exception'''
         self.on_keyboardinterrupt:events.Exception = events.Exception(KeyboardInterrupt)
@@ -45,6 +44,12 @@ class Handler:
         self._running_sessions:set[Session] = set()
         '''Running Sessions of Handler'''
 
+        self._namespace = Namespace(
+            name='root',
+            description='Root Namespace',
+            config=config,
+        )
+
         async def _default_exception_handler(e:Exception, obj:object):
             self.logger.exception(e)
 
@@ -52,19 +57,18 @@ class Handler:
         
         self.on_keyboardinterrupt.add_callback(lambda e,obj:self.close())
 
-        self.logger:log.Logger = log.Logger("Handler")
+        self.logger:log.Logger = log.getLogger('handler')
         '''Logger of Handler'''
 
-
-        formatter = log.Formatter()
-        handler = log.ConsoleHandler()
-        handler.formatter = formatter
-        self.logger.addHandler(handler)
-
-        if config['global']['debug']:
-            self.logger.setLevel(log.DEBUG)
-        else:
-            self.logger.setLevel(log.INFO)
+    @property
+    def commands(self):
+        '''Get all commands'''
+        return self._namespace.commands
+    
+    @property
+    def config(self):
+        '''Get the config'''
+        return self._namespace.config
 
     def __contains__(self, interface:Interface) -> bool:
         return interface in self._interfaces
@@ -91,17 +95,10 @@ class Handler:
         self._running_sessions.remove(session)
         self._update_running_sessions()
     
-    def reload_commands(self) -> None:
-        '''Reload commands from interfaces'''
-        self.logger.debug("Reloading commands")
-        self._commands.clear()
-        for i in self._interfaces:
-            cmds = i.commands
-            for cmd in cmds:
-                if cmd.expose == False:
-                    continue
-                cmd.extra['from'] = i
-                self._commands.add(cmd)
+    def reload_namespaces(self) -> None:
+        '''Reload namespaces from interfaces'''
+        self.logger.debug("Reloading namespaces")
+        self._namespace.reload_commands()
 
     def reload_users(self) -> None:
         '''Reload users from interfaces'''
@@ -125,24 +122,24 @@ class Handler:
 
     def reload(self):
         '''Reload commands and users from interfaces'''
-        self.reload_commands()
+        self.reload_namespaces()
         self.reload_users()
 
     def check_cmd_support(self, cmd:str) -> bool:
         '''Check whether the command is support by this handler'''
-        return cmd in self._commands
+        return cmd in self.commands
     
     def get_cmd(self, cmd:str, interface:Optional[Interface] = None) -> Command:
         '''Get command by name'''
         if interface == None:
-            return self._commands.get(cmd)
+            return self.commands.get(cmd)
         else:
             if interface not in self._interfaces:
                 raise error.NotFound(interface, handler=self, content='Interface Not In Handler')
             return interface.commands.get(cmd)
     
     def get_executable_cmds(self, *args, **wargs) -> Generator[Command, None, None]:
-        return self._commands.get_executable(*args, **wargs)
+        return self.commands.get_executable(*args, **wargs)
 
     @overload
     async def add_interface(self, interface:Interface) -> None:
@@ -159,6 +156,7 @@ class Handler:
             if i in self._interfaces:
                 raise error.Existed(i, handler=self)
             self._interfaces.add(i)
+            self._namespace.subnamespaces[i.namespace.name] = i.namespace
             await i.init()
         self.reload()
 
@@ -175,13 +173,16 @@ class Handler:
         if isinstance(param, Interface):
             if param not in self._interfaces:
                 raise error.NotFound(param, handler=self)
+            await param.final()
             self._interfaces.remove(param)
+            self._namespace.subnamespaces.pop(param.namespace.name)
             self.reload()
         elif isinstance(param, uuid.UUID):
             for i in self._interfaces:
                 if i.id == param:
                     await i.final()
                     self._interfaces.remove(i)
+                    self._namespace.subnamespaces.pop(i.namespace.name)
                     self.reload()
                     return
             raise error.NotFound(param, handler=self)

@@ -1,13 +1,13 @@
 '''
-AutoDone-AI
-AutoDone is a framework for interaction among AI, human and system.
+AI-Completer
+AI-Completer is a framework for interaction among AI, human and system.
 '''
 
 __version__ = "0.0.1beta"
 __author__ = "Li Yan"
 __package__ = "aicompleter"
 __license__ = "GPLv3"
-__description__ = "AutoDone-AI"
+__description__ = "AI-Completer, a framework for interaction among AI, human and system."
 # __url__ = ""
 # Unknown yet
 import os
@@ -58,5 +58,7 @@ from . import (
     ai,
     implements,
 )
+
+from .namespace import Namespace
 
 del os

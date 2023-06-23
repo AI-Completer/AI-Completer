@@ -14,14 +14,13 @@ class ConsoleInterface(interface.Interface):
     Console Interface
     Interactive with user in console
     '''
-    namespace:str = "console"
     def __init__(self,id: uuid.UUID = uuid.uuid4()):
         user = User(
             name="console",
             in_group="user",
             all_groups={"user","command"},
         )
-        super().__init__(user,id = id)
+        super().__init__(user,id = id, namespace="console")
 
         self.commands.add(
             interface.Command(

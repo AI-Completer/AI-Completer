@@ -1,11 +1,13 @@
-import os
+import argparse
 import asyncio
+import os
+
 from aicompleter import *
 from aicompleter.config import Config
-from aicompleter.utils import ainput,aprint
 from aicompleter.implements import ConsoleInterface
+from aicompleter.utils import ainput, aprint
+
 from . import log
-import argparse
 
 __DEBUG__:bool = False
 '''
@@ -15,19 +17,11 @@ os.environ.setdefault('DEBUG', "False")
 if os.environ['DEBUG'] == "True":
     __DEBUG__ = True
 
-logger = log.Logger("Main")
-formatter = log.Formatter()
-handler = log.ConsoleHandler()
-handler.formatter = formatter
-logger.addHandler(handler)
-if __DEBUG__:
-    logger.setLevel(log.DEBUG)
-else:
-    logger.setLevel(log.INFO)
+logger = log.getLogger("Main")
 
 __help__='''
 AI Completer
-python3 -m aicompleter [subcommands/options]
+python3 -m aicompleter [options] [subcommands] [subcommand options]
 [options]:
     --help: Show this help message
     --debug: Enable debug mode, default: False, if the environment variable DEBUG is set to True, this option will be ignored
@@ -70,6 +64,10 @@ config_.setdefault("global.debug", False)
 if config_["global.debug"]:
     __DEBUG__ = True
     os.environ['DEBUG'] = "True"
+
+if __DEBUG__ == True:
+    logger.setLevel(log.DEBUG)
+    logger.debug("Debug Mode Enabled")
 
 __AI_map__ = {
     'openaichat': (ai.openai.Chater, config_['openaichat']),

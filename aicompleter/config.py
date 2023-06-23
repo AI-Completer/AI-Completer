@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+from re import A
 from typing import Any
 
 from .error import ConfigureMissing
@@ -20,6 +21,8 @@ Use list to implement pointer
 
 class Config(EnhancedDict):
     '''Configuration Class'''
+    ALLOWED_VALUE_TYPE = (str, int, float, bool, type(None))
+
     @staticmethod
     def loadFromFile(path:str) -> Config:
         '''
@@ -51,6 +54,20 @@ class Config(EnhancedDict):
     def global_(self) -> Config:
         '''Get global config'''
         return self.get('global', Config())
+    
+    def __setitem__(self, __key: Any, __value: Any) -> None:
+        # Check type
+        def _check(key: Any, value: Any) -> None:
+            if not isinstance(key, str):
+                raise TypeError(f"Invalid key type: {key!r}")
+            if isinstance(value, dict):
+                for k, v in value.items():
+                    _check(k, v)
+                return
+            if not isinstance(value, self.ALLOWED_VALUE_TYPE):
+                raise TypeError(f"Invalid value type: {value!r}")
+        _check(__key, __value)
+        return super().__setitem__(__key, __value)
     
 def loadConfig(path:str) -> Config:
     '''Load configuration from file'''

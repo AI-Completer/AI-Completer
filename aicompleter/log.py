@@ -53,17 +53,15 @@ class Formatter(logging.Formatter):
         nrecord.levelname = self.getColor(record.levelno) + record.levelname + colorama.Fore.RESET
         nrecord.name = colorama.Fore.WHITE + colorama.Style.DIM + record.name + colorama.Fore.RESET + colorama.Style.RESET_ALL
         nrecord.message = colorama.Fore.WHITE + record.getMessage() + colorama.Fore.RESET
+        nrecord.__dict__['substruct'] = "".join([
+            f"[{colorama.Fore.WHITE + colorama.Style.DIM + sub + colorama.Fore.RESET + colorama.Style.RESET_ALL}]" 
+                for sub in self.substruct
+        ])
 
         self._fmt = \
             "{asctime} - " + \
             "{levelname:>6}" + \
-            " [{name}]" + "".join([
-            f"[{colorama.Fore.WHITE + colorama.Style.DIM + sub + colorama.Fore.RESET + colorama.Style.RESET_ALL}]" 
-                for sub in self.substruct
-        ]) + " {message}"
-
-        # nrecord {}
-        nrecord.message = nrecord.message.replace('{','{{').replace('}','}}')
+            " [{name}]" + "{substruct} {message}"
 
         return self._fmt.format(**nrecord.__dict__)
 

@@ -55,7 +55,7 @@ Do not reply with anything else.
 Current Time: {time.asctime()}
 '''
         )
-        session.data[f'{self.namespace}.conversation'] = con
+        session.data[f'{self.namespace.name}.conversation'] = con
 
         return ret
 
@@ -71,7 +71,7 @@ Current Time: {time.asctime()}
                 return ai.Message(content=json.dumps(prompt, ensure_ascii=False), role='user', user=session.id.hex)
             raise TypeError(f"Invalid prompt type {type(prompt)}")
 
-        to_execute = await self.ai.ask_once(session.data[f'{self.namespace}.conversation'], _cr_message(message.content.pure_text))
+        to_execute = await self.ai.ask_once(session.data[f'{self.namespace.name}.conversation'], _cr_message(message.content.pure_text))
         tasks:dict[tuple[str,str], asyncio.Task] = {}
         task_done_flag = asyncio.Event()
         task_using_lock = asyncio.Lock()
@@ -81,31 +81,31 @@ Current Time: {time.asctime()}
                 try:
                     json_dat = json.loads(to_execute)
                 except Exception as e:
-                    to_execute = await self.ai.ask_once(session.data[f'{self.namespace}.conversation'], _cr_message({'error': 'Invalid json format'}))
+                    to_execute = await self.ai.ask_once(session.data[f'{self.namespace.name}.conversation'], _cr_message({'error': 'Invalid json format'}))
                     continue
                 if not isinstance(json_dat, list):
                     if isinstance(json_dat, dict):
                         json_dat = [json_dat]
                     else:
-                        to_execute = await self.ai.ask_once(session.data[f'{self.namespace}.conversation'], _cr_message({'error': 'Invalid command list format'}))
+                        to_execute = await self.ai.ask_once(session.data[f'{self.namespace.name}.conversation'], _cr_message({'error': 'Invalid command list format'}))
                         continue
                 loop_flag = False
                 for cmd in json_dat:
                     if not isinstance(cmd, dict):
-                        to_execute = await self.ai.ask_once(session.data[f'{self.namespace}.conversation'], _cr_message({'error': 'Invalid command format'}))
+                        to_execute = await self.ai.ask_once(session.data[f'{self.namespace.name}.conversation'], _cr_message({'error': 'Invalid command format'}))
                         loop_flag = True
                         continue
                     if not isinstance(cmd.get('cmd', None), str):
-                        to_execute = await self.ai.ask_once(session.data[f'{self.namespace}.conversation'], _cr_message({'error': 'command name not found'}))
+                        to_execute = await self.ai.ask_once(session.data[f'{self.namespace.name}.conversation'], _cr_message({'error': 'command name not found'}))
                         loop_flag = True
                         continue
                     if not isinstance(cmd.get('param', None), (dict|str)):
-                        to_execute = await self.ai.ask_once(session.data[f'{self.namespace}.conversation'], _cr_message({'error': 'command parameters not found'}))
+                        to_execute = await self.ai.ask_once(session.data[f'{self.namespace.name}.conversation'], _cr_message({'error': 'command parameters not found'}))
                         loop_flag = True
                         continue
                     if cmd['cmd'] not in (i.cmd for i in session.in_handler.get_executable_cmds(self._user)):
                         if cmd['cmd'] not in ('stop'):
-                            to_execute = await self.ai.ask_once(session.data[f'{self.namespace}.conversation'], _cr_message({'error': 'Invalid command'}))
+                            to_execute = await self.ai.ask_once(session.data[f'{self.namespace.name}.conversation'], _cr_message({'error': 'Invalid command'}))
                             loop_flag = True
                             continue
                     if loop_flag:

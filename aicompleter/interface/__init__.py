@@ -10,4 +10,5 @@ from .command import (
     Commands,
     CommandParamElement,
     CommandParamStruct,
+    Result,
 )

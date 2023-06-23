@@ -462,3 +462,21 @@ class Commands(dict[str,Command]):
 
     def __iter__(self) -> Iterator[Command]:
         return self.values().__iter__()
+
+@attr.s(auto_attribs=True)
+class Result:
+    '''Command Result Struct'''
+    cmd:str = ""
+    '''Command'''
+    success:bool = True
+    '''Whether the command is success'''
+    ret:Any = None
+    '''
+    Return Value
+    If not success, it will be the error
+    '''
+    param:Any = None
+    '''
+    Parameters
+    If recorded
+    '''

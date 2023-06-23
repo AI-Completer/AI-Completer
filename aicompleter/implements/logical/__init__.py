@@ -10,9 +10,13 @@ from .enexecutor import (
 from .executor import (
     ExecutorInt,
 )
+from .subexecutor import (
+    SelfStateExecutor,
+)
 __all__ = (
     'CmdTranslator',
     'DifficultyTestInt',
     'StateExecutor',
     'ExecutorInt',
+    'SelfStateExecutor',
 )

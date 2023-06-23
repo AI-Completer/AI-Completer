@@ -111,13 +111,12 @@ async def main():
             ai_cls, ai_config = __AI_map__[ai_name]
             ai_config.setdefault(config_.global_)
             ai_ = ai_cls(config=ai_config)
-            ai_interface = implements.logical.StateExecutor(ai=ai_, namespace=ai_name)
+
+            ai_interface = (implements.logical.StateExecutor if args.usage == 'simple' else implements.logical.SelfStateExecutor)(ai=ai_, namespace=ai_name)
+            
             console_interface = ConsoleInterface()
             graph = layer.InterfaceDiGraph()
             graph.add(ai_interface, console_interface)
-
-            if args.usage == 'complex':
-                raise NotImplementedError("Complex helper is not implemented yet")
 
             await graph.setup(_handler)
             new_session = await _handler.new_session()
@@ -128,7 +127,7 @@ async def main():
                 dest_interface=console_interface,
             ))
             await new_session.asend(Message(
-                content = {'role':'user', 'content':ret},
+                content = ret,
                 cmd = 'agent',
                 dest_interface=ai_interface,
             ))

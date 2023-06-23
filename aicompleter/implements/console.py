@@ -25,7 +25,7 @@ class ConsoleInterface(interface.Interface):
         self.commands.add(
             interface.Command(
                 cmd="ask",
-                description="Ask for user input. User will be able to reply.",
+                description="Ask user. User will be able to reply.",
                 callable_groups={"system", "command", "agent"},
                 overrideable=True,
                 in_interface=self,

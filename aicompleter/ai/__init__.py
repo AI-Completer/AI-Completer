@@ -26,4 +26,5 @@ from .interface import (
 
 from . import (
     prompts,
+    agent,
 )

@@ -12,9 +12,8 @@ class CmdTranslator(ChatInterface):
     Command Translator
     Translate the natural language to command
     '''
-    namespace='cmd-translator'
     def __init__(self, *, ai: ChatTransformer, user: Optional[User] = None, id: Optional[uuid.UUID] = None):
-        super().__init__(ai=ai, user=user, id=id)
+        super().__init__(ai=ai,namespace='cmd-translator', user=user, id=id)
         self.commands.add(
             Command(
                 cmd='translate',

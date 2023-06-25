@@ -13,9 +13,8 @@ class DifficultyTestInt(ChatInterface):
     '''
     The AI Interface to mark the difficulty of the task
     '''
-    namespace = 'diff-test'
     def __init__(self, *, ai: ChatTransformer,user:Optional[str] = None, id: Optional[uuid.UUID] = None):
-        super().__init__(ai=ai, user=user, id=id)
+        super().__init__(ai=ai, namespace='diff-test', user=user, id=id)
         self.commands.add(
             Command(
                 cmd='mark-difficulty',

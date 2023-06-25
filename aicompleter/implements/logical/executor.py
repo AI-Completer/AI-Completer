@@ -13,9 +13,8 @@ class ExecutorInt(ChatInterface):
     Executor Interface
     This interface will directly analyze the task and call it directly
     '''
-    namespace = 'executor'
     def __init__(self, *, ai: ChatTransformer,user:Optional[str] = None, id: Optional[uuid.UUID] = None):
-        super().__init__(ai=ai, namespace=self.namespace, user=user, id=id)
+        super().__init__(ai=ai, namespace='executor', user=user, id=id)
         self.commands.add(
             Command(
                 cmd='task-analyze',
@@ -167,7 +166,7 @@ Do not reply with anything else.
                 content=reply,
                 role='assistant',
             ))
-            session.extra[f'{self.namespace}.conversation.{session.id}.data'] = conversation
+            session.extra[f'{self.namespace.name}.conversation.{session.id}.data'] = conversation
             result_list = []
 
             def _set_result_conversation():
@@ -237,7 +236,7 @@ Do not reply with anything else.
                         break
         
         # Save conversation
-        session.extra[f'{self.namespace}.conversation.{session.id}.data'] = conversation
-        session.extra[f'{self.namespace}.conversation.{session.id}.done'] = True
+        session.extra[f'{self.namespace.name}.conversation.{session.id}.data'] = conversation
+        session.extra[f'{self.namespace.name}.conversation.{session.id}.done'] = True
 
         return result_list[-1]['result']

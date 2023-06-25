@@ -20,30 +20,33 @@ class AI:
     'Is AI local or remote'
     isenabled: bool = attr.ib(default=True, converter=bool)
     'Is AI enabled'
-    support:set[str] = attr.ib(default={'text'}, converter=set)
+    support: set[str] = attr.ib(default={'text'}, converter=set)
     'Supported types of AI'
-    location: Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
+    location: Optional[str] = attr.ib(
+        default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
     'Location of AI'
 
-    config:Config = attr.ib(factory=Config, on_setattr=attr.setters.convert)
+    config: Config = attr.ib(factory=Config, on_setattr=attr.setters.convert)
     'Config of AI'
 
     @property
     def support_text(self):
         return 'text' in self.support
-    
+
     @property
     def support_image(self):
         return 'image' in self.support
-    
+
     @abstractmethod
     def generate(self, *args, **kwargs):
         '''
         Generate content
         *Require Coroutine*, this abstract method will raise NotImplementedError if not implemented
         '''
-        raise NotImplementedError(f"generate() is not implemented in {self.__class__.__name__}")
-    
+        raise NotImplementedError(
+            f"generate() is not implemented in {self.__class__.__name__}")
+
+
 class Transformer(AI):
     '''
     Abstract class for transformer
@@ -56,11 +59,12 @@ class Transformer(AI):
     'Max tokens of transformer, will limit the length of generated content'
 
     @abstractmethod
-    def generate_many(self, *args, num:int,  **kwargs) -> Coroutine[list[str], Any, None]:
+    def generate_many(self, *args, num: int,  **kwargs) -> Coroutine[list[str], Any, None]:
         '''
         Generate many possible content (if supported)
         '''
-        raise NotImplementedError(f"generate_many() is not implemented in {self.__class__.__name__}")
+        raise NotImplementedError(
+            f"generate_many() is not implemented in {self.__class__.__name__}")
 
     async def generate_text(self, *args, **kwargs) -> str:
         '''
@@ -70,8 +74,8 @@ class Transformer(AI):
         async for value in self.generate(*args, **kwargs):
             rvalue = value
         return rvalue
-    
-    async def generate_many_texts(self, *args, num:int, **kwargs) -> list[str]:
+
+    async def generate_many_texts(self, *args, num: int, **kwargs) -> list[str]:
         '''
         Generate many texts
         '''
@@ -79,19 +83,20 @@ class Transformer(AI):
         async for value in self.generate_many(*args, num=num, **kwargs):
             rvalue = value
         return rvalue
-    
+
+
 @attr.s(auto_attribs=True)
 class Message:
     '''
     Message of conversation
     '''
-    content:str
+    content: str
     'Content of message'
-    role:str
+    role: str
     'Role of message'
-    id:Optional[uuid.UUID] = None
+    id: Optional[uuid.UUID] = None
     'ID of message'
-    user:Optional[str] = None
+    user: Optional[str] = None
     'User of message'
     time: float = time.time()
     'Time of message'
@@ -100,7 +105,7 @@ class Message:
 
     def __str__(self):
         return self.content
-    
+
     def __repr__(self):
         return f"{{content: {self.content}, role: {self.role}, id: {self.id}, user: {self.user}}}"
 
@@ -109,9 +114,10 @@ class Conversation:
     '''
     Conversation
     '''
-    messages:list[Message] = []
+    messages: list[Message] = []
     'Messages of conversation'
-    id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
+    id: uuid.UUID = attr.ib(
+        factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
     'ID of conversation'
     user: Optional[str] = None
     'User of conversation'
@@ -122,49 +128,56 @@ class Conversation:
     data: dict = {}
     'Extra data of conversation'
 
+
 class ChatTransformer(Transformer):
     '''
     Abstract class for Chatable transformer
     '''
-    def new_conversation(self, user:Optional[str] = None, id:Optional[uuid.UUID] = None) -> Conversation:
+
+    def new_conversation(self, user: Optional[str] = None, id: Optional[uuid.UUID] = None, init_prompt: Optional[str] = None) -> Conversation:
         '''
         Create a new conversation
         '''
-        return Conversation(user=user, id=id or uuid.uuid4())
+        ret = Conversation(user=user, id=id or uuid.uuid4())
+        if init_prompt:
+            ret.messages.append(
+                Message(content=init_prompt, role='system', user=user))
+        return ret
 
     @abstractmethod
-    def generate(self, *args, conversation:Conversation, **kwargs) -> Coroutine[str, Any, None]:
+    def generate(self, conversation: Conversation, *args, **kwargs) -> Coroutine[str, Any, None]:
         '''
         Generate content
         '''
-        return super().generate(*args, conversation = conversation, **kwargs)
-    
+        return super().generate( conversation=conversation, *args, **kwargs)
+
     @abstractmethod
-    def generate_many(self, *args, conversation:Conversation, num:int,  **kwargs) -> Coroutine[list[str], Any, None]:
+    def generate_many(self, conversation: Conversation, num: int, *args,  **kwargs) -> Coroutine[list[str], Any, None]:
         '''
         Generate many possible content (if supported)
         '''
-        raise NotImplementedError(f"generate_many() is not implemented in {self.__class__.__name__}")
-    
-    @abstractmethod
-    async def ask(self, *args, history:Conversation, message:Message, **kwargs) -> Coroutine[str, Any, None]:
+        raise NotImplementedError(
+            f"generate_many() is not implemented in {self.__class__.__name__}")
+
+    async def ask(self, history: Conversation, message: Message, *args, **kwargs) -> Coroutine[str, Any, None]:
         '''
         Ask the AI
         '''
         # If this function is not inherited, it will use generate() instead
-        new_conversation = copy.copy(history)
+        new_conversation = copy.deepcopy(history)
         new_conversation.messages.append(message)
         async for value in self.generate(*args, conversation=new_conversation, **kwargs):
             yield value
         history.messages.append(message)
-        history.messages.append(Message(content=value, role='assistant', user=history.user))
-    
-    async def ask_once(self, *args,history:Conversation, message:Message, **kwargs) -> Message:
+        history.messages.append(
+            Message(content=value, role='assistant', user=history.user))
+
+    async def ask_once(self, history: Conversation, message: Message, *args, **kwargs) -> str:
         '''
         Ask the AI once
         '''
         rvalue = ''
-        async for value in self.ask(*args, history=history, message=message, **kwargs):
+        async for value in self.ask(history=history, message=message, *args, **kwargs):
             rvalue = value
         return rvalue
 
@@ -177,8 +190,9 @@ class TextTransformer(Transformer):
         return super().generate(*args, prompt=prompt, **kwargs)
 
     @abstractmethod
-    async def generate_many(self, *args, prompt:str, num:int,  **kwargs) -> Coroutine[list[str], Any, None]:
+    async def generate_many(self, *args, prompt: str, num: int,  **kwargs) -> Coroutine[list[str], Any, None]:
         '''
         Generate many possible content (if supported)
         '''
-        raise NotImplementedError(f"generate_many() is not implemented in {self.__class__.__name__}")
+        raise NotImplementedError(
+            f"generate_many() is not implemented in {self.__class__.__name__}")

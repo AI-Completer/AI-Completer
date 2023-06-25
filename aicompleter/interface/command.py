@@ -2,19 +2,22 @@
 Command Support For Interface
 '''
 from __future__ import annotations
+
 import asyncio
 import functools
 import json
-from typing import (Any, Callable, Coroutine, Generator, Iterable, Iterator, Optional, Self,
-                    TypeVar, overload)
+import os
+from typing import (Any, Callable, Coroutine, Generator, Iterable, Iterator,
+                    Optional, Self, TypeVar, overload)
 
 import attr
-import os
+
 import aicompleter
 import aicompleter.error as error
-from aicompleter import log, session
-from aicompleter import utils
-from aicompleter.memory.base import MemoryItem
+from .. import log, session, utils, config 
+
+if bool(config.varibles['disable_memory']) == False:
+    from aicompleter.memory.base import MemoryItem
 
 Interface = TypeVar('Interface', bound='aicompleter.interface.Interface')
 User = TypeVar('User', bound='aicompleter.interface.User')
@@ -40,6 +43,28 @@ class CommandParamElement:
     '''Whether the parameter is optional'''
     tooltip:str = ""
     '''Tooltip of the parameter'''
+
+    def __to_json__(self):
+        return {
+            "name":self.name,
+            "type":self.type.__name__ if isinstance(self.type,type) else '',
+            "default":self.default,
+            "description":self.description,
+            "optional":self.optional,
+            "tooltip":self.tooltip,
+        }
+    
+    @staticmethod
+    def __from_json__(data:dict):
+        return CommandParamElement(
+            name=data['name'],
+            type=eval(data['type']) if data['type'] else str,
+            # TODO: fix the eval problem
+            default=data['default'],
+            description=data['description'],
+            optional=data['optional'],
+            tooltip=data['tooltip'],
+        )
 
     @property
     def json_text(self):
@@ -101,6 +126,43 @@ class CommandParamStruct:
                         raise TypeError(f"data must be {struct.type}")
                     return True
         return _check(self._struct, data)
+    
+    def __to_json__(self):
+        '''
+        Get the json description of the struct
+        '''
+        def _json(struct:dict|list|CommandParamElement):
+            if isinstance(struct, dict):
+                ret = {}
+                for key,value in struct.items():
+                    ret[key] = _json(value)
+                return ret
+            elif isinstance(struct, list):
+                return [_json(struct[0])]
+            elif isinstance(struct, CommandParamElement):
+                return json.dumps(struct.__to_json__())
+            else:
+                raise TypeError("struct must be a dict, list or CommandParamElement instance")
+        return json.dumps(_json(self._struct))
+    
+    @staticmethod
+    def __from_json__(data:dict):
+        '''
+        Get the struct from json description
+        '''
+        def _from_json(struct:dict|list|str):
+            if isinstance(struct, dict):
+                ret = {}
+                for key,value in struct.items():
+                    ret[key] = _from_json(value)
+                return ret
+            elif isinstance(struct, list):
+                return [_from_json(struct[0])]
+            elif isinstance(struct, str):
+                return CommandParamElement.__from_json__(json.loads(struct))
+            else:
+                raise TypeError("struct must be a dict, list or CommandParamElement instance")
+        return CommandParamStruct(_from_json(data))
     
     @property
     def json_text(self):
@@ -195,13 +257,14 @@ class Command:
             if not self.format.check(message.content.pure_text):
                 raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",message=message,interface=self.in_interface)
         
-        # Add Memory
-        session._memory.put(MemoryItem(
-            vertex=session._vertex_model.transform_text(message.content.pure_text),
-            class_=f"cmd-{self.cmd}",
-            data=message.content.pure_text,
-        ))
-        
+        if bool(config.varibles['disable_memory']) == False:
+            # Add Memory
+            session._memory.put(MemoryItem(
+                vertex=session._vertex_model.transform_text(message.content.pure_text),
+                class_=f"cmd-{self.cmd}",
+                data=message.content.pure_text,
+            ))
+            
         if self.callback is not None:
             task = asyncio.get_event_loop().create_task(self.callback(session, message))
             session._running_tasks.append(task)
@@ -247,144 +310,31 @@ class Command:
              (*self.callable_groups, ), 
             self.overrideable, tuple(self.extra.items()), 
             self.expose))
-
-class CommandSet:
-    def __init__(self) -> None:
-        raise DeprecationWarning("CommandSet is deprecated, use Commands instead")
-        self._set:set[Command] = set()
-
-    @overload
-    def add(self, cmd:Command) -> None:
-        ...
-
-    @overload
-    def add(self, *cmds:Command) -> None:
-        ...
-
-    def add(self, *cmds:object) -> None:
-        '''Add a command to the set(not overrideable)'''
-        for cmd in cmds:
-            if not isinstance(cmd, Command):
-                raise TypeError("cmd must be a Command instance")
-            if cmd in self._set:
-                # Existed
-                continue
-            if not cmd.cmd in self:
-                # Not existed
-                self._set.add(cmd)
-                continue
-            
-            existed_cmd = self.get(cmd.cmd)
-            if existed_cmd.overrideable:
-                # Existed and overrideable
-                self.remove(cmd.cmd)
-                self._set.add(cmd)
-                continue
-            # Existed and not overrideable
-            if cmd.overrideable:
-                # Existed and not overrideable and overrideable
-                continue
-            # Existed and not overrideable and not overrideable
-            raise error.Existed(cmd.cmd, cmd_set=self)
-
-    def set(self, cmd:Command) -> None:
-        '''Add a command to the set(overrideable)'''
-        if not isinstance(cmd, Command):
-            raise TypeError("cmd must be a Command instance")
-        for i in self._set:
-            if i.cmd == cmd.cmd:
-                self._set.remove(i)
-                break
-            if cmd.cmd in i.alias:
-                self._set.remove(i)
-                break
-        self._set.add(cmd)
-
-    def remove(self, cmd:str) -> None:
-        '''Remove a command from the set'''
-        if not isinstance(cmd, str):
-            raise TypeError("cmd must be a string instance")
-        for i in self._set:
-            if i.cmd == cmd:
-                self._set.remove(i)
-                return
-            for j in i.alias:
-                if j == cmd:
-                    self._set.remove(i)
-                    return
-        raise error.NotFound(cmd, cmd_set=self)
-
-    def get(self, cmd:str) -> Command:
-        '''Get a command from the set'''
-        for i in self._set:
-            if i.cmd == cmd:
-                return i
-            for j in i.alias:
-                if j == cmd:
-                    return i
-        raise error.NotFound(cmd, cmd_set=self)
-                
-    def has(self, cmd:str) -> bool:
-        '''Check if a command is in the set'''
-        return cmd in [i.cmd for i in self._set] or cmd in [j for i in self._set for j in i.alias]
-                
-    def get_by_group(self, groupname:str) -> list[Command]:
-        '''Get commands callable by a user'''
-        return [i for i in self._set if groupname in i.callable_groups]
     
-    def get_by_user(self, user:User) -> list[Command]:
-        '''Get commands callable by a user'''
-        return [i for i in self._set if user.in_group in i.callable_groups]
+    def __to_json__(self):
+        return {
+            "cmd":self.cmd,
+            "alias":list(self.alias),
+            "description":self.description,
+            "format":self.format.__to_json__() if self.format else None,
+            "callable_groups":list(self.callable_groups),
+            "overrideable":self.overrideable,
+            "extra":self.extra,
+            "expose":self.expose,
+        }
     
-    def clear(self) -> None:
-        '''Clear the set'''
-        self._set.clear()
-    
-    @functools.singledispatchmethod
-    def __contains__(self, *args, **kwargs) -> bool:
-        raise TypeError("cmd must be a string instance or a Command instance")
-    
-    @__contains__.register(str)
-    def _(self, cmd:str) -> bool:    
-        return cmd in [i.cmd for i in self._set] or cmd in [j for i in self._set for j in i.alias]
-    
-    @__contains__.register(Command)
-    def _(self, cmd:Command) -> bool:
-        return cmd in self._set
-    
-    def __iter__(self) -> Iterator[Command]:
-        return iter(self._set)
-    
-    def __len__(self) -> int:
-        return len(self._set)
-    
-    def __repr__(self) -> str:
-        return f"CommandSet({self._set})"
-    
-    def __str__(self) -> str:
-        return f"CommandSet({self._set})"
-    
-    def __getitem__(self, cmd:str) -> Command:
-        return self.get(cmd)
-    
-    def __setitem__(self, cmd:str, value:Command) -> None:
-        self.remove(cmd)
-        self.add(value)
-    
-    def register(self, value:Command):
-        '''
-        Decorator for registering a command
-        '''
-        def wrapper(func:Callable[[session.Session, session.Message], None]):
-            value.bind(func)
-            self.add(value)
-            return func
-        return wrapper
-
-    def each(self, func:Callable[[Command], None]) -> None:
-        '''Call a function for each command'''
-        for i in self._set:
-            func(i)
+    @staticmethod
+    def __from_json__(data:dict):
+        return Command(
+            cmd=data['cmd'],
+            alias=set(data.get('alias',[])),
+            description=data.get('description',''),
+            format=CommandParamStruct.__from_json__(data['format']) if data['format'] else None,
+            callable_groups=set(data.get('callable_groups',[])),
+            overrideable=bool(data.get('overrideable',False)),
+            extra=data.get('extra',{}),
+            expose=data.get('expose',True),
+        )
 
 class Commands(dict[str,Command]):
     '''
@@ -499,20 +449,38 @@ class Commands(dict[str,Command]):
         '''
         Get commands executable by a user or a group
         '''
-        if isinstance(arg, User):
+        if isinstance(arg, aicompleter.User):
             for grp in arg.all_groups:
                 yield from self.get_executable(grp)
-        elif isinstance(arg, Group):
+        elif isinstance(arg, aicompleter.Group):
             return self.get_executable(arg.name)
         elif isinstance(arg, str):
             for i in self.values():
                 if arg in i.callable_groups:
                     yield i
-        raise TypeError("arg must be a User or a Group or a string instance")
-
+        else:
+            raise TypeError("arg must be a User or a Group or a string instance")
 
     def __repr__(self) -> str:
         return f"Commands({super().__repr__()})"
 
     def __iter__(self) -> Iterator[Command]:
         return self.values().__iter__()
+
+@attr.s(auto_attribs=True)
+class Result:
+    '''Command Result Struct'''
+    cmd:str = ""
+    '''Command'''
+    success:bool = True
+    '''Whether the command is success'''
+    ret:Any = None
+    '''
+    Return Value
+    If not success, it will be the error
+    '''
+    param:Any = None
+    '''
+    Parameters
+    If recorded
+    '''

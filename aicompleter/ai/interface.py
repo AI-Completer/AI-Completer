@@ -25,7 +25,7 @@ class TransformerInterface(Interface):
     '''
     Transformer interface
     '''
-    def __init__(self,*, ai:Transformer, user:Optional[User] = None, id:Optional[uuid.UUID] = None):
+    def __init__(self,*, ai:Transformer, namespace:str = "transformer", user:Optional[User] = None, id:Optional[uuid.UUID] = None):
         super().__init__(
             user=user or User(
                 name=ai.name,
@@ -33,7 +33,8 @@ class TransformerInterface(Interface):
                 all_groups={"agent","command"},
                 support={"text"},
             ),
-            id=id or uuid.uuid4()
+            namespace=namespace,
+            id=id or uuid.uuid4(),
         )
         self.ai:Transformer = ai
 
@@ -42,8 +43,7 @@ class ChatInterface(TransformerInterface):
     Chat interface
     '''
     def __init__(self, *, ai: ChatTransformer, namespace:str, user:Optional[str] = None, id: Optional[uuid.UUID] = None):
-        super().__init__(ai=ai, user=user, id=id)
-        self.namespace = namespace
+        super().__init__(ai=ai,namespace=namespace, user=user, id=id)
         self.ai:ChatTransformer
         utils.typecheck(self.ai, ChatTransformer)
 
@@ -62,13 +62,13 @@ class ChatInterface(TransformerInterface):
 
     async def session_init(self, session: Session):
         await super().session_init(session)
-        session.extra[f'{self.namespace}.conversation'] = self.ai.new_conversation(user=session.id.hex)
+        session.extra[f'{self.namespace.name}.conversation'] = self.ai.new_conversation(user=session.id.hex)
 
     async def set_conversation(self, session: Session, conversation:Conversation):
         '''
         Set the conversation for ask command
         '''
-        session.extra[f'{self.namespace}.conversation'] = conversation
+        session.extra[f'{self.namespace.name}.conversation'] = conversation
     
     # async def generate(self, session:Session, message:Message):
     #     '''
@@ -96,8 +96,8 @@ class ChatInterface(TransformerInterface):
         '''
         Ask the AI
         '''
-        self.ai.config = session.config[self.namespace]
-        conversation:Conversation = session.data[f'{self.namespace}.conversation']
+        self.ai.config = session.config[self.namespace.name]
+        conversation:Conversation = session.data[f'{self.namespace.name}.conversation']
         
         async for i in self.ai.ask(message=ai.Message(
             content=message.content.text,
@@ -107,10 +107,6 @@ class ChatInterface(TransformerInterface):
             ret_message = i
         
         return ret_message
-
-    def __init_subclass__(cls) -> None:
-        super().__init_subclass__()
-        del cls.ask
 
     def __hash__(self):
         return hash(self.id)

@@ -1,32 +1,15 @@
 '''
-AutoDone-AI
-AutoDone is a framework for interaction among AI, human and system.
+AI-Completer
+AI-Completer is a framework for interaction among AI, human and system.
 '''
 
 __version__ = "0.0.1beta"
 __author__ = "Li Yan"
 __package__ = "aicompleter"
 __license__ = "GPLv3"
-__description__ = "AutoDone-AI"
+__description__ = "AI-Completer, a framework for interaction among AI, human and system."
 # __url__ = ""
 # Unknown yet
-import os
-
-from . import (
-    implements,
-    interface,
-    session,
-    error,
-    config,
-    utils,
-    log,
-    ai,
-)
-
-if bool(os.environ.get("DISABLE_MEMORY", False)) == False:
-    from . import (
-        memory,
-    )
 
 from .config import (
     Config,
@@ -57,4 +40,22 @@ from .layer import (
     DiGraph,
     InterfaceDiGraph,
 )
-del os
+
+
+from . import (
+    interface,
+    session,
+    error,
+    config,
+    utils,
+    log,
+    ai,
+    implements,
+)
+
+from .namespace import Namespace
+
+if bool(config.varibles['disable_memory']) == False:
+    from . import (
+        memory,
+    )

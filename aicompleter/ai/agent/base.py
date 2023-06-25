@@ -3,6 +3,7 @@ import json
 import traceback
 from typing import Any, Callable, Coroutine, Optional, Self, overload
 from ... import *
+from ... import events
 from .. import ChatTransformer
 
 # class _Agent:
@@ -150,6 +151,7 @@ class Agent:
         self.conversation = self.ai.new_conversation(user,init_prompt=init_prompt)
         self.on_call: Callable[[str, Any], Coroutine[Any, None, None]] = lambda cmd, param: asyncio.create_task()
         self.on_subagent: Callable[[str, Any], None | Coroutine[None, None, None]] = lambda name, word: self.new_subagent(name, word)
+        self.on_exception: events.Event = events.Event(callbacks=[lambda e: print(traceback.format_exc())])
 
         self._result_queue: asyncio.Queue[interface.Result] = asyncio.Queue()
         self._request_queue: asyncio.Queue[ai.Message] = asyncio.Queue()
@@ -168,11 +170,11 @@ class Agent:
             return [value.ai.name]
         self.logger = log.getLogger('Agent', _getstruct(self))
 
-        def _unexception(x):
+        async def _unexception(x:asyncio.Future):
             try:
                 return x.result()
             except Exception as e:
-                traceback.print_exception(type(e), e, e.__traceback__)
+                await self.on_exception(e)
                 return e
         self._handle_task.add_done_callback(_unexception)
         self._loop_task.add_done_callback(_unexception)
@@ -220,22 +222,38 @@ class Agent:
         '''
         Parse the commands from AI
         '''
-        try:
-            json_dat = json.loads(raw)
-        except Exception as e:
-            # raise ValueError('Invalid json format') from e
-            # Use direct ask command
-            return [{
-                'cmd':'ask',
-                'param':raw,
-            }]
-        if not isinstance(json_dat, list):
-            if isinstance(json_dat, dict):
-                json_dat = [json_dat]
+        # Format
+        # <Content>
+        # Commands lists
+        def _check_parse(value:str) -> bool:
+            try:
+                json.loads(value)['commands']
+                return True
+            except Exception:
+                return False
+
+        content_list = []
+        command_raw = None
+        for line in raw.splitlines():
+            if _check_parse(line):
+                command_raw = line
             else:
-                raise ValueError('Invalid command list format')
-        
-        for cmd in json_dat:
+                content_list.append(line)
+                if command_raw is not None:
+                    raise ValueError('Json format is not allowed before the content')
+
+        json_dat = {"commands":[]}
+        if content_list:
+            json_dat['commands'].append({"cmd":"ask", "param": '\n'.join(content_list)})
+        if command_raw is not None:
+            json_dat['commands'].extend(json.loads(command_raw)['commands'])
+
+        if len(json_dat['commands']) == 0:
+            raise ValueError('No commands found')
+
+        self.conversation.messages[-1].content = json.dumps(json_dat, ensure_ascii = False)
+
+        for cmd in json_dat['commands']:
             if not isinstance(cmd, dict):
                 raise ValueError('Invalid command format')
             if not isinstance(cmd.get('cmd', None), str):
@@ -280,10 +298,10 @@ class Agent:
                     user = self.conversation.user,
                 ),
             )
-
+            self.logger.debug(f'AI response: {raw}')
             if raw == '':
                 # Self call ask command, do not input anything
-                raw = '{"cmd":"ask","param":""}'
+                raw = '{"commands":[{"cmd":"ask","param":""}]}'
 
             try:
                 json_dat = self._parse(raw)
@@ -295,7 +313,8 @@ class Agent:
                     'value':str(e),
                 })
                 continue
-
+            
+            json_dat = json_dat['commands']
             if len(json_dat) == 0:
                 continue
 
@@ -309,15 +328,15 @@ class Agent:
                     continue
                 if cmd['cmd'] == 'agent':
                     # Create a subagent
-                    if not all(i in cmd['param'] for i in ('name', 'word')):
+                    if not all(i in cmd['param'] for i in ('name', 'task')):
                         self._request({
                             'type':'error',
                             'value':f"Paremeters 'name' and 'word' are required"
                         })
                     if cmd['param']['name'] in self._subagents:
-                        self._subagents[cmd['param']['name']].ask(cmd['param']['word'])
+                        self._subagents[cmd['param']['name']].ask(cmd['param']['task'])
                         continue
-                    ret = self.on_subagent(cmd['param']['name'], cmd['param']['word'])
+                    ret = self.on_subagent(cmd['param']['name'], cmd['param']['task'])
                     if asyncio.iscoroutine(ret):
                         await ret
                     continue
@@ -331,6 +350,8 @@ class Agent:
                 def when_result(x: asyncio.Future):
                     try:
                         ret = x.result()
+                    except asyncio.CancelledError:
+                        return
                     except Exception as e:
                         self._result_queue.put_nowait(interface.Result(cmd['cmd'], False, str(e)))
                     else:
@@ -369,13 +390,11 @@ class Agent:
         '''
         Ask the agent to execute a command
         '''
-        from ... import ai
         self.logger.debug(f'The upper layer ask: {value}')
-        self._request_queue.put_nowait(ai.Message(
-            content = value,
-            user=self.conversation.user,
-            role='user',
-        ))
+        self._request({
+            'type':'ask-from-user',
+            'value':value,
+        })
 
     def _subagent_ask(self, name:str, value:str):
         '''
@@ -388,4 +407,8 @@ class Agent:
             'value': value,
         })
 
-
+    def __del__(self):
+        if self._handle_task:
+            self._handle_task.cancel()
+        if self._loop_task:
+            self._loop_task.cancel()

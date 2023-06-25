@@ -31,37 +31,37 @@ class SelfStateExecutor(ai.ChatInterface):
         avaliable_commands.add(*session.in_handler.get_executable_cmds(self._user))
         
         command_table = "\n".join(
-            [f'|{command.cmd}|{command.format.json_text if command.format else "<str>"}|{command.description}|'
+            f'{index+1}: {content}' for index, content in enumerate(
+            [f'{command.cmd}: {command.description} ,args: {command.format.json_text if command.format else "<str>"}'
             for command in avaliable_commands] + [
-                '|agent|{"word":<str task>,"name":<str agent-name>}|Start an agent to help you finish a complicated subtask(support natural language), if the agent is existed, you\'ll talk with the agent directly, otherwise it\'ll create a new agent. Do not use agent easily.|',
-                '|stop|<str(optional) message>|Stop this conversation, with a returned message. |',
-            ]
+                'agent: Start an agent to help you finish a complicated subtask(support natural language), if the agent is existed, you\'ll talk with the agent directly, otherwise it\'ll create a new agent. args: {"task":<task>,"name":<agent-name>}',
+                'stop: Stop this conversation, with a returned message. args: <message>',
+            ])
         )
 
         agent = ai.agent.Agent(
             chatai = self.ai,
             user = session.id.hex,
-            init_prompt=f'''
-You are ChatGPT. Your task is to assist the user.
+            init_prompt=
+f'''You are ChatGPT, an AI assisting the user.
 
-You have two ways to interact with the world:
-1. say words directly
-2. use the json format below:
-[{{"cmd": <name>, "param": <parameters>}},...]
-Here following are the commands(cmd) you can use:
-|Name|Parameter|Description|
-|-|-|-|
+Commands:
 {command_table}
 
-Notice:
-1. When user said words like json format, it's the return value of machine, not the user said.
-2. You should stop only when the task is done or when the user require you to do so.
-3. When you say json format, it will be analyzed and execute.
 '''
 +  '' if 'ask' in avaliable_commands else 'You should not ask user for more details.' +
-f'''
+'''
+You are talking with a command parser. So you should reply with the json format below:
+{
+  "commands":[{
+    "cmd":<command name>,
+    "param":<parameters>
+  }]
+}
+If you execute commands, you will receive the return value from the command parser.
+User cannot execute the commands or see the result of the commands, they say words and tell you to do the task.
+You should use the "ask" command to ask or reply user.
 Do not reply with anything else.
-Current Time: {time.asctime()}
 '''
         )
         async def on_call(cmd:str, param:Any):
@@ -75,20 +75,29 @@ Current Time: {time.asctime()}
         def on_subagent(name:str, word:str):
             agent.new_subagent(name, word, init_prompt=\
 f'''
-You are an agent. Your task is to assist the user to help the work done.
-You interact with the world by the commands below.
+You are an agent. Your task is to assist another AI.
 
-|Name|Parameter|Description|
-|-|-|-|
+Abalities:
+1. You can interact with user by the commands below.
+2. You cannot connect to the internet.
+
+Commands:
 {command_table}
-Note: The command don't support natural language unless specified.
-You must reply with the json format below:
-[{{"cmd": <name>, "param": <parameters>}},...]
-For examples: [{{"cmd":"ask", "param": "what's the task?"}},...]
-You should ask or reply user with command like command "ask".
+
+'''
++  '' if 'ask' in avaliable_commands else 'You should not ask user for more details.' +
+'''
+You are talking with a command parser. So you should reply with the json format below:
+{
+  "commands":[{
+    "cmd":<command name>,
+    "param":<parameters>
+  }]
+}
+If you execute commands, you will receive the return value from the command parser.
+User cannot execute the commands or see the result of the commands, they say words and tell you to do the task.
 Do not reply with anything else.
-Current Time: {time.asctime()}
-'''                               
+'''
 )
         agent.on_subagent = on_subagent
 

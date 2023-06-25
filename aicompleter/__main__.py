@@ -138,7 +138,7 @@ async def main():
             ai_config.setdefault(config_.global_)
             ai_ = ai_cls(config=ai_config)
 
-            ai_interface = (implements.logical.StateExecutor if args.enable_agent else implements.logical.SelfStateExecutor)(ai=ai_, namespace=ai_name)
+            ai_interface = (implements.logical.SelfStateExecutor if args.enable_agent else implements.logical.StateExecutor)(ai=ai_, namespace=ai_name)
             
             console_interface = ConsoleInterface()
             graph = layer.InterfaceDiGraph()
@@ -167,14 +167,28 @@ async def main():
 loop = asyncio.new_event_loop()
 if os.name == "nt":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+async def check_loop():
+    # Check if the loop is empty
+    # The one task is this function
+    if len(asyncio.all_tasks(loop)) == 1:
+        loop.stop()
+    else:
+        loop.create_task(check_loop())
 try:
     loop.create_task(main())
+    loop.create_task(check_loop())
     loop.run_forever()
 except KeyboardInterrupt:
     logger.critical("KeyboardInterrupt")
-    loop.stop()
-    for task in asyncio.all_tasks(loop):
-        task.cancel()
-    loop.run_forever()
+    max_try = 10
+    try_time = 0
+    while not all(task.done() for task in asyncio.all_tasks(loop)) and try_time < max_try:
+        try_time += 1
+        logger.debug(f"Try to stop the loop. Try time: {try_time}")
+        loop.stop()
+        for task in asyncio.all_tasks(loop):
+            task.cancel()
+        loop.run_forever()
     loop.stop()
     loop.close()
+logger.debug("Loop Closed")

@@ -2,11 +2,8 @@ import argparse
 import asyncio
 import os
 
-from aicompleter import *
-from aicompleter.config import Config
-from aicompleter.implements import ConsoleInterface
-from aicompleter.utils import ainput, aprint
-
+from . import config
+from .config import Config
 from . import log
 
 __DEBUG__:bool = False
@@ -18,6 +15,18 @@ if os.environ['DEBUG'] == "True":
     __DEBUG__ = True
 
 logger = log.getLogger("Main")
+
+__map_environment__ = {
+    'DISABLE_MEMORY': ('disable_memory', bool),
+    'DISABLE_FAISS': ('disable_faiss', bool),
+}
+
+for k, (v, tp) in __map_environment__.items():
+    if k in os.environ:
+    #     config.varibles[v] = tp(os.environ[k])
+        logger.debug(f"Environment Variable {k} Found. Set {v} to {config.varibles[v]}")
+
+del k, v, tp
 
 __help__='''
 AI Completer
@@ -55,7 +64,6 @@ helper_pareser.add_argument('-i','--include', type=str, nargs='+', default=[], c
 args = parser.parse_args()
 if args.debug:
     __DEBUG__ = True
-    os.environ['DEBUG'] = "True"
 
 if not os.path.exists(args.config):
     logger.info("config.json Not Found. Use default config.")
@@ -66,11 +74,23 @@ else:
 config_.setdefault("global.debug", False)
 if config_["global.debug"]:
     __DEBUG__ = True
-    os.environ['DEBUG'] = "True"
 
 if __DEBUG__ == True:
     logger.setLevel(log.DEBUG)
     logger.debug("Debug Mode Enabled")
+    config.varibles['debug'] = True
+    config.varibles['log_level'] = log.DEBUG
+
+
+
+
+
+
+
+# After the initialization of the arguments and global configuration, we can now import the modules and do the real work
+from aicompleter import *
+from aicompleter.implements import ConsoleInterface
+from aicompleter.utils import ainput, aprint
 
 __AI_map__ = {
     'openaichat': (ai.openai.Chater, config_['openaichat']),

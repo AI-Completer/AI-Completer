@@ -255,105 +255,105 @@ class GroupSet:
                     return j
         return None
 
-class _Interface:
-    '''Interface of AI-Completer'''
-    namespace:str = ""
-    def __new__(self, *args, **kwargs):
-        raise DeprecationWarning("This Interface Class is deprecated, use aicompleter.interface.Interface instead")
+# class _Interface:
+#     '''Interface of AI-Completer'''
+#     namespace:str = ""
+#     def __new__(self, *args, **kwargs):
+#         raise DeprecationWarning("This Interface Class is deprecated, use aicompleter.interface.Interface instead")
     
-    def __init__(self, user:User, namespace:Optional[str] = None,id:uuid.UUID = uuid.uuid4()):
-        self._user = user
-        '''Character of the interface'''
-        self._closed:bool = False
-        '''Closed'''
-        self._id:uuid.UUID = id
-        '''ID'''
-        self.extra:dict = {}
-        '''Extra information'''
-        self.commands:Commands = Commands()
-        '''Commands of Interface'''
+#     def __init__(self, user:User, namespace:Optional[str] = None,id:uuid.UUID = uuid.uuid4()):
+#         self._user = user
+#         '''Character of the interface'''
+#         self._closed:bool = False
+#         '''Closed'''
+#         self._id:uuid.UUID = id
+#         '''ID'''
+#         self.extra:dict = {}
+#         '''Extra information'''
+#         self.commands:Commands = Commands()
+#         '''Commands of Interface'''
 
-        if namespace != None:
-            self.namespace = namespace
+#         if namespace != None:
+#             self.namespace = namespace
 
-        self.logger:log.Logger = log.Logger("interface")
-        '''Logger of Interface'''
-        formatter = log.Formatter(['%s - %s' % (self.namespace, str(self._id))])
-        _handler = log.ConsoleHandler()
-        _handler.setFormatter(formatter)
-        self.logger.addHandler(_handler)
-        if bool(os.environ.get('DEBUG', False)):
-            self.logger.setLevel(log.DEBUG)
-        else:
-            self.logger.setLevel(log.INFO)
+#         self.logger:log.Logger = log.getLogger("interface")
+#         '''Logger of Interface'''
+#         formatter = log.Formatter(['%s - %s' % (self.namespace, str(self._id))])
+#         _handler = log.ConsoleHandler()
+#         _handler.setFormatter(formatter)
+#         self.logger.addHandler(_handler)
+#         if bool(os.environ.get('DEBUG', False)):
+#             self.logger.setLevel(log.DEBUG)
+#         else:
+#             self.logger.setLevel(log.INFO)
 
-    @property
-    def user(self) -> User:
-        '''
-        Character of the interface
-        (Read-only)
-        :rtype: User
-        '''
-        return self._user
+#     @property
+#     def user(self) -> User:
+#         '''
+#         Character of the interface
+#         (Read-only)
+#         :rtype: User
+#         '''
+#         return self._user
 
-    @property
-    def id(self):
-        '''ID of the interface'''
-        return self._id
+#     @property
+#     def id(self):
+#         '''ID of the interface'''
+#         return self._id
 
-    def check_cmd_support(self, cmd:str) -> Command:
-        '''Check whether the command is support by this interface'''
-        for i in self.commands:
-            if i.cmd == cmd:
-                return i
-            for j in i.alias:
-                if j == cmd:
-                    return i
-        return None
+#     def check_cmd_support(self, cmd:str) -> Command:
+#         '''Check whether the command is support by this interface'''
+#         for i in self.commands:
+#             if i.cmd == cmd:
+#                 return i
+#             for j in i.alias:
+#                 if j == cmd:
+#                     return i
+#         return None
 
-    @abstractmethod
-    async def init(self):
-        '''Initial function for Interface'''
-        self.logger.debug("Interface %s initializing" % self.id)
+#     @abstractmethod
+#     async def init(self):
+#         '''Initial function for Interface'''
+#         self.logger.debug("Interface %s initializing" % self.id)
 
-    @abstractmethod
-    async def final(self):
-        '''Finial function for Interface'''
-        self.logger.debug("Interface %s finalizing" % self.id)
+#     @abstractmethod
+#     async def final(self):
+#         '''Finial function for Interface'''
+#         self.logger.debug("Interface %s finalizing" % self.id)
 
-    @abstractmethod
-    async def session_init(self,session:session.Session):
-        '''Initial function for Session'''
-        pass
+#     @abstractmethod
+#     async def session_init(self,session:session.Session):
+#         '''Initial function for Session'''
+#         pass
 
-    @abstractmethod
-    async def session_final(self,session:session.Session):
-        '''Finial function for Session'''
-        pass
+#     @abstractmethod
+#     async def session_final(self,session:session.Session):
+#         '''Finial function for Session'''
+#         pass
 
-    @abstractmethod
-    async def call(self, session:session.Session, message:session.Message):
-        '''
-        Call the command
+#     @abstractmethod
+#     async def call(self, session:session.Session, message:session.Message):
+#         '''
+#         Call the command
 
-        *Note*: Handler Class has add the history, no need to add it again
-        Call by this method will skip the command check,
-        this command can return any type of value
-        '''
-        pass
+#         *Note*: Handler Class has add the history, no need to add it again
+#         Call by this method will skip the command check,
+#         this command can return any type of value
+#         '''
+#         pass
     
-    async def close(self):
-        '''Close the interface'''
-        self._closed = True
-        await self.final()
+#     async def close(self):
+#         '''Close the interface'''
+#         self._closed = True
+#         await self.final()
 
-    def register_cmd(self, *args, **kwargs):
-        '''Register a command'''
-        return self.commands.register(Command(
-            in_interface=self,
-            *args,
-            **kwargs
-        ))
+#     def register_cmd(self, *args, **kwargs):
+#         '''Register a command'''
+#         return self.commands.register(Command(
+#             in_interface=self,
+#             *args,
+#             **kwargs
+#         ))
 
 from aicompleter.namespace import Namespace
 class Interface:

@@ -9,6 +9,7 @@ import sys
 from collections.abc import Mapping
 from types import TracebackType
 from typing import Iterable, Optional, TypeAlias
+from . import config
 
 import colorama
 
@@ -112,13 +113,15 @@ class Logger(logging.Logger):
         async with _on_reading:
             return super()._log(level, msg, args, exc_info, extra, stack_info, stacklevel)
     
-    def _log(self, level: int, msg: object, args: _ArgsType, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1) -> None:
-        # Get the asyncio loop (if any) for this thread
-        loop = asyncio._get_running_loop()
-        if loop is None:
-            return super()._log(level, msg, args, exc_info, extra, stack_info, stacklevel)
-        else:
-            return loop.create_task(self._log_async(level, msg, args, exc_info, extra, stack_info, stacklevel))
+    # Conflicts with the default input and output system (utlis.aio.ainput, utils.aio.aprint, print, input)
+
+    # def _log(self, level: int, msg: object, args: _ArgsType, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1) -> None:
+    #     # Get the asyncio loop (if any) for this thread
+    #     loop = asyncio._get_running_loop()
+    #     if loop is None:
+    #         return super()._log(level, msg, args, exc_info, extra, stack_info, stacklevel)
+    #     else:
+    #         return loop.create_task(self._log_async(level, msg, args, exc_info, extra, stack_info, stacklevel))
     
     async def log_stream(self, level: int, msg: asyncio.StreamReader, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1) -> None:
         if not self.isEnabledFor(level):
@@ -196,15 +199,15 @@ class Logger(logging.Logger):
     
     typewriter_fatal = typewriter_critical
 
-def getLogger(name:str, substruct:list[str] = [], colormap:Optional[dict[int, str]] = None, debug:Optional[bool] = None) -> Logger:
+def getLogger(name:str, substruct:list[str] = [], colormap:Optional[dict[int, str]] = None, log_level:Optional[int] = None) -> Logger:
     '''
     Get a logger
     '''
     _log = Logger(name)
-    if debug == None:
-        _log.setLevel(logging.DEBUG if bool(os.environ.get('DEBUG', False)) else logging.INFO)
+    if log_level == None:
+        _log.setLevel(config.varibles['log_level'])
     else:
-        _log.setLevel(logging.DEBUG if debug else logging.INFO)
+        _log.setLevel(log_level)
     _log.addHandler(ConsoleHandler())
     _log.handlers[0].setFormatter(Formatter(substruct, colormap))
     return _log

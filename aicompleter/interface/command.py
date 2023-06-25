@@ -2,19 +2,22 @@
 Command Support For Interface
 '''
 from __future__ import annotations
+
 import asyncio
 import functools
 import json
-from typing import (Any, Callable, Coroutine, Generator, Iterable, Iterator, Optional, Self,
-                    TypeVar, overload)
+import os
+from typing import (Any, Callable, Coroutine, Generator, Iterable, Iterator,
+                    Optional, Self, TypeVar, overload)
 
 import attr
-import os
+
 import aicompleter
 import aicompleter.error as error
-from aicompleter import log, session
-from aicompleter import utils
-from aicompleter.memory.base import MemoryItem
+from .. import log, session, utils, config 
+
+if bool(config.varibles['disable_memory']) == False:
+    from aicompleter.memory.base import MemoryItem
 
 Interface = TypeVar('Interface', bound='aicompleter.interface.Interface')
 User = TypeVar('User', bound='aicompleter.interface.User')
@@ -254,13 +257,14 @@ class Command:
             if not self.format.check(message.content.pure_text):
                 raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",message=message,interface=self.in_interface)
         
-        # Add Memory
-        session._memory.put(MemoryItem(
-            vertex=session._vertex_model.transform_text(message.content.pure_text),
-            class_=f"cmd-{self.cmd}",
-            data=message.content.pure_text,
-        ))
-        
+        if bool(config.varibles['disable_memory']) == False:
+            # Add Memory
+            session._memory.put(MemoryItem(
+                vertex=session._vertex_model.transform_text(message.content.pure_text),
+                class_=f"cmd-{self.cmd}",
+                data=message.content.pure_text,
+            ))
+            
         if self.callback is not None:
             task = asyncio.get_event_loop().create_task(self.callback(session, message))
             session._running_tasks.append(task)

@@ -10,12 +10,6 @@ __license__ = "GPLv3"
 __description__ = "AI-Completer, a framework for interaction among AI, human and system."
 # __url__ = ""
 # Unknown yet
-import os
-
-if bool(os.environ.get("DISABLE_MEMORY", False)) == False:
-    from . import (
-        memory,
-    )
 
 from .config import (
     Config,
@@ -61,4 +55,7 @@ from . import (
 
 from .namespace import Namespace
 
-del os
+if bool(config.varibles['disable_memory']) == False:
+    from . import (
+        memory,
+    )

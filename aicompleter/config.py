@@ -73,8 +73,22 @@ def loadConfig(path:str) -> Config:
     '''Load configuration from file'''
     return Config.loadFromFile(path)
 
-__all__ = (
-    'Pointer',
-    'Config',
-    'loadConfig',
-)
+# Global configuration bypass different modules
+varibles = Config({
+    'debug': False,
+    'log_level': 'INFO',
+    'disable_memory': False,
+    'disable_faiss': False,
+})
+
+__map_environment__ = {
+    'DISABLE_MEMORY': ('disable_memory', bool),
+    'DISABLE_FAISS': ('disable_faiss', bool),
+}
+
+for k, (v, tp) in __map_environment__.items():
+    if k in os.environ:
+        varibles[v] = tp(os.environ[k])
+# Due to the moudle launch limitation, we have to check this here
+# TODO: Wait for a better solution
+

@@ -12,12 +12,14 @@ import aiohttp
 import attr
 
 import aicompleter
-from aicompleter.memory.utils import MemoryConfigure
 import aicompleter.session as session
-from aicompleter import log
+from aicompleter import config, log
 from aicompleter.config import Config, EnhancedDict
-from aicompleter.memory import (Memory, MemoryItem, VectexTransformer,
-                                getMemoryItem)
+
+if bool(config.varibles['disable_memory']) == False:
+    from aicompleter.memory.utils import MemoryConfigure
+    from aicompleter.memory import (Memory, MemoryItem, VectexTransformer,
+                                    getMemoryItem)
 
 Handler = TypeVar('Handler', bound='aicompleter.handler.Handler')
 User = TypeVar('User', bound='aicompleter.interface.User')
@@ -128,7 +130,7 @@ class MessageStatus(enum.Enum):
 
 class Session:
     '''Session'''
-    def __init__(self, handler:Handler, memory:MemoryConfigure = MemoryConfigure()) -> None:
+    def __init__(self, handler:Handler, memory:Optional['MemoryConfigure'] = None) -> None:
         self.create_time: float = time.time()
         '''Create time'''
         self.last_used: float = self.create_time
@@ -149,10 +151,15 @@ class Session:
         '''Data'''
         self._running_tasks:list[asyncio.Task] = []
         '''Running tasks'''
-        self._memory:Memory = memory.initial_memory or memory.factory(*memory.factory_args, **memory.factory_kwargs)
-        '''Memory'''
-        self._vertex_model:VectexTransformer = VectexTransformer(memory.vertex_model)
-        '''Vertex model'''
+        
+        if bool(config.varibles['disable_memory']) == False:
+            self._memory:Memory = memory.initial_memory or memory.factory(*memory.factory_args, **memory.factory_kwargs)
+            '''Memory'''
+            self._vertex_model:VectexTransformer = VectexTransformer(memory.vertex_model)
+            '''Vertex model'''
+        else:
+            if memory is not None:
+                raise RuntimeError("Memory is disabled")
         self.logger:log.Logger=log.Logger('session')
         '''Logger'''
         formatter = log.Formatter()

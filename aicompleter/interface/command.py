@@ -98,20 +98,23 @@ class CommandParamStruct:
 
     def check(self, data:dict) -> bool:
         '''Check the data to see whether it is in proper format.'''
+        if isinstance(data, str):
+            data = json.loads(data)
+
         def _check(struct:dict|list|CommandParamElement, ndata:dict):
             if isinstance(struct, dict):
                 for key,value in struct.items():
                     if isinstance(value,CommandParamElement):
-                        if value.optional:
-                            pass
+                        if value.optional and key not in ndata:
+                            continue
                     if key not in ndata:
-                        raise TypeError(f"key {key} not in data")
+                        return False
                     if not _check(value, ndata[key]):
                         return False
                 return True
             elif isinstance(struct, list):
                 if not isinstance(ndata, list):
-                    raise TypeError("data must be a list")
+                    return False
                 for item in ndata:
                     if not _check(struct[0], item):
                         return False
@@ -119,12 +122,14 @@ class CommandParamStruct:
             elif isinstance(struct, CommandParamElement):
                 if isinstance(struct.type, type):    
                     if not isinstance(ndata, struct.type):
-                        raise TypeError(f"data must be {struct.type}")
+                        return False
                     return True
                 elif callable(struct.type):
                     if not struct.type(ndata):
-                        raise TypeError(f"data must be {struct.type}")
+                        return False
                     return True
+                else:
+                    raise TypeError("struct.type must be a type or a callable function")
         return _check(self._struct, data)
     
     def __to_json__(self):

@@ -6,140 +6,6 @@ from ... import *
 from ... import events
 from .. import ChatTransformer
 
-# class _Agent:
-#     '''
-#     AI Agent
-#     '''
-#     def __init__(self, ai: ai.ChatTransformer, init_prompt:str, user:Optional[str] = None):
-#         self.ai = ai
-#         self.conversation = self.ai.new_conversation(user,init_prompt=init_prompt)
-#         self.on_call: Callable[[str, Any], Coroutine[Any, None, None]] = lambda cmd, param: asyncio.create_task()
-    
-#     async def parse(self, content: str) -> list[dict]:
-#         '''
-#         Parse the commands from AI
-#         '''
-#         try:
-#             json_dat = json.loads(content)
-#         except Exception as e:
-#             raise ValueError('Invalid json format') from e
-#         if not isinstance(json_dat, list):
-#             if isinstance(json_dat, dict):
-#                 json_dat = [json_dat]
-#             else:
-#                 raise ValueError('Invalid command list format')
-        
-#         for cmd in json_dat:
-#             if not isinstance(cmd, dict):
-#                 raise ValueError('Invalid command format')
-#             if not isinstance(cmd.get('cmd', None), str):
-#                 raise ValueError('command name not found')
-#             if not isinstance(cmd.get('param', None), (dict,str)):
-#                 raise ValueError('command parameters not found')
-        
-#         return json_dat
-
-#     async def set_exception(self, exception: Exception, **kwargs):
-#         '''
-#         Set the exception to the agent,
-#         Note: It's recommended to add command flag to identify which command is failed.
-#         '''
-#         return await self.ai.ask_once(self.conversation, ai.Message(
-#             content = json.dumps({
-#                 'type':'error',
-#                 'value':str(exception),
-#                 **kwargs,
-#             }),
-#             user=self.conversation.user,
-#         ))
-
-#     @overload
-#     async def add_result(self, result: interface.Result):
-#         ...
-
-#     @overload
-#     async def add_result(self, *results: interface.Result):
-#         ...
-
-#     async def add_result(self, *results: interface.Result):
-#         '''
-#         Add result(s) to the agent
-#         '''
-#         if len(results) == 0:
-#             return
-#         return await self.ai.ask_once(self.conversation, ai.Message(
-#             content = json.dumps(
-#                 [{
-#                     'cmd': result.cmd,
-#                     'success': result.success,
-#                     'ret': result.ret,
-#                 } for result in results],
-#             ),
-#             user=self.conversation.user,
-#         ))
-    
-#     async def ask(self, value:str):
-#         '''
-#         Ask the agent to execute a command
-#         '''
-#         return await self.ai.ask_once(self.conversation, ai.Message(
-#             content = json.dumps({
-#                 'type':'ask',
-#                 'value':value,
-#             }),
-#             user=self.conversation.user,
-#         ))
-    
-#     async def execute(self, init_words: str):
-#         '''
-#         Start the agent
-#         '''
-#         tasks: dict[tuple,asyncio.Task] = []
-#         last_result = await self.ask(init_words)
-#         stop_flag = False
-#         while not stop_flag:
-#             try:
-#                 json_dat = await self.parse(last_result)
-#             except ValueError as e:
-#                 last_result = await self.set_exception(e)
-#                 continue
-            
-#             if len(json_dat) == 0:
-#                 # Equal to stop
-#                 stop_flag = True
-#                 continue
-
-#             # Execute the commands
-#             for cmd in json_dat:
-#                 if cmd['cmd'] == 'stop':
-#                     stop_flag = True
-#                     continue
-#                 tasks[(cmd['cmd'], str(cmd['param']))] = asyncio.create_task(self.on_call(cmd['cmd'], cmd['param']))
-
-#             # Wait for the tasks, if any one of them is done, then send the result to AI
-#             await asyncio.wait(tasks.values(), return_when=asyncio.FIRST_COMPLETED)
-#             # Allow more tasks to be done if there are any
-#             await asyncio.sleep(0.1)
-
-#             # Check the done tasks, tell AI and remove them
-#             completed = []
-#             exceptions = []
-#             for (cmd, param), task in tasks.items():
-#                 if task.done():
-#                     try:
-#                         task.result()
-#                     except Exception as e:
-#                         exceptions.append(e)
-#                         continue
-#                     else:
-#                         completed.append((cmd, param))
-#                     finally:
-#                         tasks.pop((cmd, param))
-            
-#             # Tell AI
-#             last_result = await self.add_result(*[interface.Result(cmd, True, None) for cmd in completed] + [interface.Result(cmd, False, str(e)) for e in exceptions])
-
-
 class Agent:
     '''
     AI Agent
@@ -170,28 +36,29 @@ class Agent:
             return [value.ai.name]
         self.logger = log.getLogger('Agent', _getstruct(self))
 
-        async def _unexception(x:asyncio.Future):
+        self._handle_task.add_done_callback(self._unexception)
+        self._loop_task.add_done_callback(self._unexception)
+
+    async def _unexception(self,x:asyncio.Future):
             try:
                 return x.result()
             except Exception as e:
                 await self.on_exception(e)
                 return e
-        self._handle_task.add_done_callback(_unexception)
-        self._loop_task.add_done_callback(_unexception)
 
     @property
     def stopped(self) -> bool:
         '''
         Whether the agent is stopped
         '''
-        return self._loop_task != ...
+        return self._result != Ellipsis
     
     @property
     def result(self) -> Any:
         '''
         The result of the agent
         '''
-        if self._loop_task == ...:
+        if self._result != Ellipsis:
             raise RuntimeError('The agent is not stopped yet')
         return self._result
 
@@ -277,6 +144,8 @@ class Agent:
             while not self._request_queue.empty():
                 requests.append(self._request_queue.get_nowait())
 
+            self.logger.debug(f'Get requests: {requests}')
+
             def _try_parse(x):
                 try:
                     return json.loads(x)
@@ -354,12 +223,16 @@ class Agent:
                         return
                     except Exception as e:
                         self._result_queue.put_nowait(interface.Result(cmd['cmd'], False, str(e)))
+                        self.logger.error(f'Exception when executing command {cmd["cmd"]}: {e}')
                     else:
                         self._result_queue.put_nowait(interface.Result(cmd['cmd'], True, ret))
+                        self.logger.info(f'Command {cmd["cmd"]} executed successfully, Result: {ret}')
 
                 asyncio.get_event_loop().create_task(self.on_call(cmd['cmd'], cmd['param'])).add_done_callback(when_result)
 
         # The loop is done
+        self._handle_task.remove_done_callback(self._unexception)
+        self._loop_task.remove_done_callback(self._unexception)
         self._handle_task.cancel()
         self._handle_task = None
         self._loop_task = None
@@ -373,17 +246,13 @@ class Agent:
 
             if result.cmd == 'ask':
                 # Excpetion
-                self._request_queue.put_nowait(ai.Message(
-                    content = result.ret,
-                    user=self.conversation.user,
-                    role='user',
-                ))
+                self.ask(result.ret)
                 continue
 
             self._request({
-                # 'cmd': result.cmd,
+                'type':'command-result',
                 'success': result.success,
-                'ret': result.ret,
+                'command-result': result.ret,
             })
 
     def ask(self, value:str):

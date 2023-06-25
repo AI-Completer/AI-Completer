@@ -17,10 +17,10 @@ class PythonCodeInterface(Interface):
         super().__init__(user, namespace, id)
         self.commands.add(Command(
             cmd='exec',
-            description='Execute python code, the environment and varibles will be persevered in this conversation.',
+            description='Execute python code, the environments and varibles will be persevered in this conversation.',
             format=CommandParamStruct({
-                'code': CommandParamElement(name='code', type='str', description='Python code to execute.', tooltip='code'),
-                'type': CommandParamElement(name='type', type='str', description='Type of the code, can be "exec" or "eval"(with returns).', tooltip='exec/eval (default to exec)', default='exec')
+                'code': CommandParamElement(name='code', type=str, description='Python code to execute.', tooltip='code'),
+                'type': CommandParamElement(name='type', type=str, description='Type of the code, can be "exec" or "eval".', tooltip='exec/eval (default to exec)', default='exec', optional=True)
             }),
             callable_groups={'user','agent'},
             force_await=True,
@@ -46,5 +46,17 @@ class PythonCodeInterface(Interface):
         Execute python code
         '''
         func = eval if message.content.json['type'] == 'eval' else exec
-        ret = func(message.content.json['code'], session.data[self.namespace.name]['globals'])
-        return ret if message.content.json['type'] == 'eval' else None
+        old_dict = dict(session.data[self.namespace.name]['globals'])
+        ret = func(message.content.json['code'], old_dict)
+        session.data[self.namespace.name]['globals'] = old_dict
+        if ret != None:
+            return ret
+        last_sentence = message.content.json['code'].splitlines()[-1].strip()
+        # Check if it's a variable
+        if set(last_sentence) <= set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789'):
+            try:
+                return old_dict[last_sentence]
+            except KeyError:
+                return None
+        return None
+    

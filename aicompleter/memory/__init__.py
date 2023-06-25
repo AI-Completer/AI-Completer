@@ -1,7 +1,7 @@
 '''
 AI Memory
 '''
-import os
+from .. import config
 
 from .base import (
     MemoryItem,
@@ -17,7 +17,7 @@ from .utils import (
     MemoryConfigure,
 )
 
-if bool(os.environ.get('DISABLE_FAISS', False)) == False:
+if bool(config.varibles['disable_faiss']) == False:
     from .faissimp import (
         FaissMemory,
     )
@@ -25,4 +25,6 @@ if bool(os.environ.get('DISABLE_FAISS', False)) == False:
 from .history import (
     HistoryFile,
 )
-del os
+
+del config
+

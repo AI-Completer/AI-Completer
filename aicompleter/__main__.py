@@ -2,11 +2,8 @@ import argparse
 import asyncio
 import os
 
-from aicompleter import *
-from aicompleter.config import Config
-from aicompleter.implements import ConsoleInterface
-from aicompleter.utils import ainput, aprint
-
+from . import config
+from .config import Config
 from . import log
 
 __DEBUG__:bool = False
@@ -18,6 +15,18 @@ if os.environ['DEBUG'] == "True":
     __DEBUG__ = True
 
 logger = log.getLogger("Main")
+
+__map_environment__ = {
+    'DISABLE_MEMORY': ('disable_memory', bool),
+    'DISABLE_FAISS': ('disable_faiss', bool),
+}
+
+for k, (v, tp) in __map_environment__.items():
+    if k in os.environ:
+    #     config.varibles[v] = tp(os.environ[k])
+        logger.debug(f"Environment Variable {k} Found. Set {v} to {config.varibles[v]}")
+
+del k, v, tp
 
 __help__='''
 AI Completer
@@ -31,7 +40,9 @@ python3 -m aicompleter [options] [subcommands] [subcommand options]
         --ai: The AI to use, default: openaichat, options: openaichat, bingai
     helper: The helper of AI Completer, this will launcher a AI assistant to help you solve the problem
         --ai: The AI to use, default: openaichat, options: openaichat, bingai
-        --usage: The usage of the helper, default: simple, options: simple, complex
+        --enable-agent: Enable subagent, default: False
+        --include [interface]: Include the extra interface, default: None, options: pythoncode
+            # Note: AI interface will be included automatically
 
 AI Completer is a tool to help you complete your work with AI.
 It can be used to complete your code, complete your text, etc.
@@ -47,12 +58,12 @@ talk_pareser = subparsers.add_parser('talk', help='Talk with the AI')
 talk_pareser.add_argument('--ai', type=str, default='openaichat', choices=('openaichat', 'bingai'), help='The AI to use, default: openaichat, options: openaichat, bingai')
 helper_pareser = subparsers.add_parser('helper', help='The helper of AI Completer, this will launcher a AI assistant to help you solve the problem')
 helper_pareser.add_argument('--ai', type=str, default='openaichat', choices=('openaichat', 'bingai'), help='The AI to use, default: openaichat, options: openaichat, bingai')
-helper_pareser.add_argument('--usage', type=str, default='simple', choices=('simple', 'complex'), help='The usage of the helper, default: simple, options: simple, complex')
+helper_pareser.add_argument('--enable-agent', action='store_true', help='Enable subagent, default: False', dest='enable_agent')
+helper_pareser.add_argument('-i','--include', type=str, nargs='+', default=[], choices=('pythoncode'), help='Include the extra interface, default: None, options: pythoncode')
 
 args = parser.parse_args()
 if args.debug:
     __DEBUG__ = True
-    os.environ['DEBUG'] = "True"
 
 if not os.path.exists(args.config):
     logger.info("config.json Not Found. Use default config.")
@@ -63,15 +74,30 @@ else:
 config_.setdefault("global.debug", False)
 if config_["global.debug"]:
     __DEBUG__ = True
-    os.environ['DEBUG'] = "True"
 
 if __DEBUG__ == True:
     logger.setLevel(log.DEBUG)
     logger.debug("Debug Mode Enabled")
+    config.varibles['debug'] = True
+    config.varibles['log_level'] = log.DEBUG
+
+
+
+
+
+
+
+# After the initialization of the arguments and global configuration, we can now import the modules and do the real work
+from aicompleter import *
+from aicompleter.implements import ConsoleInterface
+from aicompleter.utils import ainput, aprint
 
 __AI_map__ = {
     'openaichat': (ai.openai.Chater, config_['openaichat']),
     'bingai': (ai.microsoft.BingAI, config_['bingai']),
+}
+__Int_map__ = {
+    'pythoncode': implements.PythonCodeInterface,
 }
 
 async def main():
@@ -106,17 +132,23 @@ async def main():
             _handler = Handler(config_)
             ai_name = args.ai
             if ai_name not in __AI_map__:
-                logger.fatal(f"AI {ai_name} not found.")
+                logger.critical(f"AI {ai_name} not found.")
                 return
             ai_cls, ai_config = __AI_map__[ai_name]
             ai_config.setdefault(config_.global_)
             ai_ = ai_cls(config=ai_config)
 
-            ai_interface = (implements.logical.StateExecutor if args.usage == 'simple' else implements.logical.SelfStateExecutor)(ai=ai_, namespace=ai_name)
+            ai_interface = (implements.logical.StateExecutor if args.enable_agent else implements.logical.SelfStateExecutor)(ai=ai_, namespace=ai_name)
             
             console_interface = ConsoleInterface()
             graph = layer.InterfaceDiGraph()
             graph.add(ai_interface, console_interface)
+
+            for interface_name in args.include:
+                if interface_name not in __Int_map__:
+                    logger.critical(f"Interface {interface_name} not found.")
+                    return
+                graph.add(ai_interface, __Int_map__[interface_name]())
 
             await graph.setup(_handler)
             new_session = await _handler.new_session()

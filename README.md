@@ -17,7 +17,7 @@ cd AI-Completer
 
 2. Modify the config file
 
-You can use either vim or your editor to modify the file `config-example.json`, and rename it to `config.json`
+You can use either vim or your editor to modify the file `config-example.json`, and save it to `config.json`
 
 3. Run and enjoy yourself
 
@@ -43,7 +43,7 @@ cfg = config.loadConfig('config.json')
 # load config
 cfg['openaichat'].setdefault(cfg['global'])
 # load global config to overwrite openaichat config
-chater = ai.openai.Chater('gpt-3.5-turbo-0301', cfg['openaichat'])
+chater = ai.openai.Chater(cfg['openaichat'])
 # ChatAI, use openai model gpt-3.5-turbo-0301
 consoleinterface:ConsoleInterface = ConsoleInterface()
 # Console Interface
@@ -63,14 +63,13 @@ async def main():
             cmd='ask',
             session=session,
             dest_interface=consoleinterface,
-            content=MultiContent(ret if ret else "Start Your Conversation"),
+            content=ret if ret else "Start Your Conversation",
         )) # Send a ask command to the console interface, the console will print the message and require user to input
         ret = await session.asend(Message(
             cmd='ask',
             session=session,
-            src_interface=chatinterface,
             dest_interface=chatinterface,
-            content=MultiContent(text),
+            content=text,
         )) # Send a ask command to the chat interface, the ai is asked by the content (text, the question of user)
 
         # continue to execute
@@ -83,10 +82,9 @@ asyncio.run(main())
 ## To-do List
 
 We are adding more support to this program.
-- [x] Add ChatGPT command support
 - [x] Add logical structure for automatic task
-  - [ ] Add subagent support
+  - [x] Add subagent support
 - [ ] Add Commands Intergation with AI model.
-- [x] Add more logical structure
+  - [ ] Add Commands Support
 - [ ] Add memory system
-- [ ] Add Namespace support
+- [x] Add Namespace support

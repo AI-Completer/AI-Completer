@@ -153,6 +153,7 @@ class Session:
         '''Running tasks'''
         
         if bool(config.varibles['disable_memory']) == False:
+            memory = memory or MemoryConfigure()
             self._memory:Memory = memory.initial_memory or memory.factory(*memory.factory_args, **memory.factory_kwargs)
             '''Memory'''
             self._vertex_model:VectexTransformer = VectexTransformer(memory.vertex_model)

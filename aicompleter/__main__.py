@@ -52,6 +52,8 @@ AI Completer is still in development, so it may not work well.
 parser = argparse.ArgumentParser(description=__help__)
 parser.add_argument('--debug', action='store_true', help='Enable debug mode, default: False, if the environment variable DEBUG is set to True, this option will be ignored')
 parser.add_argument('--config', type=str, default='config.json', help='Specify the config file, default: config.json')
+parser.add_argument('--disable-memory', action='store_true', help='Disable memory, default: False', dest='disable_memory')
+parser.add_argument('--disable-faiss', action='store_true', help='Disable faiss, default: False', dest='disable_faiss')
 subparsers = parser.add_subparsers(dest='subcommand', help='subcommands', description='subcommands, including:\n\ttalk: Talk with the AI\n\thelper: The helper of AI Completer, this will launcher a AI assistant to help you solve the problem')
 subparsers.required = True
 talk_pareser = subparsers.add_parser('talk', help='Talk with the AI')
@@ -81,9 +83,10 @@ if __DEBUG__ == True:
     config.varibles['debug'] = True
     config.varibles['log_level'] = log.DEBUG
 
-
-
-
+if args.disable_memory:
+    config.varibles['disable_memory'] = True
+if args.disable_faiss:
+    config.varibles['disable_faiss'] = True
 
 
 
@@ -184,7 +187,7 @@ except KeyboardInterrupt:
     try_time = 0
     while not all(task.done() for task in asyncio.all_tasks(loop)) and try_time < max_try:
         try_time += 1
-        logger.debug(f"Try to stop the loop. Try time: {try_time}")
+        logger.debug(f"Try to stop the loop. Try times: {try_time}")
         loop.stop()
         for task in asyncio.all_tasks(loop):
             task.cancel()

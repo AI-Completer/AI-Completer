@@ -89,9 +89,20 @@ class Agent:
         '''
         Parse the commands from AI
         '''
-        # Format
-        # <Content>
-        # Commands lists
+
+        # Check this format : {"type":"ask", "message":"<message>"}
+        try:
+            json_dat = json.loads(raw)
+            if not isinstance(json_dat, dict):
+                raise ValueError('Invalid json format')
+            if not isinstance(json_dat.get('type', None), str):
+                raise ValueError('type not found')
+            if json_dat['type'] == 'ask' and 'message' in json_dat:
+                raw = json_dat['message']
+        except Exception:
+            pass
+
+
         def _check_parse(value:str) -> bool:
             try:
                 json.loads(value)['commands']
@@ -136,99 +147,109 @@ class Agent:
         '''
         from ... import ai
         stop_flag = False
-        while not stop_flag:
-            await asyncio.sleep(0.1)
-            # Get all the requests
+        try:
+            while not stop_flag:
+                await asyncio.sleep(0.1)
+                # Get all the requests
 
-            requests:list[ai.Message] = [await self._request_queue.get()]
-            while not self._request_queue.empty():
-                requests.append(self._request_queue.get_nowait())
+                requests:list[ai.Message] = [await self._request_queue.get()]
+                while not self._request_queue.empty():
+                    requests.append(self._request_queue.get_nowait())
 
-            self.logger.debug(f'Get requests: {requests}')
+                self.logger.debug(f'Get requests: {requests}')
 
-            def _try_parse(x):
-                try:
-                    return json.loads(x)
-                except Exception:
-                    return x
-
-            if len(requests) == 1:
-                raw_content = _try_parse(requests[0].content)
-                if isinstance(raw_content, dict):
-                    raw_content = json.dumps(raw_content, ensure_ascii = False)
-            else:
-                raw_content = json.dumps([_try_parse(request.content) for request in requests], ensure_ascii = False)
-
-            raw = await self.ai.ask_once(
-                history = self.conversation,
-                message = ai.Message(
-                    content = raw_content,
-                    role = 'user',
-                    user = self.conversation.user,
-                ),
-            )
-            self.logger.debug(f'AI response: {raw}')
-            if raw == '':
-                # Self call ask command, do not input anything
-                raw = '{"commands":[{"cmd":"ask","param":""}]}'
-
-            try:
-                json_dat = self._parse(raw)
-            except ValueError as e:
-                # no wait to tell AI
-                self.logger.error(f'Invalid json format: {raw}')
-                self._request({
-                    'type':'error',
-                    'value':str(e),
-                })
-                continue
-            
-            json_dat = json_dat['commands']
-            if len(json_dat) == 0:
-                continue
-
-            # Execute the commands
-            for cmd in json_dat:
-                if cmd['cmd'] == 'stop':
-                    stop_flag = True
-                    self._result = cmd.pop('param', None)
-                    if self._parent:
-                        self._parent._subagents.pop(self._parent_name)
-                    continue
-                if cmd['cmd'] == 'agent':
-                    # Create a subagent
-                    if not all(i in cmd['param'] for i in ('name', 'task')):
-                        self._request({
-                            'type':'error',
-                            'value':f"Paremeters 'name' and 'word' are required"
-                        })
-                    if cmd['param']['name'] in self._subagents:
-                        self._subagents[cmd['param']['name']].ask(cmd['param']['task'])
-                        continue
-                    ret = self.on_subagent(cmd['param']['name'], cmd['param']['task'])
-                    if asyncio.iscoroutine(ret):
-                        await ret
-                    continue
-                if cmd['cmd'] == 'ask':
-                    # This command will be hooked if the agent is a subagent
-                    if self._parent:
-                        self._parent._subagent_ask(self._parent_name, cmd['param'])
-                        await asyncio.sleep(0.1)
-                        continue
-
-                def when_result(x: asyncio.Future):
+                def _try_parse(x):
                     try:
-                        ret = x.result()
-                    except asyncio.CancelledError:
-                        return
-                    except Exception as e:
-                        self._result_queue.put_nowait(interface.Result(cmd['cmd'], False, str(e)))
-                        self.logger.error(f'Exception when executing command {cmd["cmd"]}: {e}')
-                    else:
-                        self._result_queue.put_nowait(interface.Result(cmd['cmd'], True, ret))
-                        self.logger.info(f'Command {cmd["cmd"]} executed successfully, Result: {ret}')
+                        return json.loads(x)
+                    except Exception:
+                        return x
 
-                asyncio.get_event_loop().create_task(self.on_call(cmd['cmd'], cmd['param'])).add_done_callback(when_result)
+                if len(requests) == 1:
+                    raw_content = _try_parse(requests[0].content)
+                    if isinstance(raw_content, dict):
+                        raw_content = json.dumps(raw_content, ensure_ascii = False)
+                else:
+                    raw_content = json.dumps([_try_parse(request.content) for request in requests], ensure_ascii = False)
+
+                raw = await self.ai.ask_once(
+                    history = self.conversation,
+                    message = ai.Message(
+                        content = raw_content,
+                        role = 'user',
+                        user = self.conversation.user,
+                    ),
+                )
+                self.logger.debug(f'AI response: {raw}')
+                if raw == '':
+                    # Self call ask command, do not input anything
+                    raw = '{"commands":[{"cmd":"ask","param":""}]}'
+
+                try:
+                    json_dat = self._parse(raw)
+                except ValueError as e:
+                    # no wait to tell AI
+                    self.logger.error(f'Invalid json format: {raw}')
+                    self._request({
+                        'type':'error',
+                        'value':str(e),
+                    })
+                    continue
+                
+                json_dat = json_dat['commands']
+                if len(json_dat) == 0:
+                    continue
+
+                # Execute the commands
+                for cmd in json_dat:
+                    if cmd['cmd'] == 'stop':
+                        stop_flag = True
+                        self._result = cmd.pop('param', None)
+                        if self._parent:
+                            self._parent._subagents.pop(self._parent_name)
+                        continue
+                    if cmd['cmd'] == 'agent':
+                        # Create a subagent
+                        if not all(i in cmd['param'] for i in ('name', 'task')):
+                            self._request({
+                                'type':'error',
+                                'value':f"Paremeters 'name' and 'word' are required"
+                            })
+                        if cmd['param']['name'] in self._subagents:
+                            self._subagents[cmd['param']['name']].ask(cmd['param']['task'])
+                            continue
+                        ret = self.on_subagent(cmd['param']['name'], cmd['param']['task'])
+                        if asyncio.iscoroutine(ret):
+                            await ret
+                        continue
+                    if cmd['cmd'] == 'ask':
+                        # This command will be hooked if the agent is a subagent
+                        if self._parent:
+                            self._parent._subagent_ask(self._parent_name, cmd['param'])
+                            await asyncio.sleep(0.1)
+                            continue
+
+                    def when_result(x: asyncio.Future):
+                        try:
+                            ret = x.result()
+                        except asyncio.CancelledError:
+                            return
+                        except Exception as e:
+                            self._result_queue.put_nowait(interface.Result(cmd['cmd'], False, str(e)))
+                            self.logger.error(f'Exception when executing command {cmd["cmd"]}: {e}')
+                        else:
+                            self._result_queue.put_nowait(interface.Result(cmd['cmd'], True, ret))
+                            self.logger.info(f'Command {cmd["cmd"]} executed successfully, Result: {ret}')
+
+                    asyncio.get_event_loop().create_task(self.on_call(cmd['cmd'], cmd['param'])).add_done_callback(when_result)
+        except asyncio.CancelledError as e:
+            # The loop is done
+            self._handle_task.remove_done_callback(self._unexception)
+            self._loop_task.remove_done_callback(self._unexception)
+            self._handle_task.cancel()
+            self._handle_task = None
+            self._loop_task = None
+            self.logger.debug('The agent is stopped')
+            raise e
 
         # The loop is done
         self._handle_task.remove_done_callback(self._unexception)
@@ -279,5 +300,7 @@ class Agent:
     def __del__(self):
         if self._handle_task:
             self._handle_task.cancel()
+            self._handle_task.remove_done_callback(self._unexception)
         if self._loop_task:
             self._loop_task.cancel()
+            self._loop_task.remove_done_callback(self._unexception)

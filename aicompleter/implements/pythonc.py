@@ -17,7 +17,7 @@ class PythonCodeInterface(Interface):
         super().__init__(user, namespace, id)
         self.commands.add(Command(
             cmd='exec',
-            description='Execute python code, the environments and varibles will be persevered in this conversation.',
+            description='Execute python code, the environments and varibles will be persevered in this conversation.You cannot see the stdout of the code.',
             format=CommandParamStruct({
                 'code': CommandParamElement(name='code', type=str, description='Python code to execute.', tooltip='code'),
                 'type': CommandParamElement(name='type', type=str, description='Type of the code, can be "exec" or "eval".', tooltip='exec/eval (default to exec)', default='exec', optional=True)

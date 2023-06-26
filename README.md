@@ -26,7 +26,7 @@ You can use either vim or your editor to modify the file `config-example.json`, 
 ```shell
 python3 -m aicompleter talk --ai bingai
 # This will start a conversation with bing ai.
-python3 -m aicompleter helper --usage simple
+python3 -m aicompleter helper --enable-agent --include pythoncode
 # This will start a helper with OpenAI API
 ```
 

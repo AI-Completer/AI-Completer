@@ -173,10 +173,14 @@ if os.name == "nt":
 async def check_loop():
     # Check if the loop is empty
     # The one task is this function
-    if len(asyncio.all_tasks(loop)) == 1:
+    try:
+        if len(asyncio.all_tasks(loop)) == 1:
+            loop.stop()
+        else:
+            loop.create_task(check_loop())
+    except asyncio.CancelledError as e:
         loop.stop()
-    else:
-        loop.create_task(check_loop())
+        raise e
 try:
     loop.create_task(main())
     loop.create_task(check_loop())
@@ -187,7 +191,6 @@ except KeyboardInterrupt:
     try_time = 0
     while not all(task.done() for task in asyncio.all_tasks(loop)) and try_time < max_try:
         try_time += 1
-        logger.debug(f"Try to stop the loop. Try times: {try_time}")
         loop.stop()
         for task in asyncio.all_tasks(loop):
             task.cancel()

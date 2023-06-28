@@ -15,9 +15,15 @@ class Agent:
         self._init_prompt = init_prompt
         
         self.conversation = self.ai.new_conversation(user,init_prompt=init_prompt)
+        '''The conversation of the agent'''
         self.on_call: Callable[[str, Any], Coroutine[Any, None, None]] = lambda cmd, param: asyncio.create_task()
+        '''Event when a command is called'''
         self.on_subagent: Callable[[str, Any], None | Coroutine[None, None, None]] = lambda name, word: self.new_subagent(name, word)
+        '''Event when a subagent is created'''
         self.on_exception: events.Event = events.Event(callbacks=[lambda e: print(traceback.format_exc())])
+        '''Event when an exception is raised'''
+        self.enable_ask = True
+        '''Enable the ask command'''
 
         self._result_queue: asyncio.Queue[interface.Result] = asyncio.Queue()
         self._request_queue: asyncio.Queue[ai.Message] = asyncio.Queue()
@@ -222,6 +228,12 @@ class Agent:
                             await ret
                         continue
                     if cmd['cmd'] == 'ask':
+                        if not self.enable_ask:
+                            self._request({
+                                'type':'error',
+                                'value':f"Ask command is not allowed"
+                            })
+                            continue
                         # This command will be hooked if the agent is a subagent
                         if self._parent:
                             self._parent._subagent_ask(self._parent_name, cmd['param'])
@@ -261,7 +273,6 @@ class Agent:
         # Will end itself
 
     async def _handle_result(self):
-        from ... import ai
         while True:
             result = await self._result_queue.get()
 

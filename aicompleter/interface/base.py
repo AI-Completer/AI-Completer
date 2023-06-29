@@ -425,6 +425,21 @@ class Interface:
         '''Finial function for Session'''
         pass
 
+    def getconfig(self, session:session.Session):
+        '''
+        Get the config of the interface
+        :param session: Session
+        '''
+        # There is a config conflict when using mutable interface
+        return session.config[self.namespace.name]
+    
+    def getdata(self, session:session.Session):
+        '''
+        Get the data of the interface
+        :param session: Session
+        '''
+        return session.data[self.id.hex]
+
     @abstractmethod
     async def call(self, session:session.Session, message:session.Message):
         '''
@@ -433,6 +448,8 @@ class Interface:
         *Note*: Handler Class has add the history, no need to add it again
         Call by this method will skip the command check,
         this command can return any type of value
+        :param session: Session
+        :param message: Message
         '''
         pass
     

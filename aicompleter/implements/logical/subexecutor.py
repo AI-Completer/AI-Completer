@@ -104,7 +104,8 @@ Do not reply with anything else.
 )
         agent.on_subagent = on_subagent
 
-        session.data[f'{self.namespace.name}.agent'] = agent
+        data = self.getdata(session)
+        data['agent'] = agent
 
         return ret
 
@@ -119,7 +120,7 @@ Do not reply with anything else.
                 return json.dumps(prompt, ensure_ascii=False)
             raise TypeError(f"Invalid prompt type {type(prompt)}")
 
-        agent:ai.agent.Agent = session.data[f'{self.namespace.name}.agent']
+        agent:ai.agent.Agent = self.getdata(session)['agent']
         agent.ask(_cr_message(message.content.pure_text))
         
         return None

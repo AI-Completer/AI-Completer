@@ -75,6 +75,7 @@ Do not reply with anything else.
 
 Your task is:
 {task}
+Respond in the language of the task.
 '''
         )
 
@@ -88,5 +89,6 @@ Your task is:
         agent.enable_ask = False
         
         agent.ask("Start the task now")
-
+        await agent.wait()
+        return agent.result
         

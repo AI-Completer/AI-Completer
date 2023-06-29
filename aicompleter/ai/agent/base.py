@@ -45,12 +45,11 @@ class Agent:
         self._handle_task.add_done_callback(self._unexception)
         self._loop_task.add_done_callback(self._unexception)
 
-    async def _unexception(self,x:asyncio.Future):
+    def _unexception(self,x:asyncio.Future):
         try:
-            return x.result()
+            x.result()
         except Exception as e:
-            await self.on_exception(e)
-            return e
+            asyncio.get_event_loop().create_task(self.on_exception(e))
 
     @property
     def stopped(self) -> bool:
@@ -64,7 +63,7 @@ class Agent:
         '''
         The result of the agent
         '''
-        if self._result != Ellipsis:
+        if not self.stopped:
             raise RuntimeError('The agent is not stopped yet')
         return self._result
 
@@ -103,8 +102,10 @@ class Agent:
                 raise ValueError('Invalid json format')
             if not isinstance(json_dat.get('type', None), str):
                 raise ValueError('type not found')
-            if json_dat['type'] == 'ask' and 'message' in json_dat:
+            if json_dat['type'].beginwiths('ask') and 'message' in json_dat:
                 raw = json_dat['message']
+            if json_dat['type'].beginwiths('ask') and 'value' in json_dat:
+                raw = json_dat['value']
         except Exception:
             pass
 
@@ -307,6 +308,13 @@ class Agent:
             'name': name,
             'value': value,
         })
+
+    async def wait(self):
+        '''
+        Wait until the agent is stopped
+        '''
+        while not self.stopped:
+            await asyncio.sleep(0.1)
 
     def __del__(self):
         if self._handle_task:

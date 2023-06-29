@@ -46,11 +46,11 @@ class Agent:
         self._loop_task.add_done_callback(self._unexception)
 
     async def _unexception(self,x:asyncio.Future):
-            try:
-                return x.result()
-            except Exception as e:
-                await self.on_exception(e)
-                return e
+        try:
+            return x.result()
+        except Exception as e:
+            await self.on_exception(e)
+            return e
 
     @property
     def stopped(self) -> bool:

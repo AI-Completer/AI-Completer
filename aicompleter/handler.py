@@ -16,7 +16,7 @@ from .namespace import Namespace
 
 class Handler:
     '''
-    Handler for AutoDone-AI
+    Handler for AI-Completer
     The handler will transfer various information between Interfaces, 
     enabling interaction among person, AI and system.
     '''
@@ -94,11 +94,6 @@ class Handler:
         await session.close()
         self._running_sessions.remove(session)
         self._update_running_sessions()
-    
-    def reload_namespaces(self) -> None:
-        '''Reload namespaces from interfaces'''
-        self.logger.debug("Reloading namespaces")
-        self._namespace.reload_commands()
 
     def reload_users(self) -> None:
         '''Reload users from interfaces'''
@@ -121,22 +116,27 @@ class Handler:
             self._groupset.add(_group)
 
     def reload(self):
-        '''Reload commands and users from interfaces'''
-        self.reload_namespaces()
+        '''Reload users from interfaces'''
         self.reload_users()
 
     def check_cmd_support(self, cmd:str) -> bool:
         '''Check whether the command is support by this handler'''
         return cmd in self.commands
     
-    def get_cmd(self, cmd:str, interface:Optional[Interface] = None) -> Command:
+    def get_cmd(self, cmd:str, dst_interface:Optional[Interface] = None, src_interface:Optional[Interface] = None) -> Command | None:
         '''Get command by name'''
-        if interface == None:
-            return self.commands.get(cmd)
+        if dst_interface == None:
+            if src_interface == None:
+                return next(self._namespace.getcmd(cmd), None)
+            else:
+                # Create a new Commands class
+                ret = Commands()
+                ret.add(*self._namespace.get_executable(src_interface.user))
+                return ret.get(cmd, None)
         else:
-            if interface not in self._interfaces:
+            if dst_interface not in self._interfaces:
                 raise error.NotFound(interface, handler=self, content='Interface Not In Handler')
-            return interface.commands.get(cmd)
+            return dst_interface.commands.get(cmd, None)
     
     def get_executable_cmds(self, *args, **wargs) -> Generator[Command, None, None]:
         return self.commands.get_executable(*args, **wargs)
@@ -217,7 +217,7 @@ class Handler:
         '''
         command = message.cmd
         # from_ = message.src_interface
-        cmd = self.get_cmd(command, message.dest_interface)
+        cmd = self.get_cmd(command, message.dest_interface, message.src_interface)
         if cmd == None:
             raise error.CommandNotImplement(command, self)
         # if from_:
@@ -247,11 +247,10 @@ class Handler:
                     if any([i in call_groups for i in message.src_interface.user.all_groups]) == False:
                         raise error.PermissionDenied(message.cmd, interface=message.src_interface, handler=self)
             else:
-                call_groups = self.get_cmd(message.cmd).callable_groups
-                if any([i in call_groups for i in message.src_interface.user.all_groups]) == False:
-                    raise error.PermissionDenied(message.cmd, interface=message.src_interface, handler=self)
+                if self.get_cmd(message.cmd) == None:
+                    raise error.CommandNotImplement(message.cmd, self, detail = "Either the command is not implemented in the handler or the interface has no permission to call the command.")
         message.session = session
-        cmd = self.get_cmd(message.cmd, message.dest_interface)
+        cmd = self.get_cmd(message.cmd, message.dest_interface, message.src_interface)
         if cmd == None:
             raise error.CommandNotImplement(message.cmd, self)
         if cmd.force_await:
@@ -299,8 +298,8 @@ class Handler:
                           config:Optional[Config] = None) -> session.Session:
         '''
         Create a new session, will call all interfaces' session_init method
-        param:
-            interface: Interface, optional, the interface to set as src_interface
+        :param interface:Interface, optional, the interface to set as src_interface
+        :param config:Config, optional, the config to set as session.config
         '''
         ret = session.Session(self)
         self.logger.debug("Creating new session %s", ret.id)

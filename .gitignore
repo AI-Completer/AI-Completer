@@ -168,5 +168,8 @@ config.toml
 # VSCode
 .vscode/
 
+# Working directory
+workspace/
+
 # Temporary test scripts
 test_*.py

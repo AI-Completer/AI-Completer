@@ -15,9 +15,15 @@ class Agent:
         self._init_prompt = init_prompt
         
         self.conversation = self.ai.new_conversation(user,init_prompt=init_prompt)
+        '''The conversation of the agent'''
         self.on_call: Callable[[str, Any], Coroutine[Any, None, None]] = lambda cmd, param: asyncio.create_task()
+        '''Event when a command is called'''
         self.on_subagent: Callable[[str, Any], None | Coroutine[None, None, None]] = lambda name, word: self.new_subagent(name, word)
+        '''Event when a subagent is created'''
         self.on_exception: events.Event = events.Event(callbacks=[lambda e: print(traceback.format_exc())])
+        '''Event when an exception is raised'''
+        self.enable_ask = True
+        '''Enable the ask command'''
 
         self._result_queue: asyncio.Queue[interface.Result] = asyncio.Queue()
         self._request_queue: asyncio.Queue[ai.Message] = asyncio.Queue()
@@ -39,12 +45,11 @@ class Agent:
         self._handle_task.add_done_callback(self._unexception)
         self._loop_task.add_done_callback(self._unexception)
 
-    async def _unexception(self,x:asyncio.Future):
-            try:
-                return x.result()
-            except Exception as e:
-                await self.on_exception(e)
-                return e
+    def _unexception(self,x:asyncio.Future):
+        try:
+            x.result()
+        except Exception as e:
+            asyncio.get_event_loop().create_task(self.on_exception(e))
 
     @property
     def stopped(self) -> bool:
@@ -58,7 +63,7 @@ class Agent:
         '''
         The result of the agent
         '''
-        if self._result != Ellipsis:
+        if not self.stopped:
             raise RuntimeError('The agent is not stopped yet')
         return self._result
 
@@ -97,8 +102,10 @@ class Agent:
                 raise ValueError('Invalid json format')
             if not isinstance(json_dat.get('type', None), str):
                 raise ValueError('type not found')
-            if json_dat['type'] == 'ask' and 'message' in json_dat:
+            if json_dat['type'].beginwiths('ask') and 'message' in json_dat:
                 raw = json_dat['message']
+            if json_dat['type'].beginwiths('ask') and 'value' in json_dat:
+                raw = json_dat['value']
         except Exception:
             pass
 
@@ -112,13 +119,16 @@ class Agent:
 
         content_list = []
         command_raw = None
-        for line in raw.splitlines():
-            if _check_parse(line):
-                command_raw = line
-            else:
-                content_list.append(line)
-                if command_raw is not None:
-                    raise ValueError('Json format is not allowed before the content')
+        if _check_parse(raw):
+            command_raw = raw
+        else:
+            for line in raw.splitlines():
+                if _check_parse(line):
+                    command_raw = line
+                else:
+                    content_list.append(line)
+                    if command_raw is not None:
+                        raise ValueError('Json format is not allowed before the content')
 
         json_dat = {"commands":[]}
         if content_list:
@@ -222,6 +232,12 @@ class Agent:
                             await ret
                         continue
                     if cmd['cmd'] == 'ask':
+                        if not self.enable_ask:
+                            self._request({
+                                'type':'error',
+                                'value':f"Ask command is not allowed"
+                            })
+                            continue
                         # This command will be hooked if the agent is a subagent
                         if self._parent:
                             self._parent._subagent_ask(self._parent_name, cmd['param'])
@@ -261,7 +277,6 @@ class Agent:
         # Will end itself
 
     async def _handle_result(self):
-        from ... import ai
         while True:
             result = await self._result_queue.get()
 
@@ -296,6 +311,13 @@ class Agent:
             'name': name,
             'value': value,
         })
+
+    async def wait(self):
+        '''
+        Wait until the agent is stopped
+        '''
+        while not self.stopped:
+            await asyncio.sleep(0.1)
 
     def __del__(self):
         if self._handle_task:

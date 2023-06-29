@@ -17,7 +17,7 @@ class PythonCodeInterface(Interface):
         super().__init__(user, namespace, id)
         self.commands.add(Command(
             cmd='exec',
-            description='Execute python code, the environments and varibles will be persevered in this conversation.You cannot see the stdout of the code.',
+            description='Execute python code, the environments and varibles will be persevered in this conversation.',
             format=CommandParamStruct({
                 'code': CommandParamElement(name='code', type=str, description='Python code to execute.', tooltip='code'),
                 'type': CommandParamElement(name='type', type=str, description='Type of the code, can be "exec" or "eval".', tooltip='exec/eval (default to exec)', default='exec', optional=True)
@@ -47,16 +47,25 @@ class PythonCodeInterface(Interface):
         '''
         func = eval if message.content.json['type'] == 'eval' else exec
         old_dict = dict(session.data[self.namespace.name]['globals'])
-        ret = func(message.content.json['code'], old_dict)
-        session.data[self.namespace.name]['globals'] = old_dict
-        if ret != None:
+        if func == eval:
+            ret = func(message.content.json['code'], old_dict)
+            session.data[self.namespace.name]['globals'] = old_dict
             return ret
-        last_sentence = message.content.json['code'].splitlines()[-1].strip()
-        # Check if it's a variable
-        if set(last_sentence) <= set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789'):
-            try:
-                return old_dict[last_sentence]
-            except KeyError:
-                return None
+        else:
+            # exec
+            sentences = message.content.json['code'].splitlines()
+            if sentences[-1][0] != ' ':
+                # Not in a block
+                ret = func('\n'.join(sentences[:-1]), old_dict)
+                session.data[self.namespace.name]['globals'] = old_dict
+                return eval(sentences[-1], old_dict)
+            else:
+                # Check the new variables
+                old_var = set(old_dict.keys())
+                func(message.content.json['code'], old_dict)
+                session.data[self.namespace.name]['globals'] = old_dict
+                new_var = set(old_dict.keys())
+                if 'result' in (new_var - old_var):
+                    return old_dict['result']
         return None
     

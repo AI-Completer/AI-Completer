@@ -64,34 +64,30 @@ class Namespace:
         Get the executable of the namespace
         *Note*: This command will yield all possible executable commands, including the name-conflicted commands in subnamespaces.
         '''
+        from . import interface
         if isinstance(arg, interface.User):
             for grp in arg.all_groups:
                 yield from self.get_executable(grp)
         elif isinstance(arg, interface.Group):
             return self.get_executable(arg.name)
         elif isinstance(arg, str):
-            if arg in self.subnamespaces:
-                yield from self.subnamespaces[arg].get_executable(arg)
-            if len(self.subnamespaces) == 0:
-                # This base namespace has no subnamespaces
-                for cmd in self.commands:
-                    if grp in cmd.callable_groups:
-                        yield cmd
+            for cmd in self.commands:
+                if arg in cmd.callable_groups:
+                    yield cmd
+            for value in self.subnamespaces.values():
+                yield from value.get_executable(arg)
         else:
             raise TypeError(f'Invalid argument type: {arg!r}')
 
-    def reload_commands(self):
-        '''
-        Reload all commands
-        '''
-        if len(self.subnamespaces) == 0:
-            # No need to reload commands
-            return
-        self.commands.clear()
-        for sub in self.subnamespaces.values():
-            sub.reload_commands()
-            for cmd in sub.commands:
-                if cmd.expose == False:
-                    continue
-                cmd.extra['from'] = sub
-                self.commands.add(cmd)
+    def subnamespace(self, name:str):
+        if self.name == name:
+            yield self
+        for value in self.subnamespaces.values():
+            yield from value.subnamespace(name)
+
+    def getcmd(self, name:str):
+        if name in self.commands:
+            yield self.commands[name]
+        for value in self.subnamespaces.values():
+            yield from value.getcmd(name)
+    

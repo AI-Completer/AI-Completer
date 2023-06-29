@@ -119,13 +119,16 @@ class Agent:
 
         content_list = []
         command_raw = None
-        for line in raw.splitlines():
-            if _check_parse(line):
-                command_raw = line
-            else:
-                content_list.append(line)
-                if command_raw is not None:
-                    raise ValueError('Json format is not allowed before the content')
+        if _check_parse(raw):
+            command_raw = raw
+        else:
+            for line in raw.splitlines():
+                if _check_parse(line):
+                    command_raw = line
+                else:
+                    content_list.append(line)
+                    if command_raw is not None:
+                        raise ValueError('Json format is not allowed before the content')
 
         json_dat = {"commands":[]}
         if content_list:

@@ -32,6 +32,11 @@ class BaseException(Exception):
 
     def __str__(self) -> str:
         return f"<{self.__class__.__name__}: {self.args} {self.kwargs}>"
+    
+    def __init_subclass__(cls) -> None:
+        if cls.__doc__ == BaseException.__doc__:
+            cls.__doc__ = None
+        return super().__init_subclass__()
 
 class ParamRequired(BaseException):
     '''Param Required'''

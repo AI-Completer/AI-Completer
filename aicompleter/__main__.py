@@ -16,18 +16,6 @@ if os.environ['DEBUG'] == "True":
 
 logger = log.getLogger("Main")
 
-__map_environment__ = {
-    'DISABLE_MEMORY': ('disable_memory', bool),
-    'DISABLE_FAISS': ('disable_faiss', bool),
-}
-
-for k, (v, tp) in __map_environment__.items():
-    if k in os.environ:
-    #     config.varibles[v] = tp(os.environ[k])
-        logger.debug(f"Environment Variable {k} Found. Set {v} to {config.varibles[v]}")
-
-del k, v, tp
-
 __help__='''
 AI Completer
 python3 -m aicompleter [options] [subcommands] [subcommand options]
@@ -79,6 +67,7 @@ if config_["global.debug"]:
 
 if __DEBUG__ == True:
     logger.setLevel(log.DEBUG)
+    logger._cache = {}              # Issue: The logging cache will not be cleared when the logger level is changed
     logger.debug("Debug Mode Enabled")
     config.varibles['debug'] = True
     config.varibles['log_level'] = log.DEBUG
@@ -96,8 +85,8 @@ from aicompleter.implements import ConsoleInterface
 from aicompleter.utils import ainput, aprint
 
 __AI_map__ = {
-    'openaichat': (ai.openai.Chater, config_['openaichat']),
-    'bingai': (ai.microsoft.BingAI, config_['bingai']),
+    'openaichat': (ai.openai.Chater, {"config":config_['openaichat'], "model":'gpt-3.5-turbo'}),
+    'bingai': (ai.microsoft.BingAI, {"config":config_['bingai']}),
 }
 __Int_map__ = {
     'pythoncode': implements.PythonCodeInterface,
@@ -112,9 +101,9 @@ async def main():
             if ai_name not in __AI_map__:
                 logger.fatal(f"AI {ai_name} not found.")
                 return
-            ai_cls, ai_config = __AI_map__[ai_name]
-            ai_config.setdefault(config_.global_)
-            ai_ = ai_cls(config=ai_config)
+            ai_cls, ai_param = __AI_map__[ai_name]
+            ai_param["config"].setdefault(config_.global_)
+            ai_ = ai_cls(**ai_param)
             ai_interface = ai.ChatInterface(ai=ai_, namespace=ai_name)
             con_interface = ConsoleInterface()
             handler_ = Handler(config_)
@@ -137,9 +126,9 @@ async def main():
             if ai_name not in __AI_map__:
                 logger.critical(f"AI {ai_name} not found.")
                 return
-            ai_cls, ai_config = __AI_map__[ai_name]
-            ai_config.setdefault(config_.global_)
-            ai_ = ai_cls(config=ai_config)
+            ai_cls, ai_param = __AI_map__[ai_name]
+            ai_param["config"].setdefault(config_.global_)
+            ai_ = ai_cls(**ai_param)
 
             ai_interface = (implements.logical.SelfStateExecutor if args.enable_agent else implements.logical.StateExecutor)(ai=ai_, namespace=ai_name)
             
@@ -173,30 +162,36 @@ if os.name == "nt":
 async def check_loop():
     # Check if the loop is empty
     # The one task is this function
-    try:
-        if len(asyncio.all_tasks(loop)) == 1:
+    while True:
+        try:
+            if len(asyncio.all_tasks(loop)) == 1:
+                loop.stop()
+                await asyncio.sleep(0)
+            else:
+                await asyncio.sleep(0.1)
+        except asyncio.CancelledError as e:
             loop.stop()
-        else:
-            await asyncio.sleep(0.1)
-            loop.create_task(check_loop())
-    except asyncio.CancelledError as e:
-        loop.stop()
-        raise e
+            return
 try:
     loop.create_task(main())
-    loop.create_task(check_loop())
+    check_task = loop.create_task(check_loop())
     loop.run_forever()
 except KeyboardInterrupt:
     logger.critical("KeyboardInterrupt")
     max_try = 10
     try_time = 0
-    while not all(task.done() for task in asyncio.all_tasks(loop)) and try_time < max_try:
+    while not all(task.done() for task in asyncio.all_tasks(loop) if task != check_task) and try_time < max_try:
         try_time += 1
         for task in asyncio.all_tasks(loop):
+            if task == check_task:
+                continue
             task.cancel()
-        try:
-            loop.run_forever()
-        except asyncio.CancelledError:
-            pass
+        loop.run_forever()
+
+    if try_time >= max_try:
+        logger.critical("Force Quit")
+    # Stop check_task
+    check_task.cancel()
+    loop.run_until_complete(check_task)
     loop.close()
 logger.debug("Loop Closed")

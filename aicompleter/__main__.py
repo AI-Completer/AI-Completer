@@ -192,10 +192,11 @@ except KeyboardInterrupt:
     try_time = 0
     while not all(task.done() for task in asyncio.all_tasks(loop)) and try_time < max_try:
         try_time += 1
-        loop.stop()
         for task in asyncio.all_tasks(loop):
             task.cancel()
-        loop.run_forever()
-    loop.stop()
+        try:
+            loop.run_forever()
+        except asyncio.CancelledError:
+            pass
     loop.close()
 logger.debug("Loop Closed")

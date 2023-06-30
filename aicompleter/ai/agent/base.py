@@ -48,6 +48,8 @@ class Agent:
     def _unexception(self,x:asyncio.Future):
         try:
             x.result()
+        except asyncio.CancelledError as e:
+            pass
         except Exception as e:
             asyncio.get_event_loop().create_task(self.on_exception(e))
 

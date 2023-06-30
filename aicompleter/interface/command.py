@@ -303,6 +303,9 @@ class Command:
             session._running_tasks.append(task)
             try:
                 ret = await task
+            except asyncio.CancelledError as e:
+                session._running_tasks.remove(task)
+                raise e
             except Exception as e:
                 session._running_tasks.remove(task)
                 raise e

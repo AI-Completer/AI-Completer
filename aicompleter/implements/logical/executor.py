@@ -160,13 +160,14 @@ Do not reply with anything else.
             ]
         )
         stop = False
+        data = self.getdata(session)
         while not stop:
             reply = await self.ai.generate_text(conversation=conversation)
             conversation.messages.append(ai.Message(
                 content=reply,
                 role='assistant',
             ))
-            session.extra[f'{self.namespace.name}.conversation.{session.id}.data'] = conversation
+            data['conversation'] = conversation
             result_list = []
 
             def _set_result_conversation():
@@ -236,7 +237,6 @@ Do not reply with anything else.
                         break
         
         # Save conversation
-        session.extra[f'{self.namespace.name}.conversation.{session.id}.data'] = conversation
-        session.extra[f'{self.namespace.name}.conversation.{session.id}.done'] = True
+        data['conversation'] = conversation
 
         return result_list[-1]['result']

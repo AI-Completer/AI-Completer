@@ -45,25 +45,29 @@ class PythonCodeInterface(Interface):
         '''
         Execute python code
         '''
+        data = self.getdata(session)
+        
         func = eval if message.content.json['type'] == 'eval' else exec
-        old_dict = dict(session.data[self.namespace.name]['globals'])
+        old_dict = dict(data['globals'])
         if func == eval:
             ret = func(message.content.json['code'], old_dict)
-            session.data[self.namespace.name]['globals'] = old_dict
+            data['globals'] = old_dict
             return ret
         else:
             # exec
             sentences = message.content.json['code'].splitlines()
+            if len(sentences) == 1:
+                return eval(message.content.json['code'], old_dict)
             if sentences[-1][0] != ' ':
                 # Not in a block
                 ret = func('\n'.join(sentences[:-1]), old_dict)
-                session.data[self.namespace.name]['globals'] = old_dict
+                data['globals'] = old_dict
                 return eval(sentences[-1], old_dict)
             else:
                 # Check the new variables
                 old_var = set(old_dict.keys())
                 func(message.content.json['code'], old_dict)
-                session.data[self.namespace.name]['globals'] = old_dict
+                data['globals'] = old_dict
                 new_var = set(old_dict.keys())
                 if 'result' in (new_var - old_var):
                     return old_dict['result']

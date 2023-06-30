@@ -4,6 +4,7 @@ Command Support For Interface
 from __future__ import annotations
 
 import asyncio
+import copy
 import functools
 import json
 import os
@@ -131,6 +132,32 @@ class CommandParamStruct:
                 else:
                     raise TypeError("struct.type must be a type or a callable function")
         return _check(self._struct, data)
+    
+    def setdefault(self, data:dict):
+        '''
+        Set the default value if the parameter is optional and with default value
+        '''
+        data = copy.deepcopy(data)
+        if isinstance(data, str):
+            data = json.loads(data)
+
+        def _set(struct:dict|list|CommandParamElement, ndata:dict):
+            if isinstance(struct, dict):
+                for key,value in struct.items():
+                    if isinstance(value,CommandParamElement):
+                        if value.optional and key not in ndata:
+                            ndata[key] = value.default
+                    _set(value, ndata[key])
+            elif isinstance(struct, list):
+                if not isinstance(ndata, list):
+                    raise TypeError("data must be a list")
+                for item in ndata:
+                    _set(struct[0], item)
+            elif isinstance(struct, CommandParamElement):
+                ...
+
+        _set(self._struct, data)
+        return data
     
     def __to_json__(self):
         '''
@@ -261,6 +288,7 @@ class Command:
         if self.format != None:
             if not self.format.check(message.content.pure_text):
                 raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",message=message,interface=self.in_interface)
+            message.content = json.dumps(self.format.setdefault(message.content.pure_text))
         
         if bool(config.varibles['disable_memory']) == False:
             # Add Memory
@@ -269,7 +297,7 @@ class Command:
                 class_=f"cmd-{self.cmd}",
                 data=message.content.pure_text,
             ))
-            
+        
         if self.callback is not None:
             task = asyncio.get_event_loop().create_task(self.callback(session, message))
             session._running_tasks.append(task)

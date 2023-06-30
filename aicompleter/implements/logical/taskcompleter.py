@@ -22,10 +22,6 @@ class TaskCompleter(ai.ChatInterface):
             overrideable=False,
             callback=self.cmd_task,
         ))
-        
-    async def session_init(self, session: Session):
-        ret = await super().session_init(session)
-        return ret
     
     async def cmd_task(self, session: Session, message: Message):
         '''

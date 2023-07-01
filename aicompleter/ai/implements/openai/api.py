@@ -22,8 +22,6 @@ class OpenAIConversation(Conversation):
     '''
     OpenAI Conversation
     '''
-    functions: Optional[list[Function]] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.deep_iterable(member_validator=attr.validators.instance_of(Function), iterable_validator=attr.validators.instance_of(list))))
-    'Functions of conversation'
     function_call: Literal['none', 'auto'] | dict | None = attr.ib(default=None, validator=attr.validators.in_(['none', 'auto', None, dict]))
     'Function call mode of conversation'
 

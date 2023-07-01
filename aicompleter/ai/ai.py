@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import copy
-from os import name
 import time
 import uuid
 from abc import abstractmethod
+from os import name
 from typing import Any, Coroutine, Optional
 
 import attr
@@ -109,6 +111,65 @@ class Message:
 
     def __repr__(self):
         return f"{{content: {self.content}, role: {self.role}, id: {self.id}, user: {self.user}}}"
+    
+@attr.s(auto_attribs=True)
+class FuncParam:
+    '''
+    Parameter of function
+    '''
+    name:str = attr.ib(converter=str)
+    'Name of parameter'
+    description:Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
+    'Description of parameter'
+    type:Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
+    'Type of parameter'
+    default:Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
+    'Default value of parameter'
+    enum: Optional[list[str]] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.deep_iterable(member_validator=attr.validators.instance_of(str), iterable_validator=attr.validators.instance_of(list))))
+    'Enum of parameter'
+    required: bool = attr.ib(default=False, validator=bool)
+    'Is parameter required'
+
+    @name.validator
+    def __name_validator(self, attribute, value):
+        # Check illegal characters
+        if not value.isidentifier():
+            raise ValueError(
+                f"name must be a valid identifier, not {value}")
+
+@attr.s(auto_attribs=True)
+class Function:
+    '''
+    Function that called by AI,
+    
+    # TODO
+    This is a feature not fully accepted by all AI, and is related to prompts.
+    We will refactor the general prompt to fit this feature.
+    '''
+    name:str = attr.ib(converter=str)
+    'Name of function'
+    description:Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
+    'Description of function'
+    parameters: list[FuncParam] = attr.ib(factory=list, validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(FuncParam), iterable_validator=attr.validators.instance_of(list)))
+
+    @name.validator
+    def __name_validator(self, attribute, value):
+        # Check illegal characters
+        if not value.isidentifier():
+            raise ValueError(
+                f"name must be a valid identifier, not {value}")
+
+@attr.s(auto_attribs=True)
+class Funccall:
+    '''
+    Function call of AI
+    '''
+    name: str = attr.ib(converter=str)
+    'Name of function'
+    function: Optional[Function] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(Function)))
+    'Function of function call'
+    parameters: dict[str, Any] = attr.ib(factory=dict, validator=attr.validators.deep_mapping(key_validator=attr.validators.instance_of(str), value_validator=attr.validators.instance_of(str)))
+    'Parameters of function call'
 
 @attr.s(auto_attribs=True)
 class Conversation:
@@ -128,6 +189,8 @@ class Conversation:
     'Timeout of conversation'
     data: dict = attr.ib(factory=dict, validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(str), iterable_validator=attr.validators.instance_of(dict)))
     'Extra data of conversation'
+    functions: Optional[list[Function]] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.deep_iterable(member_validator=attr.validators.instance_of(Function), iterable_validator=attr.validators.instance_of(list))))
+    'Functions of conversation, this function is callable by AI, when it\'s none, no parameter will be passed to AI, note: AI may not support this feature'
 
     @abstractmethod
     def generate_json(self) -> dict[str, Any]:
@@ -203,63 +266,3 @@ class TextTransformer(Transformer):
         '''
         raise NotImplementedError(
             f"generate_many() is not implemented in {self.__class__.__name__}")
-
-
-@attr.s(auto_attribs=True)
-class FuncParam:
-    '''
-    Parameter of function
-    '''
-    name:str = attr.ib(converter=str)
-    'Name of parameter'
-    description:Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
-    'Description of parameter'
-    type:Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
-    'Type of parameter'
-    default:Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
-    'Default value of parameter'
-    enum: Optional[list[str]] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.deep_iterable(member_validator=attr.validators.instance_of(str), iterable_validator=attr.validators.instance_of(list))))
-    'Enum of parameter'
-    required: bool = attr.ib(default=False, validator=bool)
-    'Is parameter required'
-
-    @name.validator
-    def __name_validator(self, attribute, value):
-        # Check illegal characters
-        if not value.isidentifier():
-            raise ValueError(
-                f"name must be a valid identifier, not {value}")
-
-@attr.s(auto_attribs=True)
-class Function:
-    '''
-    Function that called by AI,
-    
-    # TODO
-    This is a feature not fully accepted by all AI, and is related to prompts.
-    We will refactor the general prompt to fit this feature.
-    '''
-    name:str = attr.ib(converter=str)
-    'Name of function'
-    description:Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
-    'Description of function'
-    parameters: list[FuncParam] = attr.ib(factory=list, validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(FuncParam), iterable_validator=attr.validators.instance_of(list)))
-
-    @name.validator
-    def __name_validator(self, attribute, value):
-        # Check illegal characters
-        if not value.isidentifier():
-            raise ValueError(
-                f"name must be a valid identifier, not {value}")
-
-@attr.s(auto_attribs=True)
-class Funccall:
-    '''
-    Function call of AI
-    '''
-    name: str = attr.ib(converter=str)
-    'Name of function'
-    function: Optional[Function] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(Function)))
-    'Function of function call'
-    parameters: dict[str, Any] = attr.ib(factory=dict, validator=attr.validators.deep_mapping(key_validator=attr.validators.instance_of(str), value_validator=attr.validators.instance_of(str)))
-    'Parameters of function call'

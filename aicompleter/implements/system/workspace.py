@@ -486,8 +486,11 @@ class FileSystem:
 
 class WorkSpace:
     '''
-    WorkSpace for Autodone-AI
+    WorkSpace for AI-Completer
     To limit the scope of files
+
+    :param filesystem: FileSystem
+    :param init_path: Init Path (Absolute Path to the file system)
     '''
     def __init__(self, filesystem: FileSystem, init_path: os.PathLike) -> None:
         self._fs = filesystem

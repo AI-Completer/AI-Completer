@@ -1,4 +1,5 @@
 import copy
+from os import name
 import time
 import uuid
 from abc import abstractmethod
@@ -114,20 +115,26 @@ class Conversation:
     '''
     Conversation
     '''
-    messages: list[Message] = []
+    messages: list[Message] = attr.ib(factory=list, validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(Message), iterable_validator=attr.validators.instance_of(list)))
     'Messages of conversation'
     id: uuid.UUID = attr.ib(
         factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
     'ID of conversation'
-    user: Optional[str] = None
+    user: Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
     'User of conversation'
-    time: float = time.time()
+    time: float = attr.ib(factory=time.time, validator=attr.validators.instance_of(float))
     'Creation time of conversation'
     timeout: Optional[float] = None
     'Timeout of conversation'
-    data: dict = {}
+    data: dict = attr.ib(factory=dict, validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(str), iterable_validator=attr.validators.instance_of(dict)))
     'Extra data of conversation'
 
+    @abstractmethod
+    def generate_json(self) -> dict[str, Any]:
+        '''
+        Generate json
+        '''
+        return attr.asdict(self)
 
 class ChatTransformer(Transformer):
     '''
@@ -196,3 +203,63 @@ class TextTransformer(Transformer):
         '''
         raise NotImplementedError(
             f"generate_many() is not implemented in {self.__class__.__name__}")
+
+
+@attr.s(auto_attribs=True)
+class FuncParam:
+    '''
+    Parameter of function
+    '''
+    name:str = attr.ib(converter=str)
+    'Name of parameter'
+    description:Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
+    'Description of parameter'
+    type:Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
+    'Type of parameter'
+    default:Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
+    'Default value of parameter'
+    enum: Optional[list[str]] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.deep_iterable(member_validator=attr.validators.instance_of(str), iterable_validator=attr.validators.instance_of(list))))
+    'Enum of parameter'
+    required: bool = attr.ib(default=False, validator=bool)
+    'Is parameter required'
+
+    @name.validator
+    def __name_validator(self, attribute, value):
+        # Check illegal characters
+        if not value.isidentifier():
+            raise ValueError(
+                f"name must be a valid identifier, not {value}")
+
+@attr.s(auto_attribs=True)
+class Function:
+    '''
+    Function that called by AI,
+    
+    # TODO
+    This is a feature not fully accepted by all AI, and is related to prompts.
+    We will refactor the general prompt to fit this feature.
+    '''
+    name:str = attr.ib(converter=str)
+    'Name of function'
+    description:Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
+    'Description of function'
+    parameters: list[FuncParam] = attr.ib(factory=list, validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(FuncParam), iterable_validator=attr.validators.instance_of(list)))
+
+    @name.validator
+    def __name_validator(self, attribute, value):
+        # Check illegal characters
+        if not value.isidentifier():
+            raise ValueError(
+                f"name must be a valid identifier, not {value}")
+
+@attr.s(auto_attribs=True)
+class Funccall:
+    '''
+    Function call of AI
+    '''
+    name: str = attr.ib(converter=str)
+    'Name of function'
+    function: Optional[Function] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(Function)))
+    'Function of function call'
+    parameters: dict[str, Any] = attr.ib(factory=dict, validator=attr.validators.deep_mapping(key_validator=attr.validators.instance_of(str), value_validator=attr.validators.instance_of(str)))
+    'Parameters of function call'

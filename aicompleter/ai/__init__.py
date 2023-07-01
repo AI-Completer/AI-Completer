@@ -12,6 +12,9 @@ from .ai import (
     Conversation,
     ChatTransformer,
     TextTransformer,
+    Function,
+    Funccall,
+    FuncParam,
 )
 
 from .implements import (

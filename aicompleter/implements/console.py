@@ -6,8 +6,8 @@ import uuid
 
 from aicompleter import interface, utils
 from aicompleter.interface.base import User, Group
+from aicompleter.interface.command import CommandParamElement
 from aicompleter.session import Message, Session
-
 
 class ConsoleInterface(interface.Interface):
     '''
@@ -30,6 +30,7 @@ class ConsoleInterface(interface.Interface):
                 overrideable=True,
                 in_interface=self,
                 callback=self.cmd_ask,
+                format=CommandParamElement('content', str, description="Content to ask or reply.")
             ),
             interface.Command(
                 cmd="echo",
@@ -38,6 +39,7 @@ class ConsoleInterface(interface.Interface):
                 overrideable=True,
                 in_interface=self,
                 callback=self.cmd_echo,
+                format=CommandParamElement('content', str, description="Content to show.")
             )
         )
 
@@ -45,11 +47,11 @@ class ConsoleInterface(interface.Interface):
         '''
         Ask user for input
         '''
-        await utils.aprint(f"The {message.src_interface.user.name if message.src_interface else '[Unknown]'} ask you: {message.content.text}")
+        await utils.aprint(f"The {message.src_interface.user.name if message.src_interface else '[Unknown]'} ask you: {message.content.json['content']}")
         return await utils.ainput(">>> ")
 
     async def cmd_echo(self, session:Session, message:Message):
         '''
         Reply to console interface
         '''
-        await utils.aprint(f"The {message.src_interface.user.name} reply you: {message.content.text}")
+        await utils.aprint(f"The {message.src_interface.user.name} reply you: {message.content.json['content']}")

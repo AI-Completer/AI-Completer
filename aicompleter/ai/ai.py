@@ -62,31 +62,12 @@ class Transformer(AI):
     'Max tokens of transformer, will limit the length of generated content'
 
     @abstractmethod
-    def generate_many(self, *args, num: int,  **kwargs) -> Coroutine[list[str], Any, None]:
+    def generate_many(self, *args, num: int,  **kwargs) -> Coroutine[list[Any], Any, None]:
         '''
         Generate many possible content (if supported)
         '''
         raise NotImplementedError(
             f"generate_many() is not implemented in {self.__class__.__name__}")
-
-    async def generate_text(self, *args, **kwargs) -> str:
-        '''
-        Generate text
-        '''
-        rvalue = ''
-        async for value in self.generate(*args, **kwargs):
-            rvalue = value
-        return rvalue
-
-    async def generate_many_texts(self, *args, num: int, **kwargs) -> list[str]:
-        '''
-        Generate many texts
-        '''
-        rvalue = []
-        async for value in self.generate_many(*args, num=num, **kwargs):
-            rvalue = value
-        return rvalue
-
 
 @attr.s(auto_attribs=True)
 class Message:
@@ -215,14 +196,14 @@ class ChatTransformer(Transformer):
         return ret
 
     @abstractmethod
-    def generate(self, conversation: Conversation, *args, **kwargs) -> Coroutine[str, Any, None]:
+    def generate(self, conversation: Conversation, *args, **kwargs) -> Coroutine[Message, Any, None]:
         '''
         Generate content
         '''
         return super().generate( conversation=conversation, *args, **kwargs)
 
     @abstractmethod
-    def generate_many(self, conversation: Conversation, num: int, *args,  **kwargs) -> Coroutine[list[str], Any, None]:
+    def generate_many(self, conversation: Conversation, num: int, *args,  **kwargs) -> Coroutine[list[Message], Any, None]:
         '''
         Generate many possible content (if supported)
         '''
@@ -237,10 +218,9 @@ class ChatTransformer(Transformer):
         new_conversation = copy.deepcopy(history)
         new_conversation.messages.append(message)
         async for value in self.generate(*args, conversation=new_conversation, **kwargs):
-            yield value
+            yield value.content
         history.messages.append(message)
-        history.messages.append(
-            Message(content=value, role='assistant', user=history.user))
+        history.messages.append(value)
 
     async def ask_once(self, history: Conversation, message: Message, *args, **kwargs) -> str:
         '''
@@ -248,6 +228,33 @@ class ChatTransformer(Transformer):
         '''
         rvalue = ''
         async for value in self.ask(history=history, message=message, *args, **kwargs):
+            rvalue = value
+        return rvalue
+    
+    async def generate_text(self, *args, **kwargs) -> str:
+        '''
+        Generate text
+        '''
+        rvalue = ''
+        async for value in self.generate(*args, **kwargs):
+            rvalue = value
+        return rvalue
+
+    async def generate_many_texts(self, *args, num: int, **kwargs) -> list[str]:
+        '''
+        Generate many texts
+        '''
+        rvalue = []
+        async for value in self.generate_many(*args, num=num, **kwargs):
+            rvalue = value
+        return rvalue
+    
+    async def generate_message(self, *args, **kwargs) -> Message:
+        '''
+        Generate message
+        '''
+        rvalue = None
+        async for value in self.generate(*args, **kwargs):
             rvalue = value
         return rvalue
 

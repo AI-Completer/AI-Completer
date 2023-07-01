@@ -30,13 +30,16 @@ class OpenAIConversation(Conversation):
         ret['user'] = self.user
         ret['messages'] = []
         for message in self.messages:
-            mes_ret = {
-                'content': message.content,
-                'role': message.role,
-            }
-            if message.user:
-                mes_ret['name'] = message.user
-            ret['messages'].append(mes_ret)
+            if message.data:
+                ret['messages'].append(mes_ret)
+            else:
+                mes_ret = {
+                    'content': message.content,
+                    'role': message.role,
+                }
+                if message.user:
+                    mes_ret['name'] = message.user
+                ret['messages'].append(mes_ret)
         if self.functions:
             functions_ret = []
             for function in self.functions:
@@ -180,7 +183,7 @@ class Chater(ChatTransformer,OpenAIGPT):
         '''
         return ''.join([value async for value in self._request(conversation)])
     
-    async def generate(self, conversation: Conversation) -> Generator[str, Any, None]:
+    async def generate(self, conversation: Conversation) -> Generator[Message, Any, None]:
         '''
         Generate the conversation and return text
         '''
@@ -192,16 +195,52 @@ class Chater(ChatTransformer,OpenAIGPT):
                 for line in lines[:-1]:
                     if line == 'data:[DONE]':
                         break
-                    yield json.loads(line)['choices'][0]['message']['content']
+                    raw = json.loads(line)['choices'][0]['message']
+                    ret_message = Message(
+                        content = raw.get('content', ''),
+                        role = raw['role'],
+                        user = raw.get('name', None),
+                        data = raw,
+                    )
+                    if 'function_call' in raw:
+                        # Function call will be interpreted in the agent calss
+                        ret_message.function_call = raw['function_call']
+                    yield ret_message
+
                 full_text = lines[-1]
         # Last line
         if full_text:
-            yield json.loads(full_text)['choices'][0]['message']['content']
+            raw = json.loads(full_text)['choices'][0]['message']
+            ret_message = Message(
+                content = raw.get('content', ''),
+                role = raw['role'],
+                user = raw.get('name', None),
+                data = raw,
+            )
+            if 'function_call' in raw:
+                # Function call will be interpreted in the agent calss
+                ret_message.function_call = raw['function_call']
+            yield ret_message
 
-    async def generate_many(self, conversation: Conversation) -> Generator[list[str], Any, None]:
+    async def generate_many(self, conversation: Conversation) -> Generator[list[Message], Any, None]:
         '''
         Generate the conversations and return text
         '''
+        def _from_message(raw:dict, i:int) -> Message:
+            '''
+            Convert the raw message to Message
+            '''
+            raw = raw['choices'][i]['message']
+            ret_message = Message(
+                content = raw['content'],
+                role = raw['role'],
+                user = raw['name'] if 'name' in raw else None,
+                data = raw,
+            )
+            if 'function_call' in raw:
+                # Function call will be interpreted in the agent calss
+                ret_message.function_call = raw['function_call']
+            return ret_message
         full_text = ''
         async for value in self.generate(conversation):
             full_text += value
@@ -209,14 +248,14 @@ class Chater(ChatTransformer,OpenAIGPT):
                 lines = full_text.splitlines(keepends=True)
                 for line in lines[:-1]:
                     yield [
-                        json.loads(line)['choices'][i]['message']['content']
+                        _from_message(json.loads(line), i)
                         for i in range(len(json.loads(line)['choices']))
                         ]
                 full_text = lines[-1]
         # Last line
         if full_text:
             yield [
-                json.loads(full_text)['choices'][i]['message']['content']
+                _from_message(json.loads(full_text), i)
                 for i in range(len(json.loads(full_text)['choices']))
                 ]
     

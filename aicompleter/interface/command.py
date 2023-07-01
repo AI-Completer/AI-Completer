@@ -97,6 +97,11 @@ class CommandParamStruct:
         self._struct = struct
         CommandParamStruct._check_struct(struct)
 
+    def __iter__(self) -> Iterator[CommandParamElement | CommandParamStruct | list | dict]:
+        '''Iterate the struct'''
+        return self._struct.__iter__()
+        
+
     def check(self, data:dict) -> bool:
         '''Check the data to see whether it is in proper format.'''
         if isinstance(data, str):

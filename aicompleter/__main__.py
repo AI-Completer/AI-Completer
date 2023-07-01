@@ -178,20 +178,24 @@ try:
     loop.run_forever()
 except KeyboardInterrupt:
     logger.critical("KeyboardInterrupt")
-    max_try = 10
-    try_time = 0
-    while not all(task.done() for task in asyncio.all_tasks(loop) if task != check_task) and try_time < max_try:
-        try_time += 1
-        for task in asyncio.all_tasks(loop):
-            if task == check_task:
-                continue
-            task.cancel()
-        loop.run_forever()
+except BaseException as e:
+    logger.critical(f"Unexception: {e}")
+finally:
+    if not loop.is_closed():
+        max_try = 10
+        try_time = 0
+        while not all(task.done() for task in asyncio.all_tasks(loop) if task != check_task) and try_time < max_try:
+            try_time += 1
+            for task in asyncio.all_tasks(loop):
+                if task == check_task:
+                    continue
+                task.cancel()
+            loop.run_forever()
 
-    if try_time >= max_try:
-        logger.critical("Force Quit")
-    # Stop check_task
-    check_task.cancel()
-    loop.run_until_complete(check_task)
-    loop.close()
+        if try_time >= max_try:
+            logger.critical("Force Quit")
+        # Stop check_task
+        check_task.cancel()
+        loop.run_until_complete(check_task)
+        loop.close()
 logger.debug("Loop Closed")

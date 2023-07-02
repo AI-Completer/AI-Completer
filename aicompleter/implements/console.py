@@ -6,7 +6,7 @@ import uuid
 
 from aicompleter import interface, utils
 from aicompleter.interface.base import User, Group
-from aicompleter.interface.command import CommandParamElement
+from aicompleter.interface.command import CommandParamElement, CommandParamStruct
 from aicompleter.session import Message, Session
 
 class ConsoleInterface(interface.Interface):
@@ -30,7 +30,9 @@ class ConsoleInterface(interface.Interface):
                 overrideable=True,
                 in_interface=self,
                 callback=self.cmd_ask,
-                format=CommandParamElement('content', str, description="Content to ask or reply.")
+                format=CommandParamStruct({
+                    'content': CommandParamElement('content', str, description="Content to ask or reply."),
+                })
             ),
             interface.Command(
                 cmd="echo",
@@ -39,7 +41,9 @@ class ConsoleInterface(interface.Interface):
                 overrideable=True,
                 in_interface=self,
                 callback=self.cmd_echo,
-                format=CommandParamElement('content', str, description="Content to show.")
+                format=CommandParamStruct({
+                    'content': CommandParamElement('content', str, description="Content to show."),
+                })
             )
         )
 

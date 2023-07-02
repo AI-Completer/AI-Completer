@@ -108,7 +108,7 @@ class FuncParam:
     'Default value of parameter'
     enum: Optional[list[str]] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.deep_iterable(member_validator=attr.validators.instance_of(str), iterable_validator=attr.validators.instance_of(list))))
     'Enum of parameter'
-    required: bool = attr.ib(default=False, validator=bool)
+    required: bool = attr.ib(default=False, validator=attr.validators.instance_of(bool))
     'Is parameter required'
 
     @name.validator

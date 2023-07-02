@@ -26,6 +26,26 @@ class OpenAIConversation(Conversation):
     'Function call mode of conversation'
 
     def generate_json(self) -> dict[str, Any]:
+        # This is an example of the json
+        # {
+        #     "user": "user",
+        #     "messages": [{
+        #      "content": "Hello, I am a chatbot.",
+        #       "role": "system"
+        #       }],
+        #     "functions": [{
+        #         "name": "get_time",
+        #         "parameters": {
+        #             "type": "object",
+        #             "properties": {
+        #                 "time": {
+        #                     "type": "string"
+        #                 }
+        #             },
+        #             "required": ["time"]
+        #         }
+        #     }],
+        # }
         ret = {}
         ret['user'] = self.user
         ret['messages'] = []
@@ -45,13 +65,15 @@ class OpenAIConversation(Conversation):
             for function in self.functions:
                 fun_ret = {}
                 fun_ret['name'] = function.name
-                fun_ret['params'] = []
+                fun_ret['parameters'] = {
+                    'type':'object',
+                    'properties':{},
+                }
                 required_params = []
                 if function.description:
                     fun_ret['description'] = function.description
                 for param in function.parameters:
                     param_ret = {}
-                    param_ret['name'] = param.name
                     if param.type:
                         param_ret['type'] = param.type
                     if param.required:
@@ -60,9 +82,9 @@ class OpenAIConversation(Conversation):
                         param_ret['description'] = param.description
                     if param.enum:
                         param_ret['enum'] = param.enum
-                    fun_ret['params'].append(param_ret)
+                    fun_ret['parameters']['properties'][param.name] = param_ret
                 if required_params:
-                    fun_ret['required'] = required_params
+                    fun_ret['parameters']['required'] = required_params
                 functions_ret.append(fun_ret)
             if functions_ret:
                 ret['functions'] = functions_ret

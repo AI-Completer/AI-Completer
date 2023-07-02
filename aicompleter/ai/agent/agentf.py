@@ -3,6 +3,7 @@ AI Agent With Function
 '''
 
 import asyncio
+import copy
 import json
 import traceback
 from typing import Any, Callable, Coroutine, Literal, Optional, Self, overload
@@ -22,7 +23,7 @@ class AgentF:
         
         self.conversation = self.ai.new_conversation(user,init_prompt=init_prompt)
         '''The conversation of the agent'''
-        self.on_call: Callable[[str, Any], Coroutine[Any, None, None]] = lambda cmd, param: asyncio.create_task()
+        self.on_call: Callable[[str, Any], Coroutine[Any, None, None]] = None
         '''Event when a command is called'''
         self.on_subagent: Callable[[str, Any], None | Coroutine[None, None, None]] = lambda name, word: self.new_subagent(name, word)
         '''Event when a subagent is created'''
@@ -32,15 +33,18 @@ class AgentF:
         # self.enable_ask = True
         # '''Enable the ask command'''
 
-        self._commands = commands
+        self._raw_commands = commands
+        self._commands = copy.copy(commands)
         '''The commands of the agent'''
+        self._commands.remove('ask')
+        self._commands.remove('echo')
 
         # Add agent command
         self._commands.add(Command(
             cmd='agent',
-            description='Create a subagent to help finish the task, if the subagent is already created, you can speak to it directly',
+            description='Create a subagent to help finish the task, if the subagent is already created, you can speak to it directly, you should not use this command easily',
             expose=True,
-            in_interface=self,
+            in_interface=None,
             to_return=True,
             force_await=True,
             callback=None,
@@ -52,7 +56,7 @@ class AgentF:
             cmd='stop',
             description='Stop this conversation, and return the result',
             expose=True,
-            in_interface=self,
+            in_interface=None,
             to_return=True,
             force_await=True,
             callback=None,
@@ -70,20 +74,15 @@ class AgentF:
                     bool: 'boolean',
                     object: 'object',
                 }[_type]
+            
             if isinstance(cmd.format, CommandParamStruct):
-                return [{
-                    'name': param.name,
-                    'description': param.description,
-                    'type': map_type(param.type),
-                    'required': not param.optional,
-                } for param in cmd.format]
-            elif isinstance(cmd.format, CommandParamElement):
-                return [{
-                    'name': cmd.format.name,
-                    'description': cmd.format.description,
-                    'type': map_type(cmd.format.type),
-                    'required': not cmd.format.optional,
-                }]
+                # TODO : Structizing support
+                return [FuncParam(
+                    name = param.name,
+                    description = param.description,
+                    type = map_type(param.type),
+                    required = not param.optional,
+                ) for param in cmd.format.values()]
             else:
                 return []
 
@@ -143,7 +142,7 @@ class AgentF:
         '''
         Create a subagent
         '''
-        self._subagents[name] = self.__class__(ai or self.ai, init_prompt or self._init_prompt, user)
+        self._subagents[name] = self.__class__(ai or self.ai, init_prompt or self._init_prompt, self._raw_commands, user)
         self._subagents[name].on_call = self.on_call
         self._subagents[name]._parent = self
         self._subagents[name]._parent_name = name
@@ -178,7 +177,12 @@ class AgentF:
 
                 self.logger.debug(f'Get requests: {requests}')
 
-                def _try_parse(x):
+                def _try_parse(x:Any):
+                    if not isinstance(x, str):
+                        return x
+                    # Check variable and int and float
+                    if all(i in '0123456789.abcefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_' for i in x):
+                        return x
                     try:
                         return json.loads(x)
                     except Exception:
@@ -217,7 +221,7 @@ class AgentF:
                                 content = f'Function Error: {str(e)}',
                                 role = 'system',
                             ))
-                            self.logger.error(f'Exception when executing command {name}: {e}')
+                            self.logger.error(f'Exception when executing command {name}: {e.__class__.__name__}: {e}')
                         else:
                             self._request_queue.put_nowait(ai.Message(
                                 content = str(ret),
@@ -228,7 +232,7 @@ class AgentF:
 
                     asyncio.get_event_loop().create_task(self.on_call(name, param)).add_done_callback(when_result)
 
-                if new_message.data['function_call'] == None:
+                if new_message.data.get('function_call') == None:
                     # Ask Command
                     self.logger.debug(f'Text: {new_message.content}')
                     call_cmd('ask', {'content':new_message.content})
@@ -241,13 +245,16 @@ class AgentF:
                         function_call = _try_parse(function_call)
                     try:
                         func_name = function_call['name']
-                        func_param = function_call['arguments']
+                        func_param = json.loads(function_call['arguments'])
                     except Exception as e:
-                        self._request_queue.put_nowait(ai.Message(
-                            content = f'Function Parse Error: {str(e)}',
-                            role = 'system',
-                        ))
-                        self.logger.error(f'Exception when parsing function call: {e}')
+                        if func_name in self._commands:
+                            self._request_queue.put_nowait(ai.Message(
+                                content = f'Function Parse Error: {str(e)}, May you check your parameters format? This is the format:' + \
+                                    self._commands[func_name].format.json_text, # TODO: Format imply
+                                role = 'system',
+                            ))
+                            self.logger.error(f'Exception when parsing function call: {e}')
+                            continue
 
                     try:
                         if func_name == 'stop':
@@ -285,6 +292,14 @@ class AgentF:
                         self.logger.error(f'Exception when executing function call: {e}')
                         continue
                     
+                    if func_name not in self._raw_commands:
+                        self._request_queue.put_nowait(ai.Message(
+                            content = f'Function Parse Error: Function {func_name} not found, your available functions are: {[*self._commands.keys()]}',
+                            role = 'system',
+                        ))
+                        self.logger.error(f'Exception when parsing function call: Not found function {func_name}')
+                        continue
+
                     call_cmd(func_name, func_param)
 
         except asyncio.CancelledError as e:
@@ -329,6 +344,6 @@ class AgentF:
         return self._stop_event.wait()
 
     def __del__(self):
-        if self._loop_task:
+        if '_loop_task' in self.__dict__ and self._loop_task:
             self._loop_task.cancel()
             self._loop_task.remove_done_callback(self._unexception)

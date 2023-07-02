@@ -15,7 +15,9 @@ import attr
 
 import aicompleter
 import aicompleter.error as error
-from .. import log, session, utils, config 
+from aicompleter.session.base import MultiContent
+
+from .. import config, log, session, utils
 
 if bool(config.varibles['disable_memory']) == False:
     from aicompleter.memory.base import MemoryItem
@@ -72,7 +74,7 @@ class CommandParamElement:
         '''
         Get the json description of the parameter
         '''
-        return f"<{self.type.__name__ if isinstance(self.type,type) else ''} {self.name}{' = %s' % str(self.default) if self.default else ''}>"
+        return f"<{self.type.__name__ if isinstance(self.type,type) else ''} {self.tooltip}{' = %s' % str(self.default) if self.default else ''}>"
 
 class CommandParamStruct:
     '''
@@ -100,7 +102,14 @@ class CommandParamStruct:
     def __iter__(self) -> Iterator[CommandParamElement | CommandParamStruct | list | dict]:
         '''Iterate the struct'''
         return self._struct.__iter__()
-        
+    
+    def values(self) -> Iterable[CommandParamElement | CommandParamStruct | list | dict]:
+        '''Iterate the struct'''
+        return self._struct.values()
+    
+    def items(self) -> Iterable[tuple[str, CommandParamElement | CommandParamStruct | list | dict]]:
+        '''Iterate the struct'''
+        return self._struct.items()
 
     def check(self, data:dict) -> bool:
         '''Check the data to see whether it is in proper format.'''
@@ -231,7 +240,7 @@ class Command:
     '''Alias Names'''
     description:str = ""
     '''Description For Command'''
-    format:Optional[CommandParamStruct | CommandParamElement] = None
+    format:Optional[CommandParamStruct] = None
     '''Format For Command, if None, no format required'''
     callable_groups:set[str] = set()
     '''Groups who can call this command'''
@@ -293,7 +302,7 @@ class Command:
         if self.format != None:
             if not self.format.check(message.content.pure_text):
                 raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",message=message,interface=self.in_interface)
-            message.content = json.dumps(self.format.setdefault(message.content.pure_text))
+            message.content = MultiContent(self.format.setdefault(message.content.pure_text))
         
         if bool(config.varibles['disable_memory']) == False:
             # Add Memory
@@ -339,9 +348,9 @@ class Command:
             raise TypeError("call_func must be a callable function")
         self._call_func = callback
 
-    def __call__(self, session:session.Session, message:session.Message) -> None:
+    def __call__(self, session:session.Session, message:session.Message) -> Coroutine[Any, Any, Any | None]:
         '''Call the command'''
-        self.call(session, message)
+        return self.call(session, message)
 
     def __hash__(self):
         '''Hash the command'''

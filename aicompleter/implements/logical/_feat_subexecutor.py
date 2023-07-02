@@ -2,6 +2,8 @@
 An executor fully functional in asyncio
 This executor is designed to be a state machine and response with the command,
 this executor is also designed to be self-called.
+
+*Note*: When using openai gpt3, it's unreliable to use this executor.
 '''
 
 import asyncio
@@ -41,7 +43,12 @@ You are ChatGPT, your task is to meet the user's need.
 '''
         )
 
-        session.data[self.namespace.name]['agent'] = agent
+        agent.on_call = lambda name, param: session.asend(Message(
+            cmd = name,
+            content = param,
+            src_interface = self,
+        ))
+        self.getdata(session)['agent'] = agent
 
     async def cmd_agent(self, session: Session, message: Message):
         '''

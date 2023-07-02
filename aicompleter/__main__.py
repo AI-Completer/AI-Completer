@@ -146,7 +146,9 @@ async def main():
             new_session = await _handler.new_session()
 
             ret = await new_session.asend(Message(
-                content = 'Please Start Your Conversation',
+                content = {
+                    'content': 'Please Start Your Conversation',
+                },
                 cmd = 'ask',
                 dest_interface=console_interface,
             ))

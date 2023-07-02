@@ -9,7 +9,7 @@ from typing import Optional, overload
 import attr
 
 import aicompleter.session as session
-from aicompleter import error, log
+from aicompleter import error, log, utils
 
 from .command import Command, Commands
 
@@ -363,6 +363,7 @@ class Interface:
         '''Character of the interface'''
         self._closed:bool = False
         '''Closed'''
+        utils.typecheck(id, uuid.UUID)
         self._id:uuid.UUID = id
         '''ID'''
         self.namespace:Namespace = Namespace(

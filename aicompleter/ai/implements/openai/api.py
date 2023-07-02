@@ -1,17 +1,105 @@
 import copy
+from enum import auto
 import json
-from typing import Any, Generator, Iterator, Optional
+from tkinter.filedialog import Open
+from typing import Any, Generator, Iterator, Literal, Optional, Self
+import uuid
 
 import aiohttp
 import attr
 
 from aicompleter import utils
 from aicompleter.ai import *
+from aicompleter.ai.ai import Conversation
 from aicompleter.config import Config, EnhancedDict
 from aicompleter.ai.token import Encoder
 
 DEFAULT_API_URL:str = 'https://api.openai.com/v1/'
 'BASE URL of OpenAI API'
+
+@attr.s(auto_attribs=True)
+class OpenAIConversation(Conversation):
+    '''
+    OpenAI Conversation
+    '''
+    function_call: Literal['none', 'auto'] | dict | None = attr.ib(default=None, validator=attr.validators.in_(['none', 'auto', None, dict]))
+    'Function call mode of conversation'
+
+    def generate_json(self) -> dict[str, Any]:
+        # This is an example of the json
+        # {
+        #     "user": "user",
+        #     "messages": [{
+        #      "content": "Hello, I am a chatbot.",
+        #       "role": "system"
+        #       }],
+        #     "functions": [{
+        #         "name": "get_time",
+        #         "parameters": {
+        #             "type": "object",
+        #             "properties": {
+        #                 "time": {
+        #                     "type": "string"
+        #                 }
+        #             },
+        #             "required": ["time"]
+        #         }
+        #     }],
+        # }
+        ret = {}
+        ret['user'] = self.user
+        ret['messages'] = []
+        for message in self.messages:
+            if message.data:
+                ret['messages'].append(mes_ret)
+            else:
+                mes_ret = {
+                    'content': message.content,
+                    'role': message.role,
+                }
+                if message.user:
+                    mes_ret['name'] = message.user
+                ret['messages'].append(mes_ret)
+        if self.functions:
+            functions_ret = []
+            for function in self.functions:
+                fun_ret = {}
+                fun_ret['name'] = function.name
+                fun_ret['parameters'] = {
+                    'type':'object',
+                    'properties':{},
+                }
+                required_params = []
+                if function.description:
+                    fun_ret['description'] = function.description
+                for param in function.parameters:
+                    param_ret = {}
+                    if param.type:
+                        param_ret['type'] = param.type
+                    if param.required:
+                        required_params.append(param.name)
+                    if param.description:
+                        param_ret['description'] = param.description
+                    if param.enum:
+                        param_ret['enum'] = param.enum
+                    fun_ret['parameters']['properties'][param.name] = param_ret
+                if required_params:
+                    fun_ret['parameters']['required'] = required_params
+                functions_ret.append(fun_ret)
+            if functions_ret:
+                ret['functions'] = functions_ret
+        if self.function_call:
+            ret['function_call'] = self.function_call
+        return ret
+    
+    @staticmethod
+    def from_conversation(conversation:Conversation) -> Self:
+        '''
+        Convert a conversation to OpenAIConversation
+        '''
+        ret = OpenAIConversation.__new__(OpenAIConversation)
+        ret.__init__(**conversation.__dict__)
+        return ret
 
 class OpenAIGPT(Transformer):
     '''
@@ -59,6 +147,19 @@ class Chater(ChatTransformer,OpenAIGPT):
             raise ValueError(f'Unknown parameters: {set(config.keys()) - self.REQUIRE_PARAMS}')
         self.update_config(config)
 
+    def new_conversation(self, user: str | None = None, id: uuid.UUID | None = None, init_prompt: str | None = None) -> OpenAIConversation:
+        '''
+        Create a new conversation
+        '''
+        return OpenAIConversation(
+            user=user,
+            id=id or uuid.uuid4(),
+            messages=[Message(
+                content = init_prompt,
+                role = 'system'
+            )] if init_prompt else [],
+        )
+
     def update_config(self, config:Config):
         '''
         Update the config
@@ -75,22 +176,16 @@ class Chater(ChatTransformer,OpenAIGPT):
         Request the conversation
         '''
         utils.typecheck(conversation, Conversation)
+        # Convert to OoenAIConversation
+        if not isinstance(conversation, OpenAIConversation):
+            conversation = OpenAIConversation.from_conversation(conversation)
 
         async with aiohttp.ClientSession() as session:
-            messages = []
-            for message in conversation.messages:
-                messages.append(
-                    attr.asdict(message,
-                                filter=lambda atr,value:value != None and atr.name in {"role","content"}
-                                )
-                )
-                if message.user is not None:
-                    messages[-1]['name'] = message.user
 
             async with session.post(
                 url=self.location,
                 json=dict(
-                    messages= messages,
+                    **conversation.generate_json(),
                     **self.config['chat'],
                     model = self.name,
                 ),
@@ -100,7 +195,7 @@ class Chater(ChatTransformer,OpenAIGPT):
                 }
             ) as res:
                 if res.status != 200:
-                    raise RuntimeError(f'Error: {res.status} {res.reason}')
+                    raise RuntimeError(f'Error: {res.status} {res.reason}: ' + await res.text())
                 async for value in res.content:
                     yield value.decode()
 
@@ -110,7 +205,7 @@ class Chater(ChatTransformer,OpenAIGPT):
         '''
         return ''.join([value async for value in self._request(conversation)])
     
-    async def generate(self, conversation: Conversation) -> Generator[str, Any, None]:
+    async def generate(self, conversation: Conversation) -> Generator[Message, Any, None]:
         '''
         Generate the conversation and return text
         '''
@@ -118,18 +213,56 @@ class Chater(ChatTransformer,OpenAIGPT):
         async for value in self._request(conversation):
             full_text += value
             if '\n' in full_text:
-                lines = full_text.split('\n')
+                lines = full_text.splitlines()
                 for line in lines[:-1]:
-                    yield json.loads(line)['choices'][0]['message']['content']
+                    if line == 'data:[DONE]':
+                        break
+                    raw = json.loads(line)['choices'][0]['message']
+                    ret_message = Message(
+                        content = raw.get('content', ''),
+                        role = raw['role'],
+                        user = raw.get('name', None),
+                        data = raw,
+                    )
+                    if 'function_call' in raw:
+                        # Function call will be interpreted in the agent calss
+                        ret_message.function_call = raw['function_call']
+                    yield ret_message
+
                 full_text = lines[-1]
         # Last line
         if full_text:
-            yield json.loads(full_text)['choices'][0]['message']['content']
+            raw = json.loads(full_text)['choices'][0]['message']
+            ret_message = Message(
+                content = raw.get('content', ''),
+                role = raw['role'],
+                user = raw.get('name', None),
+                data = raw,
+            )
+            if 'function_call' in raw:
+                # Function call will be interpreted in the agent calss
+                ret_message.function_call = raw['function_call']
+            yield ret_message
 
-    async def generate_many(self, conversation: Conversation) -> Generator[list[str], Any, None]:
+    async def generate_many(self, conversation: Conversation) -> Generator[list[Message], Any, None]:
         '''
         Generate the conversations and return text
         '''
+        def _from_message(raw:dict, i:int) -> Message:
+            '''
+            Convert the raw message to Message
+            '''
+            raw = raw['choices'][i]['message']
+            ret_message = Message(
+                content = raw['content'],
+                role = raw['role'],
+                user = raw['name'] if 'name' in raw else None,
+                data = raw,
+            )
+            if 'function_call' in raw:
+                # Function call will be interpreted in the agent calss
+                ret_message.function_call = raw['function_call']
+            return ret_message
         full_text = ''
         async for value in self.generate(conversation):
             full_text += value
@@ -137,14 +270,14 @@ class Chater(ChatTransformer,OpenAIGPT):
                 lines = full_text.splitlines(keepends=True)
                 for line in lines[:-1]:
                     yield [
-                        json.loads(line)['choices'][i]['message']['content']
+                        _from_message(json.loads(line), i)
                         for i in range(len(json.loads(line)['choices']))
                         ]
                 full_text = lines[-1]
         # Last line
         if full_text:
             yield [
-                json.loads(full_text)['choices'][i]['message']['content']
+                _from_message(json.loads(full_text), i)
                 for i in range(len(json.loads(full_text)['choices']))
                 ]
     

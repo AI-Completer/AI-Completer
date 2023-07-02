@@ -139,7 +139,7 @@ class Handler:
             return dst_interface.commands.get(cmd, None)
     
     def get_executable_cmds(self, *args, **wargs) -> Generator[Command, None, None]:
-        return self.commands.get_executable(*args, **wargs)
+        return self._namespace.get_executable(*args, **wargs)
 
     @overload
     async def add_interface(self, interface:Interface) -> None:

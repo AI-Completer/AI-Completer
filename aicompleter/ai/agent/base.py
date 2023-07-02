@@ -134,7 +134,7 @@ class Agent:
 
         json_dat = {"commands":[]}
         if content_list:
-            json_dat['commands'].append({"cmd":"ask", "param": '\n'.join(content_list)})
+            json_dat['commands'].append({"cmd":"ask", "param": {"content": '\n'.join(content_list)}})
         if command_raw is not None:
             json_dat['commands'].extend(json.loads(command_raw)['commands'])
 
@@ -194,7 +194,7 @@ class Agent:
                 self.logger.debug(f'AI response: {raw}')
                 if raw == '':
                     # Self call ask command, do not input anything
-                    raw = '{"commands":[{"cmd":"ask","param":""}]}'
+                    raw = '{"commands":[{"cmd":"ask","param":{"content":""}}]}'
 
                 try:
                     json_dat = self._parse(raw)

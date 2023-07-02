@@ -5,4 +5,5 @@ from .base import (
     PromptGenerator,
     CommandsPromptGenerator,
     ReplyRequireGenerator,
+    ConstantsPromptGenerator,
 )

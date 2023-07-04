@@ -18,24 +18,7 @@ logger = log.getLogger("Main")
 
 __help__='''
 AI Completer
-python3 -m aicompleter [options] [subcommands] [subcommand options]
-[options]:
-    --help: Show this help message
-    --debug: Enable debug mode, default: False, if the environment variable DEBUG is set to True, this option will be ignored
-    --config: Specify the config file, default: config.json
-[subcommands]:
-    talk: Talk with the AI
-        --ai: The AI to use, default: openaichat, options: openaichat, bingai
-    helper: The helper of AI Completer, this will launcher a AI assistant to help you solve the problem
-        --ai: The AI to use, default: openaichat, options: openaichat, bingai
-        --enable-agent: Enable subagent, default: False
-        --include [interface]: Include the extra interface, default: None, options: pythoncode
-            # Note: AI interface will be included automatically
-
-AI Completer is a tool to help you complete your work with AI.
-It can be used to complete your code, complete your text, etc.
-
-AI Completer is still in development, so it may not work well.
+An AI assistant to help you complete your work
 '''
 parser = argparse.ArgumentParser(description=__help__)
 parser.add_argument('--debug', action='store_true', help='Enable debug mode, default: False, if the environment variable DEBUG is set to True, this option will be ignored')
@@ -49,7 +32,7 @@ talk_pareser.add_argument('--ai', type=str, default='openaichat', choices=('open
 helper_pareser = subparsers.add_parser('helper', help='The helper of AI Completer, this will launcher a AI assistant to help you solve the problem')
 helper_pareser.add_argument('--ai', type=str, default='openaichat', choices=('openaichat', 'bingai'), help='The AI to use, default: openaichat, options: openaichat, bingai')
 helper_pareser.add_argument('--enable-agent', action='store_true', help='Enable subagent, default: False', dest='enable_agent')
-helper_pareser.add_argument('-i','--include', type=str, nargs='+', default=[], choices=('pythoncode'), help='Include the extra interface, default: None, options: pythoncode')
+helper_pareser.add_argument('-i','--include', type=str, nargs='+', default=[], choices=('pythoncode', 'searcher'), help='Include the extra interface, default: None, options: pythoncode')
 
 args = parser.parse_args()
 if args.debug:
@@ -89,7 +72,8 @@ __AI_map__ = {
     'bingai': (ai.microsoft.BingAI, {"config":config_['bingai']}),
 }
 __Int_map__ = {
-    'pythoncode': implements.PythonCodeInterface,
+    'pythoncode': (implements.PythonCodeInterface, {}),
+    'searcher': (implements.SearchInterface, {'config':config_['bingai']}),
 }
 
 async def main():
@@ -140,7 +124,7 @@ async def main():
                 if interface_name not in __Int_map__:
                     logger.critical(f"Interface {interface_name} not found.")
                     return
-                graph.add(ai_interface, __Int_map__[interface_name]())
+                graph.add(ai_interface, __Int_map__[interface_name][0](**__Int_map__[interface_name][1]))
 
             await graph.setup(_handler)
             new_session = await _handler.new_session()

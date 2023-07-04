@@ -4,6 +4,7 @@ import asyncio
 import enum
 import json
 import logging
+from os import name
 import time
 import uuid
 from typing import Any, Coroutine, Optional, TypeVar, overload
@@ -133,8 +134,8 @@ class Session:
     def __init__(self, handler:Handler, memory:Optional['MemoryConfigure'] = None) -> None:
         self.create_time: float = time.time()
         '''Create time'''
-        self.last_used: float = self.create_time
-        '''Last used time'''
+        # self.last_used: float = self.create_time
+        # '''Last used time'''
         self.history:list[Message] = []
         '''History'''
         self._closed: bool = False
@@ -143,8 +144,8 @@ class Session:
         '''ID'''
         self.in_handler:Handler = handler
         '''In which handler'''
-        self.src_interface:Interface|None = None
-        '''Source interface'''
+        # self.src_interface:Interface|None = None
+        # '''Source interface'''
         self.config:Config = Config()
         '''Session Config'''
         self.data:EnhancedDict = EnhancedDict()
@@ -186,27 +187,23 @@ class Session:
         '''
         return self.data
     
-    @property
-    def locked(self) -> bool:
-        return self.lock.locked()
-    
     def __getitem__(self):
-        return self.extra.__getitem__()
+        return self.data.__getitem__()
     
     def __setitem__(self):
-        return self.extra.__setitem__()
+        return self.data.__setitem__()
     
     def __delitem__(self):
-        return self.extra.__delitem__()
+        return self.data.__delitem__()
     
     def __contains__(self):
-        return self.extra.__contains__()
+        return self.data.__contains__()
     
     def __iter__(self):
-        return self.extra.__iter__()
+        return self.data.__iter__()
     
     def __len__(self):
-        return self.extra.__len__()
+        return self.data.__len__()
 
     @property
     def closed(self) -> bool:
@@ -248,13 +245,16 @@ class Message:
     '''A normal message from the Interface.'''
     content:MultiContent = attr.ib(factory=MultiContent, converter=MultiContent)
     '''Content of the message'''
-    session:Session = session
+    session:Session = attr.ib(validator=attr.validators.instance_of(Session))
     '''Session of the message'''
-    id:uuid.UUID = uuid.uuid4()
+    id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
     '''ID of the message'''
     data:EnhancedDict = attr.ib(factory=EnhancedDict, converter=EnhancedDict, alias='extra')
-    '''Data / Extra information'''
-    last_message:Message|None = None
+    '''
+    Data / Extra information
+    *Note*: Deprecated.
+    '''
+    last_message: Optional[Message] = None
     '''Last message'''
     cmd:str
     '''Call which command to transfer this Message'''

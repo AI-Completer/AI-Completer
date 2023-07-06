@@ -5,6 +5,7 @@ from aicompleter import *
 from aicompleter.interface import User, Group
 import aicompleter.session as session
 from aicompleter.utils import Struct
+from ...interface import CommandAuthority
 from . import *
 
 class FileInterface(Interface):
@@ -32,6 +33,9 @@ class FileInterface(Interface):
                 force_await=True,
                 callable_groups={'system','agent'},
                 in_interface=self,
+                authority=CommandAuthority(
+                    can_readfile=True,
+                )
             ),
             Command(
                 name='write',
@@ -46,6 +50,9 @@ class FileInterface(Interface):
                 force_await=True,
                 callable_groups={'system','agent'},
                 in_interface=self,
+                authority=CommandAuthority(
+                    can_writefile=True,
+                )
             ),
             Command(
                 name='listdir',
@@ -58,6 +65,9 @@ class FileInterface(Interface):
                 force_await=True,
                 callable_groups={'system','agent'},
                 in_interface=self,
+                authority=CommandAuthority(
+                    can_listdir=True,
+                )
             ),
         )
 

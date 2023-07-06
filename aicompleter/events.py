@@ -73,6 +73,9 @@ class Exception(Event):
     def reraise(self):
         '''Reraise the exception'''
         raise self.exception
+    
+    def __call__(self, e:BaseException, *obj:object):
+        return super().__call__(e, *obj)
 
 __all__ = (
     'Type',

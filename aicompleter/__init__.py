@@ -41,7 +41,6 @@ from .layer import (
     InterfaceDiGraph,
 )
 
-
 from . import (
     interface,
     session,
@@ -49,6 +48,7 @@ from . import (
     config,
     utils,
     log,
+    events,
     ai,
     implements,
 )

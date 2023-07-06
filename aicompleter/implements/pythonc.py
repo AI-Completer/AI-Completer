@@ -1,6 +1,7 @@
 import uuid
 from typing import Any, Coroutine, Optional
 from aicompleter.interface.base import User
+from aicompleter.interface.command import CommandAuthority
 import aicompleter.session as session
 from .. import *
 
@@ -26,6 +27,9 @@ class PythonCodeInterface(Interface):
             force_await=True,
             to_return=True,
             callback=self.cmd_exec,
+            authority=CommandAuthority(
+                can_execute=True,
+            )
         ))
 
     async def session_init(self, session: Session) -> Coroutine[Any, Any, None]:

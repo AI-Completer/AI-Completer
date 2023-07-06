@@ -5,7 +5,7 @@ from typing import Any
 
 import aicompleter.session as session
 from .. import *
-from utils import Struct
+from ..utils import Struct
 
 def is_enable(srctext:Any) -> bool:
     if srctext in ('enable', 'true', 'True', '1', True, 'yes', 'y', 't'):
@@ -34,7 +34,10 @@ class AuthorInterface(Interface):
         author_cmd:str = cfg['authority']['cmd']
         author_format:str = cfg['authority']['format']
 
-        cmd = session.in_handler.get_cmd(message.cmd, message.src_interface, message.dest_interface)
+        cmd = session.in_handler.get_cmd(message.cmd, message.dest_interface, message.src_interface)
+        if cmd == None:
+            # Unknown command
+            return
 
         if cmd.authority.get_authority_level() < trigger_level:
             # Not triggered
@@ -42,16 +45,18 @@ class AuthorInterface(Interface):
         if cmd.cmd == author_cmd:
             # Can not trigger self
             return 
+        
+        self.logger.debug(f"Authority triggered, cmd={cmd.cmd}, level={cmd.authority.get_authority_level()}")
         enabled = None
         while enabled == None:
             ret = await session.asend(
                 Message(
-                    src_interface=self.interface,
+                    src_interface=self,
                     cmd=author_cmd,
                     content = author_format.format(
                         src=message.src_interface.user.name,
                         cmd=cmd.cmd,
-                        param=message.content.text,
+                        param=message.content.text.replace("\\", "\\\\").replace('"', '\\"'),
                         level=cmd.authority.get_authority_level(),
                     ),
                     last_message = message,
@@ -68,7 +73,7 @@ class AuthorInterface(Interface):
             'level': 15,
             'authority': {
                 'cmd': 'ask',
-                'format': '{"content": "The {src} want to use {cmd}, the parameter is {param}, do you allow it?", "options": ["(y)es", "(n)o"]}',
+                'format': '{{"content": "The {src} want to use {cmd}, the parameter is {param}, do you allow it?(y/n)"}}',
             }
         })
         if Struct({

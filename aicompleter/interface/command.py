@@ -9,6 +9,7 @@ import enum
 import functools
 import json
 import os
+import re
 from typing import (Any, Callable, Coroutine, Generator, Iterable, Iterator,
                     Optional, Self, TypeVar, overload)
 
@@ -334,10 +335,15 @@ class Command:
                 raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",message=message,interface=self.in_interface)
             message.content = MultiContent(self.format.setdefault(message.content.pure_text))
         
-        # Trigger the call event
-        if session.in_handler._on_call(session, message):
-            # The call is interrupted
-            raise error.Interrupted(f"call interrupted: Command.call",message=message,interface=self.in_interface)
+        try:
+            # Trigger the call event
+            if await session.in_handler._on_call(session, message):
+                # The call is interrupted
+                raise error.Interrupted(f"call interrupted: Command.call",message=message,interface=self.in_interface)
+        except error.Interrupted as e:
+            raise e
+        except Exception as e:
+            raise error.Interrupted(f"call interrupted by exception: Command.call",message=message,interface=self.in_interface, error=e) from e
 
         if bool(config.varibles['disable_memory']) == False:
             # Add Memory

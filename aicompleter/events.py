@@ -23,16 +23,16 @@ class Type(Enum):
 @attr.s(auto_attribs=True, kw_only=True)
 class Event:
     '''Base class for all events'''
-    id:uuid.UUID = uuid.uuid4()
+    id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
     '''ID'''
-    type:Type = Type.Exception
+    type:Type = attr.ib(default=Type.Exception, validator=attr.validators.instance_of(Type))
     '''Type of the event'''
-    callbacks:list[Callable[[Event,*object],Coroutine[bool, None, None]]] = []
+    callbacks:list[Callable[[Event,*object],Coroutine[bool, None, None]]] = attr.ib(factory=list, validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(Callable), iterable_validator=attr.validators.instance_of(list)))
     '''
     Callback functions
     When a callback function returns True, the event will be stopped
     '''
-    extra:dict = {}
+    extra:dict = attr.ib(factory=dict, validator=attr.validators.deep_mapping(key_validator=attr.validators.instance_of(str), value_validator=attr.validators.instance_of(object)))
     '''Extra information'''
 
     def __attrs_post_init__(self):

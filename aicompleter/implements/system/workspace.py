@@ -166,7 +166,6 @@ class File:
         '''
         Read file
         :param user: User
-        :param force: Force to read
         '''
         self._check_file_exists()
         force = user == None
@@ -180,12 +179,23 @@ class File:
         Write file
         :param content: Content to write
         :param user: User
-        :param force: Force to write
         '''
         force = user == None
         if not force and not self.get_permission(user).writable:
             raise error.PermissionDenied('Permission Denied', file=self.path)
         with open(self._true_path, 'w') as f:
+            f.write(content)
+
+    def write_append(self, content:str, user:Optional[User] = None) -> None:
+        '''
+        Write file (append)
+        :param content: Content to write
+        :param user: User
+        '''
+        force = user == None
+        if not force and not self.get_permission(user).writable:
+            raise error.PermissionDenied('Permission Denied', file=self.path)
+        with open(self._true_path, 'a') as f:
             f.write(content)
 
     def execute(self, user:Optional[User] = None, *args:object, **kwargs:object):

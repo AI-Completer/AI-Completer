@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import enum
 import functools
 import json
 import os
+import re
 from typing import (Any, Callable, Coroutine, Generator, Iterable, Iterator,
                     Optional, Self, TypeVar, overload)
 
@@ -230,6 +232,32 @@ class CommandParamStruct:
             else:
                 raise TypeError("struct must be a dict, list or CommandParamElement instance")
         return json.dumps(_json_description(self._struct))
+    
+@attr.s(auto_attribs=True)
+class CommandAuthority:
+    '''
+    The authority of a command
+    '''
+    can_readfile:bool = attr.ib(default=False)
+    '''Whether the command can read file'''
+    can_writefile:bool = attr.ib(default=False)
+    '''Whether the command can write file'''
+    can_listfile:bool = attr.ib(default=False)
+    '''Whether the command can list file'''
+    can_execute:bool = attr.ib(default=False)
+    '''Whether the command can execute the operation system command'''
+    
+    def get_authority_level(self):
+        '''Get the authority level'''
+        _level_map = {
+            'can_readfile': 10,
+            'can_writefile': 20,
+            'can_listfile': 8,
+            'can_execute': 30,
+        }
+        # square mean
+        return sum([_level_map[i]**2 for i in self.__dict__ if self.__dict__[i] == True])**0.5
+
 
 @attr.s(auto_attribs=True,hash=False)
 class Command:
@@ -250,6 +278,8 @@ class Command:
     '''Extra information'''
     expose:bool = True
     '''Whether this command can be exposed to handlers'''
+    authority:CommandAuthority = CommandAuthority()
+    '''Authority of the command'''
 
     in_interface:Optional[Interface] = None
     '''Interface where the command is from'''
@@ -292,6 +322,7 @@ class Command:
         '''Call the command'''
         if session.closed:
             raise error.SessionClosed(session,content=f"session {session.id} closed: Command.call",message=message,interface=self.in_interface)
+        message.session = session
         if message.src_interface:
             # Enable self call
             if message.src_interface != message.dest_interface:
@@ -304,6 +335,16 @@ class Command:
                 raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",message=message,interface=self.in_interface)
             message.content = MultiContent(self.format.setdefault(message.content.pure_text))
         
+        try:
+            # Trigger the call event
+            if await session.in_handler._on_call(session, message):
+                # The call is interrupted
+                raise error.Interrupted(f"call interrupted: Command.call",message=message,interface=self.in_interface)
+        except error.Interrupted as e:
+            raise e
+        except Exception as e:
+            raise error.Interrupted(f"call interrupted by exception: Command.call",message=message,interface=self.in_interface, error=e) from e
+
         if bool(config.varibles['disable_memory']) == False:
             # Add Memory
             session._memory.put(MemoryItem(

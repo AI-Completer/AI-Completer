@@ -9,9 +9,10 @@ from typing import Optional, overload
 import attr
 
 import aicompleter.session as session
-from aicompleter import error, log, utils
 
+from .. import config, error, log, utils
 from .command import Command, Commands
+
 
 @attr.s(auto_attribs=True, kw_only=True, hash=False)
 class User:
@@ -356,6 +357,8 @@ class GroupSet:
 #         ))
 
 from aicompleter.namespace import Namespace
+
+
 class Interface:
     '''Interface of AI Completer'''
     def __init__(self, user:User, namespace:Optional[str] = None,id:uuid.UUID = uuid.uuid4()):
@@ -426,7 +429,7 @@ class Interface:
         '''Finial function for Session'''
         pass
 
-    def getconfig(self, session:session.Session):
+    def getconfig(self, session:session.Session) -> config.Config:
         '''
         Get the config of the interface
         :param session: Session

@@ -21,6 +21,7 @@ class InitInterface(interface.Interface):
     '''
     namespace: str = "initializer"
     def __init__(self, id: uuid.UUID = uuid.uuid4(), user: Optional[User] = None):
+        raise DeprecationWarning("Initializer is deprecated")
         user = user or User(
             name="initializer",
             in_group="system",

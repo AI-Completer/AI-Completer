@@ -118,6 +118,9 @@ class ConversationTimeOut(BaseException):
 class ReachedMaxMessage(BaseException):
     '''Reached Max Message'''
 
+class Interrupted(BaseException):
+    '''Interrupted'''
+
 ################## AI Generate Error ##################
 # AI Generate Error (or possiblily human input error)
 

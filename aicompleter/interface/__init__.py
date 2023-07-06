@@ -11,4 +11,5 @@ from .command import (
     CommandParamElement,
     CommandParamStruct,
     Result,
+    CommandAuthority,
 )

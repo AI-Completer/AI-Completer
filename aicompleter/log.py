@@ -138,7 +138,7 @@ class Logger(logging.Logger):
                 output += await msg.read(1)
                 # Move the cursor to the recorded position
                 print("\033[u",end="",flush=True)
-                if msg.at_eof():
+                if output == "":
                     break
                 # Print the log
                 # The code is copied from logging.Logger._log
@@ -172,7 +172,6 @@ class Logger(logging.Logger):
                 self._index = 0
             async def read(self, n:int = 1) -> str:
                 if self._index + 1 >= len(self.msg):
-                    self._eof = True
                     return ""
                 ret = self.msg[self._index:self._index+n]
                 self._index += n

@@ -5,7 +5,8 @@ from aicompleter import *
 from aicompleter.interface import User, Group
 import aicompleter.session as session
 from aicompleter.utils import Struct
-import workspace
+from ...interface import CommandAuthority
+from . import *
 
 class FileInterface(Interface):
     '''
@@ -24,46 +25,104 @@ class FileInterface(Interface):
             Command(
                 name='read',
                 description='Read File',
-                func=self.cmd_read,
+                callback=self.cmd_read,
                 format=CommandParamStruct({
-                    'file': CommandParamElement('file', str, description='File Path',tooltip='The file path to read')
+                    'path': CommandParamElement('path', str, description='File Path',tooltip='The file path to read')
                 }),
                 to_return=True,
                 force_await=True,
                 callable_groups={'system','agent'},
-            )
+                in_interface=self,
+                authority=CommandAuthority(
+                    can_readfile=True,
+                )
+            ),
+            Command(
+                name='write',
+                description='Write File',
+                callback=self.cmd_write,
+                format=CommandParamStruct({
+                    'path': CommandParamElement('path', str, description='File Path',tooltip='The file path to write'),
+                    'content': CommandParamElement('content', str, description='File Content',tooltip='The file content to write'),
+                    'append': CommandParamElement('append', bool, description='Append',tooltip='Whether to append to the file'),
+                }),
+                to_return=True,
+                force_await=True,
+                callable_groups={'system','agent'},
+                in_interface=self,
+                authority=CommandAuthority(
+                    can_writefile=True,
+                )
+            ),
+            Command(
+                name='listdir',
+                description='List Directory',
+                callback=self.cmd_listdir,
+                format=CommandParamStruct({
+                    'path': CommandParamElement('path', str, description='Directory Path',tooltip='The directory path to list')
+                }),
+                to_return=True,
+                force_await=True,
+                callable_groups={'system','agent'},
+                in_interface=self,
+                authority=CommandAuthority(
+                    can_listdir=True,
+                )
+            ),
         )
+
+    async def session_init(self, session:Session):
+        ret = await super().session_init(session)
+        data = self.getdata(session)
+        data['filesystem'] = FileSystem(session.config[self.namespace.name].get('root', 'workspace'))
+        data['workspace'] = WorkSpace(data['filesystem'], '/')
 
     async def cmd_read(self, session:Session, message:Message) -> str:
         '''Command for reading file'''
-        if not Struct({
-                'file': str,
-            }).check(message.content.json):
-            raise error.FormatError(
-                message=message,
-                interface=self,
-                content='Unrecognized format'
-                )
-        filepath = message.content.json['file']
-        ws:workspace.WorkSpace = session.data[f'{self.namespace.name}.workspace']
-        fs:workspace.FileSystem = session.data[f'{self.namespace.name}.filesystem']
-        if ws.check(filepath):
-            return fs.get(filepath).read(self.user)
-        else:
-            raise error.PermissionDenied(
-                message=message,
-                interface=self,
-                content='Not allowed for reading file out of workspace'
-            )
+        data = self.getdata(session)
+        path = message.content.json['path']
+        if not path:
+            raise ValueError('Path cannot be empty')
+        path = normpath(path)
+        filesystem:FileSystem = data['filesystem']
+        workspace:WorkSpace = data['workspace']
+        file = workspace.get(path, session.id)
+        if not file:
+            raise FileNotFoundError(f'File {path} not found or no permission')
+        if not file.type == Type.file:
+            raise FileNotFoundError(f'File {path} is not a file')
+        return file.read(session.id)
+    
+    async def cmd_write(self, session:Session, message:Message) -> str:
+        '''Command for writing file'''
+        data = self.getdata(session)
+        path = message.content.json['path']
+        if not path:
+            raise ValueError('Path cannot be empty')
+        path = normpath(path)
+        filesystem:FileSystem = data['filesystem']
+        workspace:WorkSpace = data['workspace']
+        file = workspace.get(path, session.id)
+        if not file:
+            raise FileNotFoundError(f'File {path} not found or no permission')
+        if not file.type == Type.file:
+            raise FileNotFoundError(f'File {path} is not a file')
+        if message.content.json['append']:
+            return file.append(session.id, message.content.json['content'])
+        return file.write(session.id, message.content.json['content'])
 
-    async def session_init(self, session: Session):
-        await super().session_init(session)
-        session.config[self.namespace.name].setdefault('root','./workspace')
-        thisconfig = session.config[self.namespace.name]
-        session.data[f'{self.namespace.name}.filesystem'] = workspace.FileSystem(
-            handler=session.in_handler, 
-            root=thisconfig['root']
-        )
-        session.data[f'{self.namespace.name}.workspace'] = workspace.WorkSpace(
-            path=thisconfig['root'],
-        )
+    async def cmd_listdir(self, session:Session, message:Message) -> list[str]:
+        '''Command for listing directory'''
+        data = self.getdata(session)
+        path = message.content.json['path']
+        if not path:
+            raise ValueError('Path cannot be empty')
+        path = normpath(path)
+        filesystem:FileSystem = data['filesystem']
+        workspace:WorkSpace = data['workspace']
+        file = workspace.get(path, session.id)
+        if not file:
+            raise FileNotFoundError(f'Path {path} not found or no permission')
+        if not file.type == Type.Folder:
+            raise FileNotFoundError(f'Path {path} is not a directory')
+        return file.listdir(session.id)

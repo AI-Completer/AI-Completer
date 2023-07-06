@@ -292,6 +292,7 @@ class Command:
         '''Call the command'''
         if session.closed:
             raise error.SessionClosed(session,content=f"session {session.id} closed: Command.call",message=message,interface=self.in_interface)
+        message.session = session
         if message.src_interface:
             # Enable self call
             if message.src_interface != message.dest_interface:

@@ -81,16 +81,18 @@ class Agent:
         self.logger.debug(f'Create subagent {name}')
         return self._subagents[name]
 
-    def _request(self, value:dict):
+    def _request(self, value:dict, role:str = 'system'):
         '''
         Ask the agent to execute a command
         '''
         from ... import ai
-        self._request_queue.put_nowait(ai.Message(
+        to_add = ai.Message(
             content = json.dumps(value, ensure_ascii = False),
-            user=self.conversation.user,
-            role='user',
-        ))
+            role=role,
+        )
+        if role == 'user':
+            to_add.user = self.conversation.user
+        self._request_queue.put_nowait(to_add)
 
     def _parse(self, raw:str):
         '''
@@ -104,9 +106,9 @@ class Agent:
                 raise ValueError('Invalid json format')
             if not isinstance(json_dat.get('type', None), str):
                 raise ValueError('type not found')
-            if json_dat['type'].beginwiths('ask') and 'message' in json_dat:
+            if json_dat['type'].startwiths('ask') and 'message' in json_dat:
                 raw = json_dat['message']
-            if json_dat['type'].beginwiths('ask') and 'value' in json_dat:
+            if json_dat['type'].startwiths('ask') and 'value' in json_dat:
                 raw = json_dat['value']
         except Exception:
             pass
@@ -164,32 +166,13 @@ class Agent:
                 await asyncio.sleep(0.1)
                 # Get all the requests
 
-                requests:list[ai.Message] = [await self._request_queue.get()]
-                while not self._request_queue.empty():
-                    requests.append(self._request_queue.get_nowait())
+                request:ai.Message = await self._request_queue.get()
 
-                self.logger.debug(f'Get requests: {requests}')
-
-                def _try_parse(x):
-                    try:
-                        return json.loads(x)
-                    except Exception:
-                        return x
-
-                if len(requests) == 1:
-                    raw_content = _try_parse(requests[0].content)
-                    if isinstance(raw_content, dict):
-                        raw_content = json.dumps(raw_content, ensure_ascii = False)
-                else:
-                    raw_content = json.dumps([_try_parse(request.content) for request in requests], ensure_ascii = False)
+                self.logger.debug(f'Get requests: {request}')
 
                 raw = await self.ai.ask_once(
                     history = self.conversation,
-                    message = ai.Message(
-                        content = raw_content,
-                        role = 'user',
-                        user = self.conversation.user,
-                    ),
+                    message = request,
                 )
                 self.logger.debug(f'AI response: {raw}')
                 if raw == '':
@@ -206,6 +189,12 @@ class Agent:
                         'value':str(e),
                     })
                     continue
+
+                # Refactor the last message
+                self.conversation.messages[-1] = ai.Message(
+                    content = json.dumps(json_dat, ensure_ascii = False),
+                    role = 'assistant',
+                )
                 
                 json_dat = json_dat['commands']
                 if len(json_dat) == 0:
@@ -259,6 +248,7 @@ class Agent:
                             self.logger.info(f'Command {cmd["cmd"]} executed successfully, Result: {ret}')
 
                     asyncio.get_event_loop().create_task(self.on_call(cmd['cmd'], cmd['param'])).add_done_callback(when_result)
+            
         except asyncio.CancelledError as e:
             # The loop is done
             self._handle_task.remove_done_callback(self._unexception)
@@ -290,18 +280,19 @@ class Agent:
             self._request({
                 'type':'command-result',
                 'success': result.success,
-                'command-result': result.ret,
+                'result': result.ret,
             })
 
     def ask(self, value:str):
         '''
         Ask the agent to execute a command
         '''
-        self.logger.debug(f'The upper layer ask: {value}')
-        self._request({
-            'type':'ask-from-user',
-            'value':value,
-        })
+        from ... import ai
+        self._request_queue.put_nowait(ai.Message(
+            content = value,
+            role = 'user',
+            user = self.conversation.user,
+        ))
 
     def _subagent_ask(self, name:str, value:str):
         '''

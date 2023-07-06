@@ -135,11 +135,13 @@ async def main():
                 },
                 cmd = 'ask',
                 dest_interface=console_interface,
+                session = new_session,
             ))
             await new_session.asend(Message(
                 content = ret,
                 cmd = 'agent',
                 dest_interface=ai_interface,
+                session = new_session,
             ))
 
 loop = asyncio.new_event_loop()

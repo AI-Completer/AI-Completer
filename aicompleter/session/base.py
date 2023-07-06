@@ -245,7 +245,7 @@ class Message:
     '''A normal message from the Interface.'''
     content:MultiContent = attr.ib(factory=MultiContent, converter=MultiContent)
     '''Content of the message'''
-    session:Session = attr.ib(validator=attr.validators.instance_of(Session))
+    session:Optional[Session] = attr.ib(default=None,validator=attr.validators.optional(attr.validators.instance_of(Session)))
     '''Session of the message'''
     id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
     '''ID of the message'''

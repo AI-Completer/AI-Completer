@@ -305,6 +305,11 @@ class Command:
                 raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",message=message,interface=self.in_interface)
             message.content = MultiContent(self.format.setdefault(message.content.pure_text))
         
+        # Trigger the call event
+        if session.in_handler._on_call(session, message):
+            # The call is interrupted
+            raise error.Interrupted(f"call interrupted: Command.call",message=message,interface=self.in_interface)
+
         if bool(config.varibles['disable_memory']) == False:
             # Add Memory
             session._memory.put(MemoryItem(

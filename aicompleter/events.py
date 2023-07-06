@@ -17,6 +17,8 @@ class Type(Enum):
     '''Message'''
     KeyboardInterrupt = 3
     '''KeyboardInterrupt'''
+    Hook = 4
+    '''Hook'''
 
 @attr.s(auto_attribs=True, kw_only=True)
 class Event:

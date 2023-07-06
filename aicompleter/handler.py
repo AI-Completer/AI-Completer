@@ -43,6 +43,11 @@ class Handler:
         '''Group Set of Handler'''
         self._running_sessions:set[Session] = set()
         '''Running Sessions of Handler'''
+        self.on_call:events.Event = events.Event(type=events.Type.Hook)
+        '''
+        Event of Call, this will be triggered when a command is called
+        If the event is stopped, the command will not be called
+        '''
 
         self._namespace = Namespace(
             name='root',
@@ -59,6 +64,10 @@ class Handler:
 
         self.logger:log.Logger = log.getLogger('handler')
         '''Logger of Handler'''
+
+    def _on_call(self, session:Session, message:session.Message):
+        '''Call the on_call event'''
+        return self.on_call.trigger(session, message)
 
     @property
     def commands(self):

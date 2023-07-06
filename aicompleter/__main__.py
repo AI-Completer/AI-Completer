@@ -33,6 +33,7 @@ helper_pareser = subparsers.add_parser('helper', help='The helper of AI Complete
 helper_pareser.add_argument('--ai', type=str, default='openaichat', choices=('openaichat', 'bingai'), help='The AI to use, default: openaichat, options: openaichat, bingai')
 helper_pareser.add_argument('--enable-agent', action='store_true', help='Enable subagent, default: False', dest='enable_agent')
 helper_pareser.add_argument('-i','--include', type=str, nargs='+', default=[], choices=('pythoncode', 'searcher'), help='Include the extra interface, default: None, options: pythoncode')
+helper_pareser.add_argument('--disable-authority', action='store_true', help='Disable authority, default: False', dest='disable_authority')
 
 args = parser.parse_args()
 if args.debug:
@@ -117,8 +118,13 @@ async def main():
             ai_interface = (implements.logical.SelfStateExecutor if args.enable_agent else implements.logical.StateExecutor)(ai=ai_, namespace=ai_name)
             
             console_interface = ConsoleInterface()
+            if not args.disable_authority:
+                authority_interface = implements.AuthorInterface()
+            # Authority should get the console interface permission
             graph = layer.InterfaceDiGraph()
             graph.add(ai_interface, console_interface)
+            if not args.disable_authority:
+                graph.add(authority_interface, console_interface)
 
             for interface_name in args.include:
                 if interface_name not in __Int_map__:

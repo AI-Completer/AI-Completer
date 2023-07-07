@@ -179,6 +179,7 @@ class Chater(ChatTransformer,OpenAIGPT):
         # Convert to OoenAIConversation
         if not isinstance(conversation, OpenAIConversation):
             conversation = OpenAIConversation.from_conversation(conversation)
+        conversation = self.limit_token(conversation, self.config['sys.max_token'])
 
         async with aiohttp.ClientSession() as session:
 
@@ -295,43 +296,47 @@ class Chater(ChatTransformer,OpenAIGPT):
         ))
         return new_his
     
-    def limit_token(self, history:Conversation, max_token:int = 2048, ignore_system:bool = True):
+    def limit_token(self, history:Conversation, max_token:int = 2048, ignore_init_prompt:bool = True):
         '''
         Limit the tokens
         :param history: The history
         :param max_token: The max token
-        :param ignore_system: Whether to ignore system message, this flag will ignore its length and will forbid to cut the system message
+        :param ignore_init_prompt: Ignore the init prompt
         '''
         if len(history.messages) == 0:
             return history
+        if len(history.messages) == 1 and ignore_init_prompt:
+            return history
         encoder = Encoder(model = self.name)
         totallen = sum(encoder.getTokenLength(message.content) for message in history.messages)
-        systemlen = sum(encoder.getTokenLength(message.content) for message in history.messages if message.role == 'system')
+        init_len = encoder.getTokenLength(history.messages[0].content)
         if totallen <= max_token:
             return history
-        if ignore_system:
-            if totallen - systemlen <= max_token:
+        if ignore_init_prompt:
+            if totallen - init_len <= max_token:
                 return history
         # Cut needed
         new_his = copy.deepcopy(history)
         for index in range(len(new_his.messages)):
             totallen -= encoder.getTokenLength(new_his.messages[index].content)
-            if ignore_system and new_his.messages[index].role == 'system':
+            if ignore_init_prompt and index == 0:
                 continue
             if totallen <= max_token:
                 break
+        
         add_msg = None
         for rv in range(index, -1, -1):
-            if ignore_system and new_his.messages[rv].role == 'system':
+            if ignore_init_prompt and rv == 0:
                 continue
             add_msg = new_his.messages[rv]
             break
+
         add_msg.content = encoder.decode(encoder.encode(add_msg.content)[totallen-max_token:])
         ret_messages = []
         for i, message in enumerate(new_his.messages):
-            if ignore_system and message.role == 'system':
-                    ret_messages.append(message)
-                    continue
+            if ignore_init_prompt and i == 0:
+                ret_messages.append(message)
+                continue
             if i == rv:
                 ret_messages.append(add_msg)
                 continue

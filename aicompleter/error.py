@@ -121,6 +121,9 @@ class ReachedMaxMessage(BaseException):
 class Interrupted(BaseException):
     '''Interrupted'''
 
+class AuthorityError(BaseException):
+    '''Authority Error'''
+
 ################## AI Generate Error ##################
 # AI Generate Error (or possiblily human input error)
 

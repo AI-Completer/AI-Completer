@@ -54,11 +54,12 @@ class TaskCompleter(ai.ChatInterface):
             user = session.id.hex,
             init_prompt=f'''
 You are ChatGPT, an AI that do your task automatically.
+You should not ask for user'help.
 
 Commands:
 {command_table}
 
-You are talking with a command parser. So you should reply with the json format below:
+What you say is to be parsed by the system. So you should reply with the json format below:
 {{
     "commands":[{{
         "cmd":<command name>,

@@ -23,7 +23,21 @@ class BingAI(ChatTransformer):
     Microsoft Bing AI
     '''
     def __init__(self, config:config.Config) -> None:
-        super().__init__()
+        super().__init__(
+            name="BingAI",
+            description="Microsoft Bing AI",
+            config=config,
+        )
+        match self.config.get('model', 'balanced'):
+            case 'balanced':
+                self._style = ConversationStyle.balanced
+            case 'creative':
+                self._style = ConversationStyle.creative
+            case 'precise':
+                self._style = ConversationStyle.precise
+            case _:
+                raise ValueError(f"Invalid model: {self.config['model']}")
+        
         self._bot_map:dict[uuid.UUID, Chatbot] = {}
         self._last_message_map:dict[uuid.UUID, dict] = {}
         self.update_config(config)
@@ -37,7 +51,7 @@ class BingAI(ChatTransformer):
         '''
         return Conversation(user=user, id=id or uuid.uuid4(), time=time.time(), timeout=60*60*3, data={'num':0,'continue':True})
     
-    async def ask(self, message: Message, history: Conversation, style:Style = Style.balanced, search_result:bool = True) -> Coroutine[str, Any, None]:
+    async def ask(self, message: Message, history: Conversation, search_result:bool = True) -> Coroutine[str, Any, None]:
         '''
         Ask the AI
         '''
@@ -52,7 +66,7 @@ class BingAI(ChatTransformer):
             raise error.AIGenerateError("Conversation Ended")
         
         last_message = ''
-        async for final, ret in bot.ask_stream(message.content, conversation_style=style.value, search_result=search_result):
+        async for final, ret in bot.ask_stream(message.content, conversation_style=self._style.value, search_result=search_result):
             if not final:
                 yield ret
                 last_message = ret

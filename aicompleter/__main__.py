@@ -29,8 +29,10 @@ subparsers = parser.add_subparsers(dest='subcommand', help='subcommands', descri
 subparsers.required = True
 talk_pareser = subparsers.add_parser('talk', help='Talk with the AI')
 talk_pareser.add_argument('--ai', type=str, default='openaichat', choices=('openaichat', 'bingai'), help='The AI to use, default: openaichat, options: openaichat, bingai')
+talk_pareser.add_argument('--model', type=str, default='', help='The model to use, the choices differ from the AI, default: not set, options: openaichat: davinci, curie ,..., bingai: balanced, creative, precise')
 helper_pareser = subparsers.add_parser('helper', help='The helper of AI Completer, this will launcher a AI assistant to help you solve the problem')
 helper_pareser.add_argument('--ai', type=str, default='openaichat', choices=('openaichat', 'bingai'), help='The AI to use, default: openaichat, options: openaichat, bingai')
+helper_pareser.add_argument('--model', type=str, default='', help='The model to use, the choices differ from the AI, default: not set, options: openaichat: davinci, curie ,..., bingai: balanced, creative, precise')
 helper_pareser.add_argument('--enable-agent', action='store_true', help='Enable subagent, default: False', dest='enable_agent')
 helper_pareser.add_argument('-i','--include', type=str, nargs='+', default=[], choices=('pythoncode', 'searcher'), help='Include the extra interface, default: None, options: pythoncode')
 helper_pareser.add_argument('--disable-authority', action='store_true', help='Disable authority, default: False', dest='disable_authority')
@@ -61,7 +63,15 @@ if args.disable_memory:
 if args.disable_faiss:
     config.varibles['disable_faiss'] = True
 
-
+# Check the model
+if args.model:
+    match args.ai:
+        case 'openaichat':
+            config_['openaichat.model'] = args.model
+        case 'bingai':
+            config_['bingai.model'] = args.model
+        case _:
+            raise ValueError(f"Invalid AI: {args.ai}")
 
 # After the initialization of the arguments and global configuration, we can now import the modules and do the real work
 from aicompleter import *
@@ -69,7 +79,7 @@ from aicompleter.implements import ConsoleInterface
 from aicompleter.utils import ainput, aprint
 
 __AI_map__ = {
-    'openaichat': (ai.openai.Chater, {"config":config_['openaichat'], "model":'gpt-3.5-turbo'}),
+    'openaichat': (ai.openai.Chater, {"config":config_['openaichat']}),
     'bingai': (ai.microsoft.BingAI, {"config":config_['bingai']}),
 }
 __Int_map__ = {

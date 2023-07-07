@@ -28,10 +28,10 @@ class TransformerInterface(Interface):
                 in_group="agent",
                 all_groups={"agent","command"},
                 support={"text"},
-                config=config,
             ),
             namespace=namespace,
             id=id or uuid.uuid4(),
+            config=config,
         )
         self.ai:Transformer = ai
 
@@ -41,7 +41,7 @@ class ChatInterface(TransformerInterface):
     '''
     def __init__(self, *, ai: ChatTransformer, namespace:str, user:Optional[str] = None, id: Optional[uuid.UUID] = None, config:Config=Config()):
         super().__init__(ai=ai,namespace=namespace, user=user, id=id, config=config)
-        self.ai.config = config
+        self.ai.config.update(config)
         utils.typecheck(self.ai, ChatTransformer)
 
         if self.__class__ == ChatInterface:

@@ -14,7 +14,7 @@ from aicompleter.namespace import Namespace
 
 from .. import config, error, log, utils
 from .command import Command, Commands
-
+from ..config import Config
 
 @attr.s(auto_attribs=True, kw_only=True, hash=False)
 class User:
@@ -334,7 +334,7 @@ class Interface:
         '''Finial function for Session'''
         pass
 
-    def getconfig(self, session:Optional[session.Session] = None) -> config.Config:
+    def getconfig(self, session:Optional[session.Session] = None) -> Config:
         '''
         Get the config of the interface
         :param session: Session

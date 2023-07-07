@@ -29,7 +29,7 @@ class AI:
         default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
     'Location of AI'
 
-    config: Config = attr.ib(factory=Config, on_setattr=attr.setters.convert)
+    config: Config = attr.ib(factory=Config, validator=attr.validators.instance_of(Config))
     'Config of AI'
 
     @property

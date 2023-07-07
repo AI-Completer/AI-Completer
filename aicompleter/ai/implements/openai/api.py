@@ -135,9 +135,9 @@ class Chater(ChatTransformer,OpenAIGPT):
         'logit_bias',
         'user',
     }
-    def __init__(self, config:Config, model:str = 'gpt-3.5-turbo'):
+    def __init__(self, config:Config):
         super().__init__(
-            name=model,
+            name=config.get('model', 'gpt-3.5-turbo'),
             support={"text"},
             config=config,
         )
@@ -163,6 +163,8 @@ class Chater(ChatTransformer,OpenAIGPT):
     def update_config(self, config:Config):
         '''
         Update the config
+
+        *Note*:Model will not be updated
         '''
         self.config = config
         self.api_key:str = self.config.require('openai.api-key')

@@ -197,3 +197,9 @@ class EnhancedDict(defaultdict):
         for key, value in self.items():
             if filter is None or filter(key, value):
                 func(key, value)
+
+    def copy(self) -> EnhancedDict:
+        '''
+        Copy the dict
+        '''
+        return copy.deepcopy(self)

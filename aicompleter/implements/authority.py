@@ -19,10 +19,17 @@ class AuthorInterface(Interface):
     Authority Interface
     This will inject into the command call to check the authority of the user
     '''
-    def __init__(self) -> None:
+    def __init__(self, config:Config = Config()) -> None:
         super().__init__(
             User(name='authority',description='Authority Interface',in_group='system'),
             namespace='authority',
+            config= config or Config({
+                'level': 15,
+                'authority': {
+                    'cmd': 'ask',
+                    'format': '{{"content": "The {src} want to use {cmd}, the parameter is {param}, do you allow it?(y/n)"}}',
+                }
+            })
         )
 
     async def hook(self, event:events.Event, session: Session, message: Message) -> None:
@@ -81,13 +88,6 @@ class AuthorInterface(Interface):
         return False
 
     async def session_init(self, session: Session) -> None:
-        self.getconfig(session).setdefault({
-            'level': 15,
-            'authority': {
-                'cmd': 'ask',
-                'format': '{{"content": "The {src} want to use {cmd}, the parameter is {param}, do you allow it?(y/n)"}}',
-            }
-        })
         if Struct({
             'level': int,
             'authority': {

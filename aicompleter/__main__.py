@@ -164,8 +164,9 @@ async def check_loop():
             else:
                 await asyncio.sleep(0.1)
         except asyncio.CancelledError as e:
-            loop.stop()
-            return
+            if len(asyncio.all_tasks(loop)) == 1:
+                loop.stop()
+                return
 try:
     loop.create_task(main())
     check_task = loop.create_task(check_loop())

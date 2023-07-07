@@ -337,13 +337,11 @@ class Command:
         
         try:
             # Trigger the call event
-            if await session.in_handler._on_call(session, message):
-                # The call is interrupted
-                raise error.Interrupted(f"call interrupted: Command.call",message=message,interface=self.in_interface)
+            await session.in_handler._on_call(session, message)
         except error.Interrupted as e:
             raise e
         except Exception as e:
-            raise error.Interrupted(f"call interrupted by exception: Command.call",message=message,interface=self.in_interface, error=e) from e
+            raise error.Interrupted(f"Call interrupted by exception: Command.call",message=message,interface=self.in_interface, error=e) from e
 
         if bool(config.varibles['disable_memory']) == False:
             # Add Memory

@@ -161,6 +161,7 @@ class Agent:
         '''
         from ... import ai
         stop_flag = False
+        exception = None
         try:
             while not stop_flag:
                 await asyncio.sleep(0.1)
@@ -241,6 +242,12 @@ class Agent:
                         except asyncio.CancelledError:
                             return
                         except Exception as e:
+                            # Unpack Exception, remove the interface & session (to reduce the lenght of the message)
+                            if isinstance(e, error.BaseException):
+                                e.interface = None
+                                e.kwargs.pop('handler', None)
+                                e.kwargs.pop('session', None)
+                                e.parent = None
                             self._result_queue.put_nowait(interface.Result(cmd['cmd'], False, str(e)))
                             self.logger.error(f'Exception when executing command {cmd["cmd"]}: {e}')
                         else:
@@ -250,6 +257,8 @@ class Agent:
                     asyncio.get_event_loop().create_task(self.on_call(cmd['cmd'], cmd['param'])).add_done_callback(when_result)
             
         except asyncio.CancelledError as e:
+            exception = e
+        finally:
             # The loop is done
             self._handle_task.remove_done_callback(self._unexception)
             self._loop_task.remove_done_callback(self._unexception)
@@ -257,16 +266,10 @@ class Agent:
             self._handle_task = None
             self._loop_task = None
             self.logger.debug('The agent is stopped')
-            raise e
-
-        # The loop is done
-        self._handle_task.remove_done_callback(self._unexception)
-        self._loop_task.remove_done_callback(self._unexception)
-        self._handle_task.cancel()
-        self._handle_task = None
-        self._loop_task = None
-        self.logger.debug('The agent is stopped')
-        # Will end itself
+            if exception is not None:
+                raise exception
+            
+        self.logger.debug('The loop is done')
 
     async def _handle_result(self):
         while True:

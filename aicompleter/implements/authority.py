@@ -47,26 +47,38 @@ class AuthorInterface(Interface):
             return 
         
         self.logger.debug(f"Authority triggered, cmd={cmd.cmd}, level={cmd.authority.get_authority_level()}")
-        enabled = None
-        while enabled == None:
-            ret = await session.asend(
-                Message(
-                    src_interface=self,
-                    cmd=author_cmd,
-                    content = author_format.format(
-                        src=message.src_interface.user.name,
-                        cmd=cmd.cmd,
-                        param=message.content.text.replace("\\", "\\\\").replace('"', '\\"'),
-                        level=cmd.authority.get_authority_level(),
-                    ),
-                    last_message = message,
-                )
+        
+        ret = await session.asend(
+            Message(
+                src_interface=self,
+                cmd=author_cmd,
+                content = author_format.format(
+                    src=message.src_interface.user.name,
+                    cmd=cmd.cmd,
+                    param=message.content.text.replace("\\", "\\\\").replace('"', '\\"'),
+                    level=cmd.authority.get_authority_level(),
+                ),
+                last_message = message,
             )
-            try:
-                enabled = is_enable(ret)
-            except ValueError:
-                pass
-        return not enabled
+        )
+        try:
+            enabled = is_enable(ret)
+        except ValueError:
+            raise error.AuthorityError(
+                ret,
+                session = session,
+                message = message,
+            )
+        
+        if not enabled:
+            raise error.Interrupted(
+                'user authority denied',
+                session = session,
+                message = message,
+            )
+        
+        # Not stop the propagation
+        return False
 
     async def session_init(self, session: Session) -> None:
         self.getconfig(session).setdefault({

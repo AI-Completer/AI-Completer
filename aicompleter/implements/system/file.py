@@ -73,19 +73,20 @@ class FileInterface(Interface):
 
     async def session_init(self, session:Session):
         ret = await super().session_init(session)
-        data = self.getdata(session)
-        data['filesystem'] = FileSystem(session.config[self.namespace.name].get('root', 'workspace'))
-        data['workspace'] = WorkSpace(data['filesystem'], '/')
+        # This data will be reuseable in other interfaces
+        gdata = session.data['global']
+        gdata['filesystem'] = FileSystem(session.config[self.namespace.name].get('root', 'workspace'))
+        gdata['workspace'] = WorkSpace(gdata['filesystem'], '/')
 
     async def cmd_read(self, session:Session, message:Message) -> str:
         '''Command for reading file'''
-        data = self.getdata(session)
+        gdata = session.data['global']
         path = message.content.json['path']
         if not path:
             raise ValueError('Path cannot be empty')
         path = normpath(path)
-        filesystem:FileSystem = data['filesystem']
-        workspace:WorkSpace = data['workspace']
+        filesystem:FileSystem = gdata['filesystem']
+        workspace:WorkSpace = gdata['workspace']
         file = workspace.get(path, session.id)
         if not file:
             raise FileNotFoundError(f'File {path} not found or no permission')
@@ -105,11 +106,11 @@ class FileInterface(Interface):
         file = workspace.get(path, session.id)
         if not file:
             raise FileNotFoundError(f'File {path} not found or no permission')
-        if not file.type == Type.file:
+        if not file.type == Type.File:
             raise FileNotFoundError(f'File {path} is not a file')
         if message.content.json['append']:
-            return file.append(session.id, message.content.json['content'])
-        return file.write(session.id, message.content.json['content'])
+            return file.write_append(message.content.json['content'], session.id)
+        return file.write(message.content.json['content'], session.id)
 
     async def cmd_listdir(self, session:Session, message:Message) -> list[str]:
         '''Command for listing directory'''

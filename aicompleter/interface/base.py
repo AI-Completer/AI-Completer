@@ -345,7 +345,7 @@ class Interface:
             ret.update(session.config[self.namespace.name])
         return ret
     
-    def getdata(self, session:session.Session):
+    def getdata(self, session:session.Session) -> utils.EnhancedDict:
         '''
         Get the data of the interface
         :param session: Session

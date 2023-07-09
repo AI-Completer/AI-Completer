@@ -213,6 +213,16 @@ class Handler:
                 ret.add(i)
         return ret
     
+    def has_interface(self, cls:type) -> bool:
+        # If cls is not a Interface type, raise TypeError
+        if not issubclass(cls, Interface):
+            raise TypeError(f"Expected type Interface, got {type(cls)}")
+        # Check inheritance
+        for i in self._interfaces:
+            if isinstance(i, cls):
+                return True
+        return False
+    
     @property
     def interfaces(self) -> set[Interface]:
         '''Get all interfaces'''

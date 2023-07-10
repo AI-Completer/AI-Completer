@@ -5,6 +5,7 @@ Provide a console interface for Autodone-AI
 import uuid
 
 from aicompleter import interface, utils
+from aicompleter.config import Config
 from aicompleter.interface.base import User, Group
 from aicompleter.interface.command import CommandParamElement, CommandParamStruct
 from aicompleter.session import Message, Session
@@ -14,11 +15,12 @@ class ConsoleInterface(interface.Interface):
     Console Interface
     Interactive with user in console
     '''
-    def __init__(self,id: uuid.UUID = uuid.uuid4()):
+    def __init__(self, config:Config = Config(),id: uuid.UUID = uuid.uuid4()):
         user = User(
             name="console",
             in_group="user",
             all_groups={"user","command"},
+            config = config,
         )
         super().__init__(user,id = id, namespace="console")
 

@@ -9,13 +9,13 @@ class PythonCodeInterface(Interface):
     '''
     This interface is designed to execute python code
     '''
-    def __init__(self, user: Optional[User] = None, namespace: str = 'pythoncode', id: uuid.UUID = uuid.uuid4()):
-        user = user or User(
+    def __init__(self, config:Config = Config(), id: uuid.UUID = uuid.uuid4()):
+        user = User(
             name='pythoncode',
             in_group='system',
             description='Execute python code',
         )
-        super().__init__(user, namespace, id)
+        super().__init__(user, 'pythoncode', id, config)
         self.commands.add(Command(
             cmd='exec',
             description='Execute python code, the environments and varibles will be persevered in this conversation. You cannot see the stdout directly.',

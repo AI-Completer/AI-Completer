@@ -11,10 +11,10 @@ class SearchInterface(ai.ChatInterface):
     '''
     Search Interface
     '''
-    def __init__(self, config:Config, user: Optional[User] = None , id: uuid.UUID = uuid.uuid4()):
+    def __init__(self, config:Config, id: uuid.UUID = uuid.uuid4()):
         super().__init__(
             ai = ai.implements.microsoft.BingAI(config),
-            user = user or User(
+            user = User(
                 name = 'searcher',
                 in_group='ai',
                 all_groups={'ai', 'searcher'},

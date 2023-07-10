@@ -21,6 +21,7 @@ class StateExecutor(ai.ChatInterface):
             callable_groups={'user'},
             overrideable=False,
             callback=self.cmd_agent,
+            in_interface=self,
         ))
         
     async def session_init(self, session: Session):

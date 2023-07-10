@@ -1,3 +1,7 @@
+'''
+Depreciated
+'''
+
 import json
 import time
 import uuid
@@ -7,13 +11,13 @@ from aicompleter import *
 from aicompleter.ai import ChatInterface, ChatTransformer, Conversation
 from aicompleter.interface import Command, Commands
 
-
 class ExecutorInt(ChatInterface):
     '''
     Executor Interface
     This interface will directly analyze the task and call it directly
     '''
     def __init__(self, *, ai: ChatTransformer,user:Optional[str] = None, id: Optional[uuid.UUID] = None):
+        raise DeprecationWarning('This interface is depreciated')
         super().__init__(ai=ai, namespace='executor', user=user, id=id)
         self.commands.add(
             Command(

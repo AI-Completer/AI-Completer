@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import importlib
 import os
 
 from . import config
@@ -35,6 +36,7 @@ helper_pareser.add_argument('--ai', type=str, default='openaichat', choices=('op
 helper_pareser.add_argument('--model', type=str, default='', help='The model to use, the choices differ from the AI, default: not set, options: openaichat: davinci, curie ,..., bingai: balanced, creative, precise')
 helper_pareser.add_argument('--enable-agent', action='store_true', help='Enable subagent, default: False', dest='enable_agent')
 helper_pareser.add_argument('-i','--include', type=str, nargs='+', default=[], choices=('pythoncode', 'searcher'), help='Include the extra interface, default: None, options: pythoncode')
+helper_pareser.add_argument('-e','--extra-include', type=str, nargs='+', default=[], help='Include the extra interface, will find the interface in the specified python program path, format: path:interface:namespace')
 helper_pareser.add_argument('--disable-authority', action='store_true', help='Disable authority, default: False', dest='disable_authority')
 
 args = parser.parse_args()
@@ -136,11 +138,47 @@ async def main():
             if not args.disable_authority:
                 graph.add(authority_interface, console_interface)
 
+            # Release the memory
+            del ai_name, ai_cls, ai_param, ai_
+
             for interface_name in args.include:
                 if interface_name not in __Int_map__:
                     logger.critical(f"Interface {interface_name} not found.")
                     return
                 graph.add(ai_interface, __Int_map__[interface_name][0](**__Int_map__[interface_name][1]))
+
+            for interface_name in args.extra_include:
+                if ':' not in interface_name:
+                    logger.critical(f"Invalid extra interface {interface_name}")
+                    return
+                path, interface, namespace = interface_name.split(':')
+                try:
+                    package = importlib.import_module(path)
+                except ImportError as e:
+                    logger.critical(f"ImportError: {e}")
+                    return
+                try:
+                    _interface = getattr(package, interface)
+                except AttributeError as e:
+                    logger.critical(f"Interface Not Found: {e}")
+                    return
+                if not issubclass(_interface, Interface):
+                    logger.critical(f"Invalid Interface: {interface}")
+                    return
+                
+                _kwargs = {}
+                if 'namespace' in _interface.__init__.__code__.co_varnames:
+                    _kwargs['namespace'] = namespace
+                if 'ai' in _interface.__init__.__code__.co_varnames:
+                    # New AI class
+                    _kwargs['ai'] = ai.ChatTransformer(name=namespace, config=config_[namespace])
+                
+                try:
+                    the_interface = _interface(config=config_[namespace], **_kwargs)
+                except Exception as e:
+                    logger.critical(f"Exception when creating the interface instance {interface}: {e}")
+                    return
+                graph.add(ai_interface, the_interface)
 
             await graph.setup(_handler)
             new_session = await _handler.new_session()

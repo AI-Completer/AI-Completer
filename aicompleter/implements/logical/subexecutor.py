@@ -7,9 +7,11 @@ this executor is also designed to be self-called.
 import asyncio
 import json
 import time
-from typing import Any
+from typing import Any, Optional
+import uuid
 from aicompleter import *
 from aicompleter import Session
+from aicompleter.ai.ai import ChatTransformer
 
 class SelfStateExecutor(ai.ChatInterface):
     '''
@@ -22,6 +24,7 @@ class SelfStateExecutor(ai.ChatInterface):
             callable_groups={'user'},
             overrideable=False,
             callback=self.cmd_agent,
+            in_interface=self,
         ))
         
     async def session_init(self, session: Session):

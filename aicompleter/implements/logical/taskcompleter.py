@@ -21,6 +21,7 @@ class TaskCompleter(ai.ChatInterface):
             callable_groups={'user'},
             overrideable=False,
             callback=self.cmd_task,
+            in_interface=self,
         ))
     
     async def cmd_task(self, session: Session, message: Message):

@@ -6,6 +6,7 @@ import os
 import uuid
 from abc import abstractmethod
 from typing import Optional, overload
+import warnings
 
 import attr
 
@@ -258,6 +259,10 @@ class GroupSet:
                     return j
         return None
 
+# Note: Interface is a abstract class, when implemented by the main module,  
+#      the subclass of Interface (implemented not abstract) should only have one constructor with keyword config, id
+#      The constructor should have a format like this:
+#      def __init__(self, config:Config, id:uuid.UUID = uuid.uuid4()):
 class Interface:
     '''Interface of AI Completer'''
     def __init__(self, user:User, namespace:Optional[str] = None,id:uuid.UUID = uuid.uuid4(), config: config.Config = config.Config()):
@@ -276,6 +281,17 @@ class Interface:
 
         self.logger:log.Logger = log.getLogger("interface", ['%s - %s' % (self.namespace.name, str(self._id))])
         '''Logger of Interface'''
+
+# Due to the variable parameter of the constructor, this check is not available
+#     def __init_subclass__(cls) -> None:
+#         # Check the constructor
+#         if not set(('config', 'id')) <= set(cls.__init__.__annotations__):
+#             warnings.warn(
+# """
+# The constructor of %s should have a format like this:
+# def __init__(self, config:Config, id:uuid.UUID = uuid.uuid4()):
+# """ % cls.__name__
+#             , SyntaxWarning, stacklevel=2)
 
     @property
     def data(self):

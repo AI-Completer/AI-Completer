@@ -2,6 +2,7 @@
 This is an authority module, which is used to manage the authority of the user.
 '''
 from typing import Any
+import uuid
 
 import aicompleter.session as session
 from .. import *
@@ -19,7 +20,7 @@ class AuthorInterface(Interface):
     Authority Interface
     This will inject into the command call to check the authority of the user
     '''
-    def __init__(self, config:Config = Config()) -> None:
+    def __init__(self, config:Config = Config(), id:uuid.UUID = uuid.uuid4()) -> None:
         super().__init__(
             User(name='authority',description='Authority Interface',in_group='system'),
             namespace='authority',
@@ -29,7 +30,8 @@ class AuthorInterface(Interface):
                     'cmd': 'ask',
                     'format': '{{"content": "The {src} want to use {cmd}, the parameter is {param}, do you allow it?(y/n)"}}',
                 }
-            })
+            }),
+            id = id,
         )
 
     async def hook(self, event:events.Event, session: Session, message: Message) -> None:

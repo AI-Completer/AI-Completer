@@ -139,7 +139,7 @@ async def main():
                 graph.add(authority_interface, console_interface)
 
             # Release the memory
-            del ai_name, ai_cls, ai_param, ai_, console_interface
+            del ai_name, ai_cls, ai_param, ai_
 
             for interface_name in args.include:
                 if interface_name not in __Int_map__:

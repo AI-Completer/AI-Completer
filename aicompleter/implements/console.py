@@ -20,9 +20,8 @@ class ConsoleInterface(interface.Interface):
             name="console",
             in_group="user",
             all_groups={"user","command"},
-            config = config,
         )
-        super().__init__(user,id = id, namespace="console")
+        super().__init__(user,id = id, namespace="console", config=config)
 
         self.commands.add(
             interface.Command(

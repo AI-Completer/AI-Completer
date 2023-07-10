@@ -97,5 +97,15 @@ except Exception as e:
     logger.critical('Unexception:' + str(e))
     sys.exit(2)
 
+# Add default system arguments if not exists
+oldargv = sys.argv
+if len(sys.argv) == 1:
+    # Add default arguments
+    sys.argv = ['aicompleter', '--config', 'config.json', 'helper', '--enable-agent', '--include','pythoncode','--include','searcher']
+    # TODO: Get available ai model
+
 # Launch the main program
 runpy.run_module('aicompleter', run_name='__main__', alter_sys=True)
+
+# Restore sys.argv
+sys.argv = oldargv

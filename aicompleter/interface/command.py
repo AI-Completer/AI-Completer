@@ -346,9 +346,9 @@ class Command:
         if bool(config.varibles['disable_memory']) == False:
             # Add Memory
             session._memory.put(MemoryItem(
-                vertex=session._vertex_model.transform_text(message.content.pure_text),
+                content=message.content.text,
                 class_=f"cmd-{self.cmd}",
-                data=message.content.pure_text,
+                data=message.content.text,
             ))
         
         if self.callback is not None:

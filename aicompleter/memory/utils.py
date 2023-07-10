@@ -1,8 +1,11 @@
 
 from typing import Any, Optional, TypeVar
+
+import numpy as np
 import sentence_transformers as st
 import torch
 from torch.types import Device
+
 from .base import *
 
 Model = st.SentenceTransformer
@@ -39,35 +42,3 @@ def getMemoryItem(text:str, data:Any, class_:str = 'default'):
     return MemoryItem(vertex=VectexTransformer(st.SentenceTransformer('distilbert-base-nli-mean-tokens')).transform_text(text),
                     class_=class_,
                     data=data)
-
-@attr.s
-class MemoryConfigure:
-    '''
-    Configure of the memory
-    '''
-    factory: type = attr.ib(default=Memory)
-    'The factory of the memory'
-    factory_args: tuple = attr.ib(default=(), validator=attr.validators.instance_of(tuple))
-    'The args of the factory'
-    factory_kwargs: dict = attr.ib(default={}, validator=attr.validators.instance_of(dict))
-    'The kwargs of the factory'
-    vertex_model: Model = attr.ib(factory=lambda : st.SentenceTransformer('paraphrase-MiniLM-L6-v2'), validator=attr.validators.instance_of(Model))
-    'The vertex model of the memory'
-
-    initial_memory: Optional[Memory] = attr.ib(default=None)
-    'The initial memory of the memory'
-
-    def __attrs_post_init__(self) -> None:
-        if self.initial_memory is None:
-            self.initial_memory = self.factory(*self.factory_args, **self.factory_kwargs)
-    
-    @factory.validator
-    def check_factory(self, attribute: str, value: type) -> None:
-        if not issubclass(value, Memory):
-            raise ValueError(f"Factory must be a subclass of Memory.")
-
-    # Check the type of the initial memory
-    @initial_memory.validator
-    def check_initial_memory(self, attribute: str, value: Optional[Memory]) -> None:
-        if value != None and self.factory != value.__class__ and self.factory != None:
-            raise ValueError(f"Initial memory must be {self.factory.__name__}.")

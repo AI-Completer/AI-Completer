@@ -7,24 +7,23 @@ from .base import (
     MemoryItem,
     Query,
     Memory,
-    MemoryClass,
-)
-
-from .utils import (
-    Model,
-    VectexTransformer,
-    getMemoryItem,
+    MemoryCategory,
     MemoryConfigure,
 )
 
-if bool(config.varibles['disable_faiss']) == False:
-    from .faissimp import (
-        FaissMemory,
-    )
+# from .utils import (
+#     Model,
+#     VectexTransformer,
+#     getMemoryItem,
+# )
+
+# if bool(config.varibles['disable_faiss']) == False:
+# from .faissimp import (
+#     FaissMemory,
+# )
 
 from .history import (
     HistoryFile,
 )
 
 del config
-

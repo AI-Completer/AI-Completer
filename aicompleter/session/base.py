@@ -157,8 +157,6 @@ class Session:
             memory = memory or MemoryConfigure()
             self._memory:Memory = memory.initial_memory or memory.factory(*memory.factory_args, **memory.factory_kwargs)
             '''Memory'''
-            self._vertex_model:VectexTransformer = VectexTransformer(memory.vertex_model)
-            '''Vertex model'''
         else:
             if memory is not None:
                 raise RuntimeError("Memory is disabled")
@@ -240,6 +238,13 @@ class Session:
             if task.done() or task.cancelled():
                 self._running_tasks.remove(task)
 
+    def save_memory(self, path:str):
+        '''Save memory to file.'''
+        if bool(config.varibles['disable_memory']) == False:
+            self._memory.save(path)
+        else:
+            raise RuntimeError("Memory is disabled")
+
 @attr.s(auto_attribs=True, kw_only=True)
 class Message:
     '''A normal message from the Interface.'''
@@ -308,7 +313,7 @@ class Message:
         }
     
     @staticmethod
-    def __from_json__(self, data:dict):
+    def __from_json__(data:dict):
         # TODO: add session
         return Message(
             content = MultiContent(data['content']),

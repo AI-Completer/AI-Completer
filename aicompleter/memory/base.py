@@ -3,6 +3,7 @@ Base Class for abstracting memory layer
 This provide a vertex database interface for the project
 '''
 from __future__ import annotations
+from ast import Not
 
 import json
 import time
@@ -11,32 +12,30 @@ from abc import abstractmethod
 from typing import Any, Callable, Iterable, Iterator, Optional, Self, overload
 
 import attr
-import numpy as np
 
-
-class MemoryClass:
+class MemoryCategory:
     '''
-    Memory Class
+    Memory Category
     '''
-    def __init__(self, class_: str) -> None:
-        self.class_ = class_
+    def __init__(self, category: str) -> None:
+        self.category = category
 
     def __eq__(self, o: object) -> bool:
         if isinstance(o, str):
-            return self.class_ == o
-        elif isinstance(o, MemoryClass):
-            return self.class_ == o.class_
+            return self.category == o
+        elif isinstance(o, MemoryCategory):
+            return self.category == o.category
         else:
             return False
         
     def __str__(self) -> str:
-        return self.class_
+        return self.category
     
     def __repr__(self) -> str:
-        return f"MemoryClass({self.class_})"
+        return f"MemoryClass({self.category})"
     
     def __hash__(self) -> int:
-        return hash(self.class_)
+        return hash(self.category)
 
 @attr.s
 class MemoryItem:
@@ -45,23 +44,23 @@ class MemoryItem:
     '''
     id: uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
     'The unique id of the item'
-    vertex: np.ndarray = attr.ib(factory=np.array)
-    'The vertex of the item'
-    class_: MemoryClass = attr.ib(default=MemoryClass('default'), converter=MemoryClass)
-    'The class of the item, usually used for classification for different types of items'
+    content: str = attr.ib(validator=attr.validators.instance_of(str))
+    'The content of the item, this will be encoded into vertex, if possible'
+    category: MemoryCategory = attr.ib(default=MemoryCategory('default'), converter=MemoryCategory)
+    'The category of the item, usually used for classification for different types of items'
     data: Any = attr.ib(default=None)
     'The data of the item'
-    timestamp: float = attr.ib(factory=time.time, converter=float)
+    timestamp: float = attr.ib(factory=time.time, validator=float)
     'The timestamp of the item'
 
     @staticmethod
-    def from_dict(self, src: dict) -> Self:
+    def from_dict(src: dict) -> Self:
         '''
         Get a MemoryItem from a dict
         '''
         ret = MemoryItem(id=uuid.UUID(src['id']),
-                        vertex=np.array(src['vertex']),
-                        class_=MemoryClass(src['class']),
+                        content=src['content'],
+                        category=MemoryCategory(src['category']),
                         timestamp=src['timestamp'])
         if 'data' in src:
             ret.data = src['data']
@@ -78,8 +77,8 @@ class MemoryItem:
         '''
         ret = {
             'id': self.id.hex,
-            'vertex': self.vertex.tolist(),
-            'class': self.class_.class_,
+            'content': self.content,
+            'category': self.category.category,
             'timestamp': self.timestamp,
         }
         if self.data == None:
@@ -101,8 +100,8 @@ class Query:
     '''
     Query
     '''
-    vertex: np.ndarray = attr.ib(converter=np.array)
-    'The vertex of the query'
+    content:str = attr.ib(validator=attr.validators.instance_of(str))
+    'The content of the query'
     class_: Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
     'The class of the query, usually used for classification for different types of items'
     limit: int = attr.ib(default=10, validator=attr.validators.instance_of(int), converter=int)
@@ -174,4 +173,48 @@ class Memory:
         '''
         Get all memory items
         '''
-        pass
+        raise NotImplementedError(f"Class {self.__class__.__name__} does not support all method")
+
+    @abstractmethod
+    def save(self, path:str) -> None:
+        '''
+        Save the memory to a file
+        '''
+        raise NotImplementedError(f"Class {self.__class__.__name__} does not support save method")
+    
+    @abstractmethod
+    @staticmethod
+    def load(path:str) -> Self:
+        '''
+        Load the memory from a file
+        '''
+        raise NotImplementedError(f"Class {__class__.__name__} does not support load method")
+
+@attr.s(auto_attribs=True)
+class MemoryConfigure:
+    '''
+    Configure of the memory
+    '''
+    factory: type = attr.ib(default=Memory)
+    'The factory of the memory'
+    factory_args: tuple = attr.ib(default=(), validator=attr.validators.instance_of(tuple))
+    'The args of the factory'
+    factory_kwargs: dict = attr.ib(default={}, validator=attr.validators.instance_of(dict))
+    'The kwargs of the factory'
+    initial_memory: Optional[Memory] = attr.ib(default=None)
+    'The initial memory of the memory'
+
+    def __attrs_post_init__(self) -> None:
+        if self.initial_memory is None:
+            self.initial_memory = self.factory(*self.factory_args, **self.factory_kwargs)
+    
+    @factory.validator
+    def check_factory(self, attribute: str, value: type) -> None:
+        if not issubclass(value, Memory):
+            raise ValueError(f"Factory must be a subclass of Memory.")
+
+    # Check the type of the initial memory
+    @initial_memory.validator
+    def check_initial_memory(self, attribute: str, value: Optional[Memory]) -> None:
+        if value != None and self.factory != value.__class__ and self.factory != None:
+            raise ValueError(f"Initial memory must be {self.factory.__name__}.")

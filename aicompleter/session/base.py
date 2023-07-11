@@ -13,14 +13,13 @@ import aiohttp
 import attr
 
 import aicompleter
+from aicompleter import memory
 import aicompleter.session as session
 from aicompleter import config, log
 from aicompleter.config import Config, EnhancedDict
 
 if bool(config.varibles['disable_memory']) == False:
-    from aicompleter.memory.utils import MemoryConfigure
-    from aicompleter.memory import (Memory, MemoryItem, VectexTransformer,
-                                    getMemoryItem)
+    from aicompleter.memory import (Memory, MemoryItem, MemoryConfigure)
 
 Handler = TypeVar('Handler', bound='aicompleter.handler.Handler')
 User = TypeVar('User', bound='aicompleter.interface.User')
@@ -131,7 +130,7 @@ class MessageStatus(enum.Enum):
 
 class Session:
     '''Session'''
-    def __init__(self, handler:Handler, memory:Optional['MemoryConfigure'] = None) -> None:
+    def __init__(self, handler:Handler, memory:Optional[MemoryConfigure] = None) -> None:
         self.create_time: float = time.time()
         '''Create time'''
         # self.last_used: float = self.create_time
@@ -152,14 +151,13 @@ class Session:
         '''Data'''
         self._running_tasks:list[asyncio.Task] = []
         '''Running tasks'''
-        
-        if bool(config.varibles['disable_memory']) == False:
-            memory = memory or MemoryConfigure()
-            self._memory:Memory = memory.initial_memory or memory.factory(*memory.factory_args, **memory.factory_kwargs)
-            '''Memory'''
-        else:
-            if memory is not None:
-                raise RuntimeError("Memory is disabled")
+
+        from ..memory import MemoryConfigure, JsonMemory
+
+        memory = memory or MemoryConfigure(factory=JsonMemory)
+        self._memory:Memory = memory.initial_memory or memory.factory(*memory.factory_args, **memory.factory_kwargs)
+        '''Memory'''
+            
         self.logger:log.Logger=log.Logger('session')
         '''Logger'''
         formatter = log.Formatter()
@@ -238,12 +236,13 @@ class Session:
             if task.done() or task.cancelled():
                 self._running_tasks.remove(task)
 
-    def save_memory(self, path:str):
+    async def save_memory(self, path:str):
         '''Save memory to file.'''
-        if bool(config.varibles['disable_memory']) == False:
-            self._memory.save(path)
-        else:
-            raise RuntimeError("Memory is disabled")
+        memoryfile = memory.MemoryFile()
+        memoryfile.set('session','session', self._memory)
+        for interface in self.in_handler._interfaces:
+            memoryfile.set(interface.user.name, f'interface.{interface.id.hex}',await interface.getMemory(self))
+        memoryfile.save(path)
 
 @attr.s(auto_attribs=True, kw_only=True)
 class Message:

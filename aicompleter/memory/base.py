@@ -3,7 +3,6 @@ Base Class for abstracting memory layer
 This provide a vertex database interface for the project
 '''
 from __future__ import annotations
-from ast import Not
 
 import json
 import time
@@ -37,24 +36,24 @@ class MemoryCategory:
     def __hash__(self) -> int:
         return hash(self.category)
 
-@attr.s
+@attr.s(auto_attribs=True)
 class MemoryItem:
     '''
     Memory Item
     '''
-    id: uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
-    'The unique id of the item'
     content: str = attr.ib(validator=attr.validators.instance_of(str))
     'The content of the item, this will be encoded into vertex, if possible'
+    id: uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
+    'The unique id of the item'
     category: MemoryCategory = attr.ib(default=MemoryCategory('default'), converter=MemoryCategory)
     'The category of the item, usually used for classification for different types of items'
     data: Any = attr.ib(default=None)
     'The data of the item'
-    timestamp: float = attr.ib(factory=time.time, validator=float)
+    timestamp: float = attr.ib(factory=time.time, validator=attr.validators.instance_of(float))
     'The timestamp of the item'
 
     @staticmethod
-    def from_dict(src: dict) -> Self:
+    def from_json(src: dict) -> Self:
         '''
         Get a MemoryItem from a dict
         '''
@@ -70,8 +69,7 @@ class MemoryItem:
                 pass
         return ret
     
-    @classmethod
-    def to_dict(self) -> dict:
+    def to_json(self) -> dict:
         '''
         Get a dict from a MemoryItem
         '''
@@ -174,21 +172,42 @@ class Memory:
         Get all memory items
         '''
         raise NotImplementedError(f"Class {self.__class__.__name__} does not support all method")
+    
+    @staticmethod
+    @abstractmethod
+    def from_json(src: dict) -> Self:
+        '''
+        Get a memory from a dict
+        When not implemented, this will return a empty memory
+        '''
+        return Memory()
+    
+    @abstractmethod
+    def to_json(self) -> dict | list:
+        '''
+        Convert the memory to a dict
+        When not implemented, this will return a empty dict
+        '''
+        return {}
 
     @abstractmethod
     def save(self, path:str) -> None:
         '''
         Save the memory to a file
+        You can modify this function to support other file format
         '''
-        raise NotImplementedError(f"Class {self.__class__.__name__} does not support save method")
+        with open(path, 'w') as f:
+            json.dump(self.to_json(), f, ensure_ascii=False, indent=4)
     
-    @abstractmethod
     @staticmethod
     def load(path:str) -> Self:
         '''
         Load the memory from a file
+        You can modify this function to support other file format
         '''
-        raise NotImplementedError(f"Class {__class__.__name__} does not support load method")
+        with open(path, 'r') as f:
+            data = json.load(f)
+            return Memory.from_json(data)
 
 @attr.s(auto_attribs=True)
 class MemoryConfigure:

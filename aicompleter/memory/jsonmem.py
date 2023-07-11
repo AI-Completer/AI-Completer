@@ -3,7 +3,7 @@ JSON memory
 '''
 
 import json
-from typing import Iterable, Iterator
+from typing import Iterable, Iterator, Self
 import uuid
 
 from aicompleter.memory.base import MemoryItem
@@ -14,7 +14,7 @@ class JsonMemory(Memory):
     Json Memory
     '''
     def __init__(self):
-        self._record:map[uuid.UUID] = {}
+        self._record:dict[uuid.UUID, MemoryItem] = {}
 
     def get(self, id: uuid.UUID) -> MemoryItem:
         '''
@@ -49,27 +49,19 @@ class JsonMemory(Memory):
         '''
         return self._record.values()
     
-    def save(self, path: str) -> None:
+    def to_json(self) -> list:
         '''
-        Save the memory to a file
+        Convert to json format
         '''
-        items = self.all()
-        # Sort by timestamp
-        items = sorted(items, key=lambda x: x.timestamp)
-        # Convret to dict
-        items = [i.to_dict() for i in items]
-        # Save
-        with open(path, 'w') as f:
-            json.dump(items, f)
+        return [item.to_json() for item in self._record.values()]
     
     @staticmethod
-    def load(path: str) -> Memory:
+    def from_json(data: list) -> Self:
         '''
-        Load the memory from a file
+        Load from json format
         '''
         ret = JsonMemory()
-        with open(path, 'r') as f:
-            data = json.load(f)
-            for item in data:
-                ret.put(MemoryItem.from_dict(item))
+        for item in data:
+            ret.put(MemoryItem.from_json(item))
         return ret
+

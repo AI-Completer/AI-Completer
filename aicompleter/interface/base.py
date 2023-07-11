@@ -9,6 +9,7 @@ from typing import Optional, overload
 import warnings
 
 import attr
+from aicompleter import memory
 
 import aicompleter.session as session
 from aicompleter.namespace import Namespace
@@ -273,6 +274,7 @@ class Interface:
         utils.typecheck(id, uuid.UUID)
         self._id:uuid.UUID = id
         '''ID'''
+
         self.namespace:Namespace = Namespace(
             name=namespace,
             description="Interface %s" % str(self._id),
@@ -331,9 +333,11 @@ class Interface:
                 if j == cmd:
                     return i
         return None
-
+    
     async def init(self) -> None:
-        '''Initial function for Interface'''
+        '''
+        Initial function for Interface
+        '''
         self.logger.debug("Interface %s initializing" % self.id)
 
     async def final(self) -> None:
@@ -349,6 +353,10 @@ class Interface:
     async def session_final(self,session:session.Session) -> None:
         '''Finial function for Session'''
         pass
+    
+    async def getMemory(self, session:session.Session) -> memory.Memory:
+        '''Get the memory of the interface'''
+        return memory.Memory()
 
     def getconfig(self, session:Optional[session.Session] = None) -> Config:
         '''
@@ -394,4 +402,3 @@ class Interface:
             *args,
             **kwargs
         ))
-

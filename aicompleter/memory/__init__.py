@@ -22,8 +22,12 @@ from .base import (
 #     FaissMemory,
 # )
 
+from .jsonmem import (
+    JsonMemory,
+)
+
 from .history import (
-    HistoryFile,
+    MemoryFile,
 )
 
 del config

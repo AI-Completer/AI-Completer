@@ -6,6 +6,8 @@ import copy
 import uuid
 from typing import Generator, Iterator, Optional, overload
 
+from aicompleter import memory
+
 from . import error, events, interface, log, session
 from .config import Config
 from .interface import Command, Interface, User, Group, UserSet, GroupSet
@@ -304,23 +306,17 @@ class Handler:
             if i.closed:
                 self._running_sessions.remove(i)
 
-    @overload
-    async def new_session(self, interface:Interface) -> session.Session:
-        pass
-
-    @overload
-    async def new_session(self) -> session.Session:
-        pass
-
     async def new_session(self, 
                           interface:Optional[Interface] = None,
-                          config:Optional[Config] = None) -> session.Session:
+                          config:Optional[Config] = None,
+                          memoryConfigure:Optional[memory.MemoryConfigure] = None) -> session.Session:
         '''
         Create a new session, will call all interfaces' session_init method
         :param interface:Interface, optional, the interface to set as src_interface
         :param config:Config, optional, the config to set as session.config
+        :param memoryConfigure:MemoryConfigure, optional, the memory configure to set as session.memoryConfigure
         '''
-        ret = session.Session(self)
+        ret = session.Session(self, memoryConfigure)
         self.logger.debug("Creating new session %s", ret.id)
         if interface:
             if not isinstance(interface, Interface):

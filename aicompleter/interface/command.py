@@ -347,7 +347,7 @@ class Command:
             # Add Memory
             session._memory.put(MemoryItem(
                 content=message.content.text,
-                class_=f"cmd-{self.cmd}",
+                category=f"cmd-{self.cmd}",
                 data=message.content.text,
             ))
         

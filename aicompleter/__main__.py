@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import importlib
 import os
+import traceback
 
 from . import config
 from .config import Config
@@ -24,6 +25,7 @@ An AI assistant to help you complete your work
 parser = argparse.ArgumentParser(description=__help__)
 parser.add_argument('--debug', action='store_true', help='Enable debug mode, default: False, if the environment variable DEBUG is set to True, this option will be ignored')
 parser.add_argument('--config', type=str, default='config.json', help='Specify the config file, default: config.json')
+parser.add_argument('--memory', type=str, default='memory.json', help='Specify the memory file, default: memory.json')
 parser.add_argument('--disable-memory', action='store_true', help='Disable memory, default: False', dest='disable_memory')
 parser.add_argument('--disable-faiss', action='store_true', help='Disable faiss, default: False', dest='disable_faiss')
 subparsers = parser.add_subparsers(dest='subcommand', help='subcommands', description='subcommands, including:\n\ttalk: Talk with the AI\n\thelper: The helper of AI Completer, this will launcher a AI assistant to help you solve the problem')
@@ -76,6 +78,7 @@ if args.model:
             raise ValueError(f"Invalid AI: {args.ai}")
 
 # After the initialization of the arguments and global configuration, we can now import the modules and do the real work
+import json
 from aicompleter import *
 from aicompleter.implements import ConsoleInterface
 from aicompleter.utils import ainput, aprint
@@ -89,7 +92,11 @@ __Int_map__ = {
     'searcher': (implements.SearchInterface, {'config':config_['bingai']}),
 }
 
+handler_ = Handler(config_)
+new_session:Session = None
+
 async def main():
+    global new_session
     # Analyse args
     logger.info("Start Executing")
     match args.subcommand:
@@ -103,22 +110,20 @@ async def main():
             ai_ = ai_cls(**ai_param)
             ai_interface = ai.ChatInterface(ai=ai_, namespace=ai_name)
             con_interface = ConsoleInterface()
-            handler_ = Handler(config_)
             await handler_.add_interface(ai_interface, con_interface)
-            session_ = await handler_.new_session()
+            new_session = await handler_.new_session()
 
             usercontent = None
             await aprint("Please Start Your Conversation")
             while True:
                 usercontent = await ainput(">>> ")
-                ret:str = await session_.asend(Message(
+                ret:str = await new_session.asend(Message(
                     content = usercontent,
                     cmd = 'ask',
                     dest_interface=ai_interface,
                 ))
                 await aprint(ret)
         case 'helper':
-            _handler = Handler(config_)
             ai_name = args.ai
             if ai_name not in __AI_map__:
                 logger.critical(f"AI {ai_name} not found.")
@@ -180,8 +185,8 @@ async def main():
                     return
                 graph.add(ai_interface, the_interface)
 
-            await graph.setup(_handler)
-            new_session = await _handler.new_session()
+            await graph.setup(handler_)
+            new_session = await handler_.new_session()
 
             ret = await new_session.asend(Message(
                 content = {
@@ -223,6 +228,8 @@ except KeyboardInterrupt:
     logger.critical("KeyboardInterrupt")
 except BaseException as e:
     logger.critical(f"Unexception: {e}")
+    if logger.isEnabledFor(log.DEBUG):
+        traceback.print_exc()
 finally:
     if not loop.is_closed():
         max_try = 10
@@ -237,8 +244,28 @@ finally:
 
         if try_time >= max_try:
             logger.critical("Force Quit")
-        # Stop check_task
-        check_task.cancel()
-        loop.run_until_complete(check_task)
+        else:
+            # Stop check_task
+            check_task.cancel()
+            loop.run_until_complete(check_task)
         loop.close()
+
+if config.varibles['disable_memory'] == False:
+    async def save():
+        memory = new_session.memory
+        ret = memory.serialize()
+        ret['interfaces'] = []
+        for interface in handler_.interfaces:
+            ret['interfaces'].append(interface.to_json(new_session))
+        with open(args.memory, 'w') as f:
+            json.dump(ret, f, ensure_ascii=False, indent=4)
+        logger.debug("Memory Saved")
+
+    try:
+        asyncio.run(save())
+    except Exception as e:
+        logger.critical(f"Exception when saving memory: {e}")
+        if logger.isEnabledFor(log.DEBUG):
+            traceback.print_exc()
+
 logger.debug("Loop Closed")

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Optional, TypeVar
+from aicompleter import memory, session
 
 import aicompleter.session as session
 from aicompleter import *
@@ -59,13 +60,13 @@ class ChatInterface(TransformerInterface):
 
     async def session_init(self, session: Session):
         await super().session_init(session)
-        session.extra[f'{self.namespace.name}.conversation'] = self.ai.new_conversation(user=session.id.hex)
+        self.getdata(session)['conversation'] = self.ai.new_conversation(user=session.id.hex)
 
     async def set_conversation(self, session: Session, conversation:Conversation):
         '''
         Set the conversation for ask command
         '''
-        session.extra[f'{self.namespace.name}.conversation'] = conversation
+        self.getdata(session)['conversation'] = conversation
     
     # async def generate(self, session:Session, message:Message):
     #     '''
@@ -107,3 +108,10 @@ class ChatInterface(TransformerInterface):
 
     def __hash__(self):
         return hash(self.id)
+
+    def to_json(self, session: Session) -> dict:
+        ret = super().to_json(session)
+        conversation:Conversation = self.getdata(session)['conversation']
+        ret['conversation'] = conversation.generate_json()
+        return ret
+    

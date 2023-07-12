@@ -171,5 +171,8 @@ config.toml
 # Working directory
 workspace/
 
+# Memory file
+memory.json
+
 # Temporary test scripts
 test_*.py

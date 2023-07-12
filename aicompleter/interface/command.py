@@ -5,24 +5,23 @@ from __future__ import annotations
 
 import asyncio
 import copy
-import enum
 import functools
 import json
 import os
-import re
 from typing import (Any, Callable, Coroutine, Generator, Iterable, Iterator,
                     Optional, Self, TypeVar, overload)
 
 import attr
 
 import aicompleter
+from aicompleter.common import AttrJSONSerializable, JSONSerializable
 import aicompleter.error as error
 from aicompleter.session.base import MultiContent
 
 from .. import config, log, session, utils
 
 if bool(config.varibles['disable_memory']) == False:
-    from aicompleter.memory.base import MemoryItem
+    from ..memory.base import MemoryItem
 
 Interface = TypeVar('Interface', bound='aicompleter.interface.Interface')
 User = TypeVar('User', bound='aicompleter.interface.User')
@@ -30,7 +29,7 @@ Group = TypeVar('Group', bound='aicompleter.interface.Group')
 Handler = TypeVar('Handler', bound='aicompleter.handler.Handler')
 
 @attr.s(auto_attribs=True,frozen=True)
-class CommandParamElement:
+class CommandParamElement(AttrJSONSerializable):
     '''Command Parameter Element'''
     name:str = ""
     '''Name of the parameter'''
@@ -49,7 +48,7 @@ class CommandParamElement:
     tooltip:str = ""
     '''Tooltip of the parameter'''
 
-    def __to_json__(self):
+    def serialize(self):
         return {
             "name":self.name,
             "type":self.type.__name__ if isinstance(self.type,type) else '',
@@ -60,7 +59,8 @@ class CommandParamElement:
         }
     
     @staticmethod
-    def __from_json__(data:dict):
+    def deserialize(data:dict):
+        raise NotImplementedError("CommandParamElement.deserialize is not implemented")
         return CommandParamElement(
             name=data['name'],
             type=eval(data['type']) if data['type'] else str,
@@ -78,7 +78,7 @@ class CommandParamElement:
         '''
         return f"<{self.type.__name__ if isinstance(self.type,type) else ''} {self.tooltip}{' = %s' % str(self.default) if self.default else ''}>"
 
-class CommandParamStruct:
+class CommandParamStruct(JSONSerializable):
     '''
     Command Parameters Struct
     Used to test struct mainly
@@ -175,7 +175,7 @@ class CommandParamStruct:
         _set(self._struct, data)
         return data
     
-    def __to_json__(self):
+    def serialize(self):
         '''
         Get the json description of the struct
         '''
@@ -188,26 +188,26 @@ class CommandParamStruct:
             elif isinstance(struct, list):
                 return [_json(struct[0])]
             elif isinstance(struct, CommandParamElement):
-                return json.dumps(struct.__to_json__())
+                return struct.serialize()
             else:
                 raise TypeError("struct must be a dict, list or CommandParamElement instance")
-        return json.dumps(_json(self._struct))
+        return _json(self._struct)
     
     @staticmethod
-    def __from_json__(data:dict):
+    def deserialize(data:dict):
         '''
         Get the struct from json description
         '''
         def _from_json(struct:dict|list|str):
             if isinstance(struct, dict):
+                if 'name' in struct and isinstance(struct['name'], str):
+                    return CommandParamElement.deserialize(struct)
                 ret = {}
                 for key,value in struct.items():
                     ret[key] = _from_json(value)
                 return ret
             elif isinstance(struct, list):
                 return [_from_json(struct[0])]
-            elif isinstance(struct, str):
-                return CommandParamElement.__from_json__(json.loads(struct))
             else:
                 raise TypeError("struct must be a dict, list or CommandParamElement instance")
         return CommandParamStruct(_from_json(data))
@@ -234,7 +234,7 @@ class CommandParamStruct:
         return json.dumps(_json_description(self._struct))
     
 @attr.s(auto_attribs=True)
-class CommandAuthority:
+class CommandAuthority(AttrJSONSerializable):
     '''
     The authority of a command
     '''
@@ -246,6 +246,15 @@ class CommandAuthority:
     '''Whether the command can list file'''
     can_execute:bool = attr.ib(default=False)
     '''Whether the command can execute the operation system command'''
+
+    @staticmethod
+    def deserialize(data:dict) -> Self:
+        return CommandAuthority(
+            can_readfile=data.get('can_readfile',False),
+            can_writefile=data.get('can_writefile',False),
+            can_listfile=data.get('can_listfile',False),
+            can_execute=data.get('can_execute',False),
+        )
     
     def get_authority_level(self):
         '''Get the authority level'''
@@ -346,9 +355,13 @@ class Command:
         if bool(config.varibles['disable_memory']) == False:
             # Add Memory
             session._memory.put(MemoryItem(
-                vertex=session._vertex_model.transform_text(message.content.pure_text),
-                class_=f"cmd-{self.cmd}",
-                data=message.content.pure_text,
+                content=message.content.text,
+                category=f"command",
+                data={
+                    'cmd':self.cmd,
+                    'from':message.src_interface.id.hex if message.src_interface else None,
+                    'to': message.dest_interface.id.hex if message.dest_interface else None,
+                },
             ))
         
         if self.callback is not None:
@@ -400,30 +413,35 @@ class Command:
             self.overrideable, tuple(self.extra.items()), 
             self.expose))
     
-    def __to_json__(self):
+    def to_json(self):
         return {
             "cmd":self.cmd,
             "alias":list(self.alias),
             "description":self.description,
-            "format":self.format.__to_json__() if self.format else None,
+            "format":self.format.serialize() if self.format else None,
             "callable_groups":list(self.callable_groups),
             "overrideable":self.overrideable,
             "extra":self.extra,
             "expose":self.expose,
+            "authority":self.authority.serialize(),
+            "to_return":self.to_return,
+            "force_await":self.force_await,
+            "callback":self.callback.__qualname__ if self.callback else None,
+            "in_interface":self.in_interface.id.hex if self.in_interface else None,
         }
     
-    @staticmethod
-    def __from_json__(data:dict):
-        return Command(
-            cmd=data['cmd'],
-            alias=set(data.get('alias',[])),
-            description=data.get('description',''),
-            format=CommandParamStruct.__from_json__(data['format']) if data['format'] else None,
-            callable_groups=set(data.get('callable_groups',[])),
-            overrideable=bool(data.get('overrideable',False)),
-            extra=data.get('extra',{}),
-            expose=data.get('expose',True),
-        )
+    # @staticmethod
+    # def __from_json__(data:dict):
+    #     return Command(
+    #         cmd=data['cmd'],
+    #         alias=set(data.get('alias',[])),
+    #         description=data.get('description',''),
+    #         format=CommandParamStruct.__from_json__(data['format']) if data['format'] else None,
+    #         callable_groups=set(data.get('callable_groups',[])),
+    #         overrideable=bool(data.get('overrideable',False)),
+    #         extra=data.get('extra',{}),
+    #         expose=data.get('expose',True),
+    #     )
 
 class Commands(dict[str,Command]):
     '''

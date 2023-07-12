@@ -5,22 +5,23 @@ import enum
 import json
 import logging
 from os import name
+import pickle
 import time
 import uuid
-from typing import Any, Coroutine, Optional, TypeVar, overload
+from typing import Any, Coroutine, Optional, Self, TypeVar, overload
 
 import aiohttp
 import attr
 
 import aicompleter
+from aicompleter import memory
+from aicompleter.common import AsyncSaveable, Saveable
 import aicompleter.session as session
 from aicompleter import config, log
 from aicompleter.config import Config, EnhancedDict
 
 if bool(config.varibles['disable_memory']) == False:
-    from aicompleter.memory.utils import MemoryConfigure
-    from aicompleter.memory import (Memory, MemoryItem, VectexTransformer,
-                                    getMemoryItem)
+    from aicompleter.memory import (Memory, MemoryItem, MemoryConfigure)
 
 Handler = TypeVar('Handler', bound='aicompleter.handler.Handler')
 User = TypeVar('User', bound='aicompleter.interface.User')
@@ -131,7 +132,7 @@ class MessageStatus(enum.Enum):
 
 class Session:
     '''Session'''
-    def __init__(self, handler:Handler, memory:Optional['MemoryConfigure'] = None) -> None:
+    def __init__(self, handler:Handler, memory:Optional[MemoryConfigure] = None) -> None:
         self.create_time: float = time.time()
         '''Create time'''
         # self.last_used: float = self.create_time
@@ -152,16 +153,13 @@ class Session:
         '''Data'''
         self._running_tasks:list[asyncio.Task] = []
         '''Running tasks'''
-        
-        if bool(config.varibles['disable_memory']) == False:
-            memory = memory or MemoryConfigure()
-            self._memory:Memory = memory.initial_memory or memory.factory(*memory.factory_args, **memory.factory_kwargs)
-            '''Memory'''
-            self._vertex_model:VectexTransformer = VectexTransformer(memory.vertex_model)
-            '''Vertex model'''
-        else:
-            if memory is not None:
-                raise RuntimeError("Memory is disabled")
+
+        from ..memory import MemoryConfigure, JsonMemory
+
+        memory = memory or MemoryConfigure(factory=JsonMemory)
+        self._memory:Memory = memory.initial_memory or memory.factory(*memory.factory_args, **memory.factory_kwargs)
+        '''Memory'''
+            
         self.logger:log.Logger=log.Logger('session')
         '''Logger'''
         formatter = log.Formatter()
@@ -173,6 +171,11 @@ class Session:
         else:
             self.logger.setLevel(logging.INFO)
         self.logger.push(self.id.hex[:8])
+
+    @property
+    def memory(self) -> Memory:
+        '''Memory'''
+        return self._memory
 
     @property
     def id(self) -> uuid.UUID:
@@ -295,7 +298,7 @@ class Message:
     def __repr__(self) -> str:
         return f"Message({self.cmd}, {self.content.text}, {self.session.id}, {self.id})"
     
-    def __to_json__(self):
+    def to_json(self):
         return {
             'content': self.content.pure_text,
             'session': self.session.id.hex,
@@ -308,14 +311,14 @@ class Message:
         }
     
     @staticmethod
-    def __from_json__(self, data:dict):
+    def from_json(data:dict):
         # TODO: add session
         return Message(
             content = MultiContent(data['content']),
             session = None,
             id = uuid.UUID(data['id']),
             data = EnhancedDict(data['data']),
-            last_message = uuid.UUID(data['last_message']) if data['last_message'] is not None else None,
+            last_message = None,
             cmd = data['cmd'],
             src_interface = None,
             dest_interface = None,

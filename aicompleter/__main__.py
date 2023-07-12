@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import importlib
 import os
+import traceback
 
 from . import config
 from .config import Config
@@ -77,6 +78,7 @@ if args.model:
             raise ValueError(f"Invalid AI: {args.ai}")
 
 # After the initialization of the arguments and global configuration, we can now import the modules and do the real work
+import json
 from aicompleter import *
 from aicompleter.implements import ConsoleInterface
 from aicompleter.utils import ainput, aprint
@@ -227,7 +229,7 @@ except KeyboardInterrupt:
 except BaseException as e:
     logger.critical(f"Unexception: {e}")
     if logger.isEnabledFor(log.DEBUG):
-        logger.exception(e)
+        traceback.print_exc()
 finally:
     if not loop.is_closed():
         max_try = 10
@@ -251,7 +253,12 @@ finally:
 if config.varibles['disable_memory'] == False:
     async def save():
         memory = new_session.memory
-        memory.save(args.memory)
+        ret = memory.serialize()
+        ret['interfaces'] = []
+        for interface in handler_.interfaces:
+            ret['interfaces'].append(interface.to_json(new_session))
+        with open(args.memory, 'w') as f:
+            json.dump(ret, f, ensure_ascii=False, indent=4)
         logger.debug("Memory Saved")
 
     try:
@@ -259,6 +266,6 @@ if config.varibles['disable_memory'] == False:
     except Exception as e:
         logger.critical(f"Exception when saving memory: {e}")
         if logger.isEnabledFor(log.DEBUG):
-            logger.exception(e)
+            traceback.print_exc()
 
 logger.debug("Loop Closed")

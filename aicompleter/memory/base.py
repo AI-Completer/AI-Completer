@@ -12,7 +12,7 @@ from typing import Any, Callable, Iterable, Iterator, Optional, Self, overload
 
 import attr
 
-from ..common import AttrJSONSerializable, JSONSerializable, Saveable
+from ..common import AttrJSONSerializable, JSONSerializable, Saveable, Serializable
 
 class MemoryCategory:
     '''
@@ -69,6 +69,8 @@ class MemoryItem(AttrJSONSerializable):
                         timestamp=src['timestamp'])
         if 'data' in src:
             ret.data = src['data']
+            if isinstance(ret.data, (dict, list)):
+                return ret
             try:
                 ret.data = json.loads(ret.data)
                 if 'type' in ret.data and ret.data['type'] == 'memory':
@@ -90,11 +92,13 @@ class MemoryItem(AttrJSONSerializable):
         if self.data == None:
             return ret
         if isinstance(self.data, (dict, list)):
-            ret['data'] = json.dumps(self.data)
+            ret['data'] = self.data
             return ret
         try:
-            if hasattr(self.data, 'to_json'):
-                ret['data'] = json.dumps(self.data.to_json())
+            if issubclass(type(self.data), Serializable):
+                ret['data'] = self.data.serialize()
+            elif hasattr(self.data, 'to_json'):
+                ret['data'] = self.data.to_json()
             else:
                 ret['data'] = str(self.data)
         except AttributeError:

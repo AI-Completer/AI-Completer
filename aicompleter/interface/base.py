@@ -366,8 +366,7 @@ class Interface:
         '''Finial function for Session'''
         pass
     
-    @abstractmethod
-    async def getHistory(self, session:session.Session) -> dict:
+    def to_json(self, session:session.Session) -> dict:
         '''Get the history of the interface'''
         return {
             'type': 'history',
@@ -382,6 +381,7 @@ class Interface:
                 'all_groups': list(self.user.all_groups),
                 'support': list(self.user.support),
             },
+            'commands': [i.to_json() for i in self.commands],
         }
 
     def getconfig(self, session:Optional[session.Session] = None) -> Config:

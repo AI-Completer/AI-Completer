@@ -226,6 +226,8 @@ except KeyboardInterrupt:
     logger.critical("KeyboardInterrupt")
 except BaseException as e:
     logger.critical(f"Unexception: {e}")
+    if logger.isEnabledFor(log.DEBUG):
+        logger.exception(e)
 finally:
     if not loop.is_closed():
         max_try = 10
@@ -248,12 +250,15 @@ finally:
 
 if config.varibles['disable_memory'] == False:
     async def save():
-        await new_session.save_memory(args.memory)
+        memory = new_session.memory
+        memory.save(args.memory)
         logger.debug("Memory Saved")
 
     try:
         asyncio.run(save())
     except Exception as e:
         logger.critical(f"Exception when saving memory: {e}")
+        if logger.isEnabledFor(log.DEBUG):
+            logger.exception(e)
 
 logger.debug("Loop Closed")

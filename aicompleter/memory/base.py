@@ -12,7 +12,7 @@ from typing import Any, Callable, Iterable, Iterator, Optional, Self, overload
 
 import attr
 
-from ..common import Saveable
+from ..common import AttrJSONSerializable, JSONSerializable, Saveable
 
 class MemoryCategory:
     '''
@@ -39,7 +39,7 @@ class MemoryCategory:
         return hash(self.category)
 
 @attr.s(auto_attribs=True)
-class MemoryItem:
+class MemoryItem(AttrJSONSerializable):
     '''
     Memory Item
     '''
@@ -59,7 +59,7 @@ class MemoryItem:
     'The timestamp of the item'
 
     @staticmethod
-    def from_json(src: dict) -> Self:
+    def deserialize(src: dict) -> Self:
         '''
         Get a MemoryItem from a dict
         '''
@@ -77,7 +77,7 @@ class MemoryItem:
                 pass
         return ret
     
-    def to_json(self) -> dict:
+    def serialize(self) -> dict:
         '''
         Get a dict from a MemoryItem
         '''
@@ -113,7 +113,7 @@ class Query:
     limit: int = attr.ib(default=10, validator=attr.validators.instance_of(int), converter=int)
     'The limit of the query'
 
-class Memory(Saveable):
+class Memory(Saveable, JSONSerializable):
     '''
     Memory(Abstraction Layer)
     '''
@@ -181,30 +181,13 @@ class Memory(Saveable):
         '''
         raise NotImplementedError(f"Class {self.__class__.__name__} does not support all method")
 
-    @staticmethod
-    @abstractmethod
-    def from_json(src: dict) -> Self:
-        '''
-        Get a memory from a dict
-        When not implemented, this will return a empty memory
-        '''
-        raise NotImplementedError(f"Class {__class__.__name__} does not support from_json method")
-    
-    @abstractmethod
-    def to_json(self) -> dict:
-        '''
-        Convert the memory to a dict
-        When not implemented, this will return a empty memory dict
-        '''
-        raise NotImplementedError(f"Class {self.__class__.__name__} does not support to_json method")
-
     def save(self, path:str) -> None:
         '''
         Save the memory to a file
         You can modify this function to support other file format
         '''
         with open(path, 'w') as f:
-            json.dump(self.to_json(), f, ensure_ascii=False, indent=4)
+            json.dump(self.serialize(), f, ensure_ascii=False, indent=4)
     
     @staticmethod
     def load(path:str) -> Self:
@@ -214,7 +197,7 @@ class Memory(Saveable):
         '''
         with open(path, 'r') as f:
             data = json.load(f)
-            return Memory.from_json(data)
+            return Memory.deserialize(data)
 
 @attr.s(auto_attribs=True)
 class MemoryConfigure:

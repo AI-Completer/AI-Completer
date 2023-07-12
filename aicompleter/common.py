@@ -53,7 +53,7 @@ class AttrJSONSerializable(JSONSerializable):
     ATTR_ENABLE_TYPES = (
         int, float, str, bool, list, set, dict, tuple, type(None), bytes
     )
-    def to_json(self) -> dict:
+    def serialize(self) -> dict:
         def _handle(data:Any):
             if isinstance(data, JSONSerializable):
                 return data.to_json()
@@ -66,7 +66,8 @@ class AttrJSONSerializable(JSONSerializable):
         return {key: _handle(value) for key, value in self.__dict__.items()}
 
     @staticmethod
-    def from_json(src: dict) -> Self:
+    @abstractmethod
+    def deserialize(src: dict) -> Self:
         raise NotImplementedError('from_json is not implemented')
 
 class Saveable(ABC):

@@ -16,6 +16,7 @@ from typing import (Any, Callable, Coroutine, Generator, Iterable, Iterator,
 import attr
 
 import aicompleter
+from aicompleter.common import AttrJSONSerializable, JSONSerializable
 import aicompleter.error as error
 from aicompleter.session.base import MultiContent
 
@@ -30,7 +31,7 @@ Group = TypeVar('Group', bound='aicompleter.interface.Group')
 Handler = TypeVar('Handler', bound='aicompleter.handler.Handler')
 
 @attr.s(auto_attribs=True,frozen=True)
-class CommandParamElement:
+class CommandParamElement(AttrJSONSerializable):
     '''Command Parameter Element'''
     name:str = ""
     '''Name of the parameter'''
@@ -49,7 +50,7 @@ class CommandParamElement:
     tooltip:str = ""
     '''Tooltip of the parameter'''
 
-    def __to_json__(self):
+    def serialize(self):
         return {
             "name":self.name,
             "type":self.type.__name__ if isinstance(self.type,type) else '',
@@ -60,7 +61,7 @@ class CommandParamElement:
         }
     
     @staticmethod
-    def __from_json__(data:dict):
+    def deserialize(data:dict):
         return CommandParamElement(
             name=data['name'],
             type=eval(data['type']) if data['type'] else str,
@@ -78,7 +79,7 @@ class CommandParamElement:
         '''
         return f"<{self.type.__name__ if isinstance(self.type,type) else ''} {self.tooltip}{' = %s' % str(self.default) if self.default else ''}>"
 
-class CommandParamStruct:
+class CommandParamStruct(JSONSerializable):
     '''
     Command Parameters Struct
     Used to test struct mainly
@@ -175,7 +176,7 @@ class CommandParamStruct:
         _set(self._struct, data)
         return data
     
-    def __to_json__(self):
+    def serialize(self):
         '''
         Get the json description of the struct
         '''
@@ -188,13 +189,13 @@ class CommandParamStruct:
             elif isinstance(struct, list):
                 return [_json(struct[0])]
             elif isinstance(struct, CommandParamElement):
-                return json.dumps(struct.__to_json__())
+                return json.dumps(struct.serialize())
             else:
                 raise TypeError("struct must be a dict, list or CommandParamElement instance")
-        return json.dumps(_json(self._struct))
+        return _json(self._struct)
     
     @staticmethod
-    def __from_json__(data:dict):
+    def deserialize(data:dict):
         '''
         Get the struct from json description
         '''
@@ -207,7 +208,7 @@ class CommandParamStruct:
             elif isinstance(struct, list):
                 return [_from_json(struct[0])]
             elif isinstance(struct, str):
-                return CommandParamElement.__from_json__(json.loads(struct))
+                return CommandParamElement.deserialize(json.loads(struct))
             else:
                 raise TypeError("struct must be a dict, list or CommandParamElement instance")
         return CommandParamStruct(_from_json(data))
@@ -400,30 +401,30 @@ class Command:
             self.overrideable, tuple(self.extra.items()), 
             self.expose))
     
-    def __to_json__(self):
-        return {
-            "cmd":self.cmd,
-            "alias":list(self.alias),
-            "description":self.description,
-            "format":self.format.__to_json__() if self.format else None,
-            "callable_groups":list(self.callable_groups),
-            "overrideable":self.overrideable,
-            "extra":self.extra,
-            "expose":self.expose,
-        }
+    # def __to_json__(self):
+    #     return {
+    #         "cmd":self.cmd,
+    #         "alias":list(self.alias),
+    #         "description":self.description,
+    #         "format":self.format.__to_json__() if self.format else None,
+    #         "callable_groups":list(self.callable_groups),
+    #         "overrideable":self.overrideable,
+    #         "extra":self.extra,
+    #         "expose":self.expose,
+    #     }
     
-    @staticmethod
-    def __from_json__(data:dict):
-        return Command(
-            cmd=data['cmd'],
-            alias=set(data.get('alias',[])),
-            description=data.get('description',''),
-            format=CommandParamStruct.__from_json__(data['format']) if data['format'] else None,
-            callable_groups=set(data.get('callable_groups',[])),
-            overrideable=bool(data.get('overrideable',False)),
-            extra=data.get('extra',{}),
-            expose=data.get('expose',True),
-        )
+    # @staticmethod
+    # def __from_json__(data:dict):
+    #     return Command(
+    #         cmd=data['cmd'],
+    #         alias=set(data.get('alias',[])),
+    #         description=data.get('description',''),
+    #         format=CommandParamStruct.__from_json__(data['format']) if data['format'] else None,
+    #         callable_groups=set(data.get('callable_groups',[])),
+    #         overrideable=bool(data.get('overrideable',False)),
+    #         extra=data.get('extra',{}),
+    #         expose=data.get('expose',True),
+    #     )
 
 class Commands(dict[str,Command]):
     '''

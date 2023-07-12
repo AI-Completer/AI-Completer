@@ -109,20 +109,7 @@ class ChatInterface(TransformerInterface):
     def __hash__(self):
         return hash(self.id)
 
-    async def getMemory(self, session: Session) -> memory.Memory:
-        ret = memory.JsonMemory()
-        conversation:Conversation = session.data[f'{self.namespace}.conversation']
-        ret.put([memory.MemoryItem(
-            content=conversation.time,
-            category='time',
-        ), memory.MemoryItem(
-            content=conversation.id,
-            category='id',
-        ), memory.MemoryItem(
-            content=conversation.user,
-            category='user',
-        )])
-        ret.put(memory.MemoryItem(
-            content=conversation.messages[i].content,
-        ) for i in range(len(conversation.messages)))
-        return ret
+    async def getHistory(self, session: Session) -> dict:
+        ret = super().getHistory(session)
+        conversation:Conversation = self.getdata(session)['conversation']
+        ret['conversation'] = conversation.to_json()

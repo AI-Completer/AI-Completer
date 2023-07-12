@@ -12,6 +12,8 @@ from typing import Any, Callable, Iterable, Iterator, Optional, Self, overload
 
 import attr
 
+from ..common import Saveable
+
 class MemoryCategory:
     '''
     Memory Category
@@ -48,7 +50,11 @@ class MemoryItem:
     category: MemoryCategory = attr.ib(default=MemoryCategory('default'), converter=MemoryCategory)
     'The category of the item, usually used for classification for different types of items'
     data: Any = attr.ib(default=None)
-    'The data of the item'
+    '''
+    The data of the item
+    Could be dict or list, or any other type with to_json method
+    Note: When extracting data from a json file, the data will be a dict, list, string or a Memory object
+    '''
     timestamp: float = attr.ib(factory=time.time, validator=attr.validators.instance_of(float))
     'The timestamp of the item'
 
@@ -65,6 +71,8 @@ class MemoryItem:
             ret.data = src['data']
             try:
                 ret.data = json.loads(ret.data)
+                if 'type' in ret.data and ret.data['type'] == 'memory':
+                    ret.data = Memory.from_json(ret.data)
             except json.JSONDecodeError:
                 pass
         return ret
@@ -85,8 +93,8 @@ class MemoryItem:
             ret['data'] = json.dumps(self.data)
             return ret
         try:
-            if hasattr(self.data, 'to_dict'):
-                ret['data'] = json.dumps(self.data.to_dict())
+            if hasattr(self.data, 'to_json'):
+                ret['data'] = json.dumps(self.data.to_json())
             else:
                 ret['data'] = str(self.data)
         except AttributeError:
@@ -105,7 +113,7 @@ class Query:
     limit: int = attr.ib(default=10, validator=attr.validators.instance_of(int), converter=int)
     'The limit of the query'
 
-class Memory:
+class Memory(Saveable):
     '''
     Memory(Abstraction Layer)
     '''
@@ -172,7 +180,7 @@ class Memory:
         Get all memory items
         '''
         raise NotImplementedError(f"Class {self.__class__.__name__} does not support all method")
-    
+
     @staticmethod
     @abstractmethod
     def from_json(src: dict) -> Self:
@@ -180,17 +188,16 @@ class Memory:
         Get a memory from a dict
         When not implemented, this will return a empty memory
         '''
-        return Memory()
+        raise NotImplementedError(f"Class {__class__.__name__} does not support from_json method")
     
     @abstractmethod
-    def to_json(self) -> dict | list:
+    def to_json(self) -> dict:
         '''
         Convert the memory to a dict
-        When not implemented, this will return a empty dict
+        When not implemented, this will return a empty memory dict
         '''
-        return {}
+        raise NotImplementedError(f"Class {self.__class__.__name__} does not support to_json method")
 
-    @abstractmethod
     def save(self, path:str) -> None:
         '''
         Save the memory to a file

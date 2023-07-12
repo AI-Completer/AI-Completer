@@ -5,21 +5,22 @@ import copy
 import os
 import uuid
 from abc import abstractmethod
-from typing import Optional, overload
+from typing import Optional, Self, overload
 import warnings
 
 import attr
-from aicompleter import memory
+from .. import memory
+from ..common import AttrJSONSerializable
 
-import aicompleter.session as session
-from aicompleter.namespace import Namespace
+from .. import session
+from ..namespace import Namespace
 
 from .. import config, error, log, utils
 from .command import Command, Commands
 from ..config import Config
 
 @attr.s(auto_attribs=True, kw_only=True, hash=False)
-class User:
+class User(AttrJSONSerializable):
     '''User'''
     name:str = ""
     '''Name of the user'''
@@ -54,6 +55,17 @@ class User:
     
     def __attrs_post_init__(self):
         self.all_groups.add(self.in_group)
+
+    @staticmethod
+    def deserialize(src:dict) -> Self:
+        return User(
+            name=src['name'],
+            id=uuid.UUID(src['id']),
+            description=src['description'],
+            in_group=src['in_group'],
+            all_groups=set(src['all_groups']),
+            support=set(src['support']),
+        )
 
 class Group:
     '''
@@ -355,9 +367,22 @@ class Interface:
         pass
     
     @abstractmethod
-    async def getMemory(self, session:session.Session) -> memory.Memory:
-        '''Get the memory of the interface'''
-        return memory.Memory()
+    async def getHistory(self, session:session.Session) -> dict:
+        '''Get the history of the interface'''
+        return {
+            'type': 'history',
+            'subtype': 'interface',
+            'class': self.__class__.__qualname__,
+            'id': self.id.hex,
+            'user': {
+                'name': self.user.name,
+                'id': self.user.id.hex,
+                'description': self.user.description,
+                'in_group': self.user.in_group,
+                'all_groups': list(self.user.all_groups),
+                'support': list(self.user.support),
+            },
+        }
 
     def getconfig(self, session:Optional[session.Session] = None) -> Config:
         '''

@@ -49,19 +49,26 @@ class JsonMemory(Memory):
         '''
         return self._record.values()
     
-    def to_json(self) -> list:
+    def to_json(self) -> dict:
         '''
         Convert to json format
         '''
-        return [item.to_json() for item in self._record.values()]
+        return {
+            'type': 'memory',
+            'subtype': 'jsonmemory',
+            'data': [item.to_json() for item in self._record.values()],
+        }
     
     @staticmethod
-    def from_json(data: list) -> Self:
+    def from_json(data: dict) -> Self:
         '''
         Load from json format
         '''
+        if data['type'] != 'memory':
+            raise ValueError(f"Expect type 'memory', got '{data['type']}'")
+        if data['subtype'] != 'jsonmemory':
+            raise ValueError(f"Expect subtype 'jsonmemory', got '{data['subtype']}'")
         ret = JsonMemory()
-        for item in data:
+        for item in data['data']:
             ret.put(MemoryItem.from_json(item))
         return ret
-

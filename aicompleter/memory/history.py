@@ -6,10 +6,12 @@ import os
 import time
 from typing import Any, Iterator, Self
 
+from aicompleter.common import Saveable
+
 from .base import Memory, MemoryItem, Query
 from .. import utils
 
-class MemoryFile:
+class MemoryFile(Saveable):
     '''
     Memory File
     
@@ -75,8 +77,6 @@ class MemoryFile:
         '''
         Load from json
         '''
-        # TODO: verify these code
-
         ret = MemoryFile()
         ret._path_record = data['map']
         def __in_from_json(path, data):

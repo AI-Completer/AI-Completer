@@ -5,15 +5,17 @@ import enum
 import json
 import logging
 from os import name
+import pickle
 import time
 import uuid
-from typing import Any, Coroutine, Optional, TypeVar, overload
+from typing import Any, Coroutine, Optional, Self, TypeVar, overload
 
 import aiohttp
 import attr
 
 import aicompleter
 from aicompleter import memory
+from aicompleter.common import AsyncSaveable, Saveable
 import aicompleter.session as session
 from aicompleter import config, log
 from aicompleter.config import Config, EnhancedDict
@@ -241,14 +243,6 @@ class Session:
             if task.done() or task.cancelled():
                 self._running_tasks.remove(task)
 
-    async def save_memory(self, path:str):
-        '''Save memory to file.'''
-        memoryfile = memory.MemoryFile()
-        memoryfile.set('session','session', self._memory)
-        for interface in self.in_handler._interfaces:
-            memoryfile.set(interface.user.name, f'interface.{interface.id.hex}',await interface.getMemory(self))
-        memoryfile.save(path)
-
 @attr.s(auto_attribs=True, kw_only=True)
 class Message:
     '''A normal message from the Interface.'''
@@ -304,7 +298,7 @@ class Message:
     def __repr__(self) -> str:
         return f"Message({self.cmd}, {self.content.text}, {self.session.id}, {self.id})"
     
-    def __to_json__(self):
+    def to_json(self):
         return {
             'content': self.content.pure_text,
             'session': self.session.id.hex,
@@ -317,14 +311,14 @@ class Message:
         }
     
     @staticmethod
-    def __from_json__(data:dict):
+    def from_json(data:dict):
         # TODO: add session
         return Message(
             content = MultiContent(data['content']),
             session = None,
             id = uuid.UUID(data['id']),
             data = EnhancedDict(data['data']),
-            last_message = uuid.UUID(data['last_message']) if data['last_message'] is not None else None,
+            last_message = None,
             cmd = data['cmd'],
             src_interface = None,
             dest_interface = None,

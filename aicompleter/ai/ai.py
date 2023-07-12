@@ -4,11 +4,12 @@ import copy
 import time
 import uuid
 from abc import abstractmethod
-from typing import Any, Coroutine, Optional
+from typing import Any, Coroutine, Optional, Self
 
 import attr
+from ..common import JSONSerializable
 
-from aicompleter.config import Config
+from ..config import Config
 
 
 @attr.s(auto_attribs=True)
@@ -93,7 +94,7 @@ class Message:
         return f"{{content: {self.content}, role: {self.role}, id: {self.id}, user: {self.user}}}"
     
 @attr.s(auto_attribs=True)
-class FuncParam:
+class FuncParam(JSONSerializable):
     '''
     Parameter of function
     '''
@@ -116,9 +117,30 @@ class FuncParam:
         if not value.isidentifier():
             raise ValueError(
                 f"name must be a valid identifier, not {value}")
+        
+    def to_json(self):
+        return {
+            'name': self.name,
+            'description': self.description,
+            'type': self.type,
+            'default': self.default,
+            'enum': self.enum,
+            'required': self.required,
+        }
+    
+    @staticmethod
+    def from_json(data: dict[str, Any]) -> Self:
+        return FuncParam(
+            name=data['name'],
+            description=data['description'],
+            type=data['type'],
+            default=data['default'],
+            enum=data['enum'],
+            required=data['required'],
+        )
 
 @attr.s(auto_attribs=True)
-class Function:
+class Function(JSONSerializable):
     '''
     Function that called by AI,
     
@@ -138,6 +160,21 @@ class Function:
         if not value.isidentifier():
             raise ValueError(
                 f"name must be a valid identifier, not {value}")
+        
+    def to_json(self):
+        return {
+            'name': self.name,
+            'description': self.description,
+            'parameters': [param.to_json() for param in self.parameters],
+        }
+    
+    @staticmethod
+    def from_json(data: dict[str, Any]) -> Self:
+        return Function(
+            name=data['name'],
+            description=data['description'],
+            parameters=[FuncParam.from_json(param) for param in data['parameters']],
+        )
 
 @attr.s(auto_attribs=True)
 class Funccall:

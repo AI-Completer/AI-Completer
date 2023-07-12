@@ -354,6 +354,7 @@ class Interface:
         '''Finial function for Session'''
         pass
     
+    @abstractmethod
     async def getMemory(self, session:session.Session) -> memory.Memory:
         '''Get the memory of the interface'''
         return memory.Memory()

@@ -4,7 +4,6 @@ import copy
 import time
 import uuid
 from abc import abstractmethod
-from os import name
 from typing import Any, Coroutine, Optional
 
 import attr

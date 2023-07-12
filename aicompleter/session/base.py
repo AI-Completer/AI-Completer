@@ -171,6 +171,11 @@ class Session:
         self.logger.push(self.id.hex[:8])
 
     @property
+    def memory(self) -> Memory:
+        '''Memory'''
+        return self._memory
+
+    @property
     def id(self) -> uuid.UUID:
         '''ID'''
         return self._id

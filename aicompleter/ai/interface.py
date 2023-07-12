@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Optional, TypeVar
+from aicompleter import memory
 
 import aicompleter.session as session
 from aicompleter import *
@@ -107,3 +108,21 @@ class ChatInterface(TransformerInterface):
 
     def __hash__(self):
         return hash(self.id)
+
+    async def getMemory(self, session: Session) -> memory.Memory:
+        ret = memory.JsonMemory()
+        conversation:Conversation = session.data[f'{self.namespace}.conversation']
+        ret.put([memory.MemoryItem(
+            content=conversation.time,
+            category='time',
+        ), memory.MemoryItem(
+            content=conversation.id,
+            category='id',
+        ), memory.MemoryItem(
+            content=conversation.user,
+            category='user',
+        )])
+        ret.put(memory.MemoryItem(
+            content=conversation.messages[i].content,
+        ) for i in range(len(conversation.messages)))
+        return ret

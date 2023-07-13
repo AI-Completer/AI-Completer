@@ -5,7 +5,7 @@ import copy
 import os
 import uuid
 from abc import abstractmethod
-from typing import Optional, Self, overload
+from typing import Optional, Self, TypeVar, overload
 import warnings
 
 import attr
@@ -15,15 +15,20 @@ from ..common import AttrJSONSerializable
 from .. import session
 from ..namespace import Namespace
 
-from .. import config, error, log, utils
+from .. import config, error, log, utils, handler
 from .command import Command, Commands
 from ..config import Config
+
+Handler = TypeVar('Handler', bound='handler.Handler')
 
 @attr.s(auto_attribs=True, kw_only=True, hash=False)
 class User(AttrJSONSerializable):
     '''User'''
     name:str = ""
-    '''Name of the user'''
+    '''
+    Name of the user
+    If the name is empty, the user will be assigned a name by the handler
+    '''
     id:uuid.UUID = uuid.uuid4()
     '''ID of the user'''
     description:Optional[str] = None
@@ -278,7 +283,7 @@ class GroupSet:
 #      def __init__(self, config:Config, id:uuid.UUID = uuid.uuid4()):
 class Interface:
     '''Interface of AI Completer'''
-    def __init__(self, user:User, namespace:Optional[str] = None,id:uuid.UUID = uuid.uuid4(), config: config.Config = config.Config()):
+    def __init__(self,  namespace:str, user:User,id:uuid.UUID = uuid.uuid4(), config: config.Config = config.Config()):
         self._user = user
         '''Character of the interface'''
         self._closed:bool = False
@@ -346,10 +351,19 @@ class Interface:
                     return i
         return None
     
-    async def init(self) -> None:
+    async def init(self, in_handler:Handler) -> None:
         '''
         Initial function for Interface
         '''
+        if self._user == None:
+            self._user = in_handler.assign_user()
+        if self._user.name == "":
+            self._user = in_handler.assign_user(
+                description=self._user.description,
+                in_group=self._user.in_group,
+                all_groups=self._user.all_groups,
+                support=self._user.support,
+            )
         self.logger.debug("Interface %s initializing" % self.id)
 
     async def final(self) -> None:

@@ -112,7 +112,10 @@ class Handler:
         # User
         self._userset.clear()
         for i in self._interfaces:
-            self._userset.add(i.user)
+            if i.user.name not in self._userset:
+                self._userset.add(i.user)
+            elif i.user != self._userset[i.user.name]:
+                raise error.Conflict('interface user conflict', name=i.user.name, interface=self)
         # Group
         groupnames:set[str] = set()
         for i in self._userset:
@@ -151,6 +154,30 @@ class Handler:
     
     def get_executable_cmds(self, *args, **wargs) -> Generator[Command, None, None]:
         return self._namespace.get_executable(*args, **wargs)
+    
+    def assign_user(self, 
+                    description:Optional[str] = None, 
+                    in_group:Optional[str] = "",
+                    all_groups:Optional[set[str]] = set(),
+                    support:Optional[set[str]] = set()) -> User:
+        '''
+        Assign a new user
+        '''
+        def _random_name():
+            import random
+            import string
+            return ''.join(random.choice(string.ascii_letters) for i in range(10))
+        while True:
+            name = _random_name()
+            if name not in self._userset:
+                break
+        return User(
+            name=name,
+            description=description,
+            in_group=in_group,
+            all_groups=all_groups,
+            support=support,
+        )
 
     @overload
     async def add_interface(self, interface:Interface) -> None:
@@ -168,7 +195,7 @@ class Handler:
                 raise error.Existed(i, handler=self)
             self._interfaces.add(i)
             self._namespace.subnamespaces[i.namespace.name] = i.namespace
-            await i.init()
+            await i.init(self)
         self.reload()
 
     @overload

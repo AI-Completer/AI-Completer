@@ -14,13 +14,16 @@ class FileInterface(Interface):
     Including File Read and Write
     '''
     def __init__(self, user: Optional[User] = None, id: Optional[uuid.UUID] = uuid.uuid4()):
-        user = user or User(
-            name="file",
-            in_group="system",
-            all_groups={"system","command"},
-            support={"text","file"}
+        super().__init__(
+            namespace="file",
+            user = user or User(
+                name="file",
+                in_group="system",
+                all_groups={"system","command"},
+                support={"text","file"}
+            ),
+            id=id
         )
-        super().__init__(user,namespace="file",id=id)
         self.commands.add(
             Command(
                 cmd='read',

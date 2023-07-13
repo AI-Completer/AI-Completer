@@ -25,7 +25,6 @@ class TransformerInterface(Interface):
     def __init__(self,*, ai:Transformer, namespace:str = "transformer", user:Optional[User] = None, id:Optional[uuid.UUID] = None, config:Config = Config()):
         super().__init__(
             user=user or User(
-                name=ai.name,
                 in_group="agent",
                 all_groups={"agent","command"},
                 support={"text"},

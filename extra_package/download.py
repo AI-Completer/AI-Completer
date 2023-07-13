@@ -64,12 +64,12 @@ class DownloadInterface(Interface):
         '''
         Download a file
         '''
-        gdata = session.data[session.data['fileint']]
+        gdata = session.data[self.getdata(session)['fileint'].hex]
         ws:WorkSpace = gdata['workspace']
 
         data = self.getdata(session)
-        path:str = message.content['path']
-        url:str = message.content['url']
+        path:str = message.content.json['path']
+        url:str = message.content.json['url']
         # Check permission
         f = ws.get(path, message.src_interface.user)
         if f == None:
@@ -86,4 +86,4 @@ class DownloadInterface(Interface):
             # Check Exception
             ws.remove(path)
             raise e
-        return 'success'
+        return None

@@ -262,8 +262,12 @@ class File:
         :param args: args for open
         :param kwargs: kwargs for open
         '''
-        self._check_file_exists()
-        pre = self.get_permission(user)
+        if not self.existed:
+            if 'w' not in mode and 'a' not in mode and '+' not in mode:
+                raise error.NotFound('File Not Found', file=self.path)
+            pre = self.default_permission.owner
+        else:
+            pre = self.get_permission(user)
         if 'r' in mode and not pre.readable:
             raise error.PermissionDenied('Permission Denied', file=self.path)
         if ('w' in mode or '+' in mode) and not pre.writable:

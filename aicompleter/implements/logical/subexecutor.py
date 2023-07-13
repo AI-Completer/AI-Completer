@@ -65,6 +65,7 @@ If you execute commands, you will receive the return value from the command pars
 You can execute multiple commands at once.
 User cannot execute the commands or see the result of the commands, they say words and tell you to do the task.
 You should use the "stop" command to stop the conversation.
+You can use "$last_result" to refer to the last command result, including the error.
 Do not reply with anything else.
 '''
         )

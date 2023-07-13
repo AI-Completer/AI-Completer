@@ -119,6 +119,9 @@ class MultiContent(Content):
     def json(self) -> dict:
         '''Get json content.'''
         return json.loads(self.pure_text)
+    
+    def __getitem__(self, key):
+        return self.json[key]
 
 @enum.unique
 class MessageStatus(enum.Enum):

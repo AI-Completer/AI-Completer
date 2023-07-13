@@ -64,6 +64,10 @@ class Config(EnhancedDict):
                 for k, v in value.items():
                     _check(k, v)
                 return
+            if isinstance(value, list):
+                for i in value:
+                    _check(key, i)
+                return
             if not isinstance(value, self.ALLOWED_VALUE_TYPE):
                 raise TypeError(f"Invalid value type: {value!r}")
         _check(__key, __value)

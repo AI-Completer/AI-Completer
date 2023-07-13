@@ -273,7 +273,7 @@ class ChatTransformer(Transformer):
         '''
         rvalue = ''
         async for value in self.generate(*args, **kwargs):
-            rvalue = value
+            rvalue = value.content
         return rvalue
 
     async def generate_many_texts(self, *args, num: int, **kwargs) -> list[str]:

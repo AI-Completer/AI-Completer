@@ -47,6 +47,8 @@ class Agent:
         self._handle_task.add_done_callback(self._unexception)
         self._loop_task.add_done_callback(self._unexception)
 
+        self._last_result = None
+
     def _unexception(self,x:asyncio.Future):
         try:
             x.result()
@@ -203,6 +205,9 @@ class Agent:
                     # Self call ask command, do not input anything
                     raw = '{"commands":[{"cmd":"ask","param":{"content":""}}]}'
 
+                # try to replace the variables
+                raw = raw.replace('$last_result', self._last_result or '')
+
                 try:
                     json_dat = self._parse(raw)
                 except ValueError as e:
@@ -283,6 +288,7 @@ class Agent:
             exception = e
         except Exception as e:
             exception = e
+            self.logger.error(f'Exception: {e}')
         finally:
             # The loop is done
             self._handle_task.remove_done_callback(self._unexception)
@@ -303,12 +309,12 @@ class Agent:
     async def _handle_result(self):
         while True:
             result = await self._result_queue.get()
-
             if result.cmd == 'ask':
                 # Excpetion
                 self.ask(result.ret)
                 continue
 
+            self._last_result = result.ret
             self._request({
                 'type':'command-result',
                 'success': result.success,

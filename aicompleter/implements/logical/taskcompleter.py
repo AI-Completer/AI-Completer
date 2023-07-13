@@ -74,7 +74,8 @@ What you say is to be parsed by the system. So you should reply with the json fo
 If you execute commands, you will receive the return value from the command parser.
 You can execute multiple commands at once.
 Do not reply with anything else.
-You should execute the "stop" command to finish the task.
+You should execute the "stop" command to finish the task and return the message.
+You need to respond in the language of the task.
 
 Your task is:
 {task}

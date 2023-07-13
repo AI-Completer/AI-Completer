@@ -64,7 +64,7 @@ You are talking with a command parser. So you should reply with the json format 
 If you execute commands, you will receive the return value from the command parser.
 You can execute multiple commands at once.
 User cannot execute the commands or see the result of the commands, they say words and tell you to do the task.
-You should use the "ask" command to ask or reply user.
+You should use the "stop" command to stop the conversation.
 Do not reply with anything else.
 '''
         )

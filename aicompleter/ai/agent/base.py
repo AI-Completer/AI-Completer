@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import traceback
 from typing import Any, Callable, Coroutine, Optional, Self, overload
@@ -30,6 +31,7 @@ class Agent:
         self._handle_task = asyncio.get_event_loop().create_task(self._handle_result())
         self._loop_task = asyncio.get_event_loop().create_task(self._loop())
         self._result = ...
+        self._stop_event: asyncio.Event = asyncio.Event()
 
         self._subagents:dict[str, Self] = {}
 
@@ -58,7 +60,7 @@ class Agent:
         '''
         Whether the agent is stopped
         '''
-        return self._result != Ellipsis
+        return self._stop_event.is_set()
     
     @property
     def result(self) -> Any:
@@ -66,7 +68,9 @@ class Agent:
         The result of the agent
         '''
         if not self.stopped:
-            raise RuntimeError('The agent is not stopped yet')
+            raise error.AI_OnRun('The agent is not stopped yet')
+        if isinstance(self._result, Exception):
+            raise self._result
         return self._result
 
     def new_subagent(self, name:str, init_words: str,init_prompt:Optional[str] = None, ai: Optional[ChatTransformer] = None , user:Optional[str] = None) -> Self:
@@ -168,13 +172,32 @@ class Agent:
                 # Get all the requests
 
                 request:ai.Message = await self._request_queue.get()
+                # Wait for other command output
+                await asyncio.sleep(0.1)
+                if self._request_queue.empty():
+                    self.logger.debug(f'Get request: {request}')
 
-                self.logger.debug(f'Get requests: {request}')
+                    raw = await self.ai.ask_once(
+                        history = self.conversation,
+                        message = request,
+                    )
+                else:
+                    requests = [request]
+                    while not self._request_queue.empty():
+                        requests.append(self._request_queue.get_nowait())
+                    self.logger.debug(f'Get requests: {requests}')
 
-                raw = await self.ai.ask_once(
-                    history = self.conversation,
-                    message = request,
-                )
+                    _new_conversation = copy.deepcopy(self.conversation)
+                    for request in requests:
+                        _new_conversation.messages.append(request)
+                    raw = await self.ai.generate_text(conversation=_new_conversation)
+                    # Success
+                    _new_conversation.messages.append(ai.Message(
+                        content = raw,
+                        role = 'assistant',
+                    ))
+                    self.conversation = _new_conversation
+
                 self.logger.debug(f'AI response: {raw}')
                 if raw == '':
                     # Self call ask command, do not input anything
@@ -258,6 +281,8 @@ class Agent:
             
         except asyncio.CancelledError as e:
             exception = e
+        except Exception as e:
+            exception = e
         finally:
             # The loop is done
             self._handle_task.remove_done_callback(self._unexception)
@@ -266,8 +291,12 @@ class Agent:
             self._handle_task = None
             self._loop_task = None
             self.logger.debug('The agent is stopped')
+            self._stop_event.set()
             if exception is not None:
-                raise exception
+                if isinstance(exception, asyncio.CancelledError):
+                    raise exception
+                else:
+                    self._result = exception
             
         self.logger.debug('The loop is done')
 
@@ -308,12 +337,11 @@ class Agent:
             'value': value,
         })
 
-    async def wait(self):
+    def wait(self):
         '''
         Wait until the agent is stopped
         '''
-        while not self.stopped:
-            await asyncio.sleep(0.1)
+        return self._stop_event.wait()
 
     def __del__(self):
         if self._handle_task:

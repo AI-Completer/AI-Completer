@@ -26,24 +26,20 @@ class TaskCompleter(ai.ChatInterface):
         )
         self.commands.add(Command(
             cmd='task',
+            description='Execute a task, this will start an agent to help you finish the task, the task must be in natural language, which can easily understand by the AI.',
             callable_groups={'user'},
             overrideable=False,
             callback=self.cmd_task,
             in_interface=self,
+            format=CommandParamStruct({
+                'task':CommandParamElement(name='task', type=str, optional=False, description='The task to be executed (in natural language), must be a task', tooltip='task')
+            })
         ))
     
     async def cmd_task(self, session: Session, message: Message):
         '''
         Execute a task
         '''
-        if not Struct({
-                'task': str,
-            }).check(message.content.json):
-            raise error.FormatError(
-                message=message,
-                interface=self,
-                content='Unrecognized format'
-                )
         task = message.content.json['task']
         
         avaliable_commands = Commands()
@@ -63,7 +59,7 @@ class TaskCompleter(ai.ChatInterface):
             user = session.id.hex,
             init_prompt=f'''
 You are ChatGPT, an AI that do your task automatically.
-You should not ask for user'help.
+You should not ask for user's help.
 
 Commands:
 {command_table}
@@ -78,17 +74,17 @@ What you say is to be parsed by the system. So you should reply with the json fo
 If you execute commands, you will receive the return value from the command parser.
 You can execute multiple commands at once.
 Do not reply with anything else.
+You should execute the "stop" command to finish the task.
 
 Your task is:
 {task}
-Respond in the language of the task.
 '''
         )
 
         def on_call(cmd:str, param:Any):
             return session.asend(Message(
                 content=param,
-                user=self._user,
+                cmd=cmd,
                 src_interface=self,
             ))
         agent.on_call = on_call

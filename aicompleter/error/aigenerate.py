@@ -35,6 +35,11 @@ class AI_InvalidConfig(AIGenerateError):
     This is an exception that caused by configure error
     '''
 
+class AI_OnRun(AIGenerateError):
+    '''
+    AI is on run
+    '''
+
 __all__ = (
     'AIGenerateError',
     *(

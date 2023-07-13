@@ -341,7 +341,7 @@ class Command:
         message.dest_interface = self.in_interface
         if self.format != None:
             if not self.format.check(message.content.pure_text):
-                raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",message=message,interface=self.in_interface)
+                raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",self.in_interface, src_message = message, format=self.format)
             message.content = MultiContent(self.format.setdefault(message.content.pure_text))
         
         try:

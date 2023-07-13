@@ -6,16 +6,24 @@ Used to complete the task fully automatically
 import asyncio
 import json
 import time
-from typing import Any
+from typing import Any, Optional
+import uuid
 from aicompleter import *
+from aicompleter.ai.ai import ChatTransformer
 from aicompleter.utils import Struct
 
 class TaskCompleter(ai.ChatInterface):
     '''
     AI Executor of the state machine
     '''
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, ai:ChatTransformer, user:Optional[User] = None, id:uuid.UUID = uuid.uuid4(), config:Config = Config()):
+        super().__init__(
+            ai = ai,
+            namespace='taskcompleter',
+            user = user,
+            config = config,
+            id = id,
+        )
         self.commands.add(Command(
             cmd='task',
             callable_groups={'user'},

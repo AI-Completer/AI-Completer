@@ -307,7 +307,6 @@ class Handler:
                 self._running_sessions.remove(i)
 
     async def new_session(self, 
-                          interface:Optional[Interface] = None,
                           config:Optional[Config] = None,
                           memoryConfigure:Optional[memory.MemoryConfigure] = None) -> session.Session:
         '''
@@ -318,10 +317,6 @@ class Handler:
         '''
         ret = session.Session(self, memoryConfigure)
         self.logger.debug("Creating new session %s", ret.id)
-        if interface:
-            if not isinstance(interface, Interface):
-                raise TypeError(f"Expected type Interface, got {type(interface)}")
-            ret.src_interface = interface
         # Initialize session
         ret.config = config
         if config == None: 

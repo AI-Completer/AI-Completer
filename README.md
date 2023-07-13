@@ -30,7 +30,7 @@ python3 -m aicompleter helper --enable-agent --include pythoncode
 # This will start a helper with OpenAI API
 ```
 
-This normally will start a conversation with ChatGPT, we're adding more functions for this program.
+You can add custom interface to this program to add more function.
 
 ## Usage
 
@@ -86,9 +86,10 @@ Reference: [Document](doc/language.md)
 ## To-do List
 
 We are adding more support to this program.
-- [x] Add logical structure for automatic task
-  - [x] Add subagent support
-- [ ] Add Commands Intergation with AI model.
-  - [ ] Add Commands Support
+- [x] Add Commands Intergation with AI model.
+  - [x] Add Commands Support
 - [ ] Add memory system
-- [x] Add Namespace support
+  - [x] Add History (Unable to recover)
+  - [ ] Add Memory Analyse
+- [ ] Add More Extra Interface
+- [ ] Add GUI support

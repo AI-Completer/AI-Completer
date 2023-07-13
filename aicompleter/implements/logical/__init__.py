@@ -13,10 +13,14 @@ from .executor import (
 from .subexecutor import (
     SelfStateExecutor,
 )
+from .taskcompleter import (
+    TaskCompleter,
+)
 __all__ = (
     'CmdTranslator',
     'DifficultyTestInt',
     'StateExecutor',
     'ExecutorInt',
     'SelfStateExecutor',
+    'TaskCompleter',
 )

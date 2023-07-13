@@ -37,7 +37,7 @@ helper_pareser = subparsers.add_parser('helper', help='The helper of AI Complete
 helper_pareser.add_argument('--ai', type=str, default='openaichat', choices=('openaichat', 'bingai'), help='The AI to use, default: openaichat, options: openaichat, bingai')
 helper_pareser.add_argument('--model', type=str, default='', help='The model to use, the choices differ from the AI, default: not set, options: openaichat: davinci, curie ,..., bingai: balanced, creative, precise')
 helper_pareser.add_argument('--enable-agent', action='store_true', help='Enable subagent, default: False', dest='enable_agent')
-helper_pareser.add_argument('-i','--include', type=str, nargs='+', default=[], choices=('pythoncode', 'searcher'), help='Include the extra interface, default: None, options: pythoncode')
+helper_pareser.add_argument('-i','--include', type=str, nargs='+', default=[], choices=('pythoncode', 'searcher', 'file'), help='Include the extra interface, default: None, options: pythoncode, searcher, file')
 helper_pareser.add_argument('-e','--extra-include', type=str, nargs='+', default=[], help='Include the extra interface, will find the interface in the specified python program path, format: path:interface:namespace')
 helper_pareser.add_argument('--disable-authority', action='store_true', help='Disable authority, default: False', dest='disable_authority')
 
@@ -90,6 +90,7 @@ __AI_map__ = {
 __Int_map__ = {
     'pythoncode': (implements.PythonCodeInterface, {}),
     'searcher': (implements.SearchInterface, {'config':config_['bingai']}),
+    'file': (implements.system.FileInterface, {}),
 }
 
 handler_ = Handler(config_)

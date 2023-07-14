@@ -221,35 +221,15 @@ async def check_loop():
             if len(asyncio.all_tasks(loop)) == 1:
                 loop.stop()
                 return
-try:
-    loop.create_task(main())
-    check_task = loop.create_task(check_loop())
-    loop.run_forever()
-except KeyboardInterrupt:
-    logger.critical("KeyboardInterrupt")
-except BaseException as e:
-    logger.critical(f"Unexception: {e}")
-    if logger.isEnabledFor(log.DEBUG):
-        traceback.print_exc()
-finally:
-    if not loop.is_closed():
-        max_try = 10
-        try_time = 0
-        while not all(task.done() for task in asyncio.all_tasks(loop) if task != check_task) and try_time < max_try:
-            try_time += 1
-            for task in asyncio.all_tasks(loop):
-                if task == check_task:
-                    continue
-                task.cancel()
-            loop.run_forever()
 
-        if try_time >= max_try:
-            logger.critical("Force Quit")
-        else:
-            # Stop check_task
-            check_task.cancel()
-            loop.run_until_complete(check_task)
-        loop.close()
+loop.create_task(main())
+check_task = loop.create_task(check_loop())
+
+utils.launch(
+    loop=loop,
+    logger=logger,
+    expecttasks={check_task},
+)
 
 if config.varibles['disable_memory'] == False:
     async def save():

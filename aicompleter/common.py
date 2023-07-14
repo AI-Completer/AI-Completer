@@ -56,7 +56,7 @@ class AttrJSONSerializable(JSONSerializable):
     def serialize(self) -> dict:
         def _handle(data:Any):
             if isinstance(data, JSONSerializable):
-                return data.to_json()
+                return data.serialize()
             elif isinstance(data, (list, set, tuple)):
                 return [_handle(item) for item in data]
             elif isinstance(data, dict):

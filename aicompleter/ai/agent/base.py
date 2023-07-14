@@ -105,21 +105,6 @@ class Agent:
         Parse the commands from AI
         '''
 
-        # Check this format : {"type":"ask", "message":"<message>"}
-        try:
-            json_dat = json.loads(raw)
-            if not isinstance(json_dat, dict):
-                raise ValueError('Invalid json format')
-            if not isinstance(json_dat.get('type', None), str):
-                raise ValueError('type not found')
-            if json_dat['type'].startwiths('ask') and 'message' in json_dat:
-                raw = json_dat['message']
-            if json_dat['type'].startwiths('ask') and 'value' in json_dat:
-                raw = json_dat['value']
-        except Exception:
-            pass
-
-
         def _check_parse(value:str) -> bool:
             try:
                 json.loads(value)['commands']
@@ -132,6 +117,9 @@ class Agent:
         if _check_parse(raw):
             command_raw = raw
         else:
+            if raw[0] == '{' and raw[-1] == '}':
+                raise ValueError('Parse error, please check the json format')
+
             for line in raw.splitlines():
                 if _check_parse(line):
                     command_raw = line
@@ -330,6 +318,13 @@ class Agent:
             role = 'user',
             user = self.conversation.user,
         ))
+
+    def trigger(self):
+        '''
+        Do nothing, just trigger the agent to run
+        '''
+        self.logger.debug('Triggered')
+        self._request_queue.put_nowait(None)
 
     def _subagent_ask(self, name:str, value:str):
         '''

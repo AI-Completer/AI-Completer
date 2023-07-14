@@ -433,3 +433,16 @@ class Interface:
             *args,
             **kwargs
         ))
+
+    def rename_cmd(self, old:str, new:str):
+        '''
+        Rename a command
+        This method is used to handle a conflict of command name
+        :param old: Old name
+        :param new: New name
+        '''
+        for cmd in self.commands:
+            if cmd.cmd == old:
+                cmd.cmd = new
+            if new in cmd.alias:
+                cmd.alias.remove(new)

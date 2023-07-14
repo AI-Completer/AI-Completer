@@ -17,6 +17,7 @@ def launch(loop:asyncio.AbstractEventLoop, logger:logging.Logger, max_try:int = 
                 else:
                     await asyncio.sleep(0)
             except asyncio.CancelledError as e:
+                loop.stop()
                 return
     expecttasks = {loop.create_task(check_loop())}
 

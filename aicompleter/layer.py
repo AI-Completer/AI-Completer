@@ -61,6 +61,8 @@ class DiGraph(Generic[_T]):
     
     def __str__(self) -> str:
         return repr(self)
+    
+del _T
 
 class InterfaceDiGraph(DiGraph[Interface]):
     '''
@@ -108,7 +110,8 @@ class InterfaceDiGraph(DiGraph[Interface]):
 
     async def setup(self, handler:Handler):
         '''Setup the tree'''
-        handler._interfaces.clear()
+        for i in handler.interfaces:
+            handler.rm_interface(i)
         await handler.add_interface(*self.allinterfaces)
         self._update_groups()
         handler.reload()
@@ -228,7 +231,8 @@ class CommandCallMap:
 
     async def setup(self, handler:Handler):
         '''Setup the tree'''
-        handler._interfaces.clear()
+        for i in handler.interfaces:
+            handler.rm_interface(i)
         _interfaces:set[Interface] = set()
         for i in self._src:
             _interfaces.add(i[0])

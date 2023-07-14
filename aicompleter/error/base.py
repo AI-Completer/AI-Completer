@@ -58,6 +58,11 @@ class Conflict(BaseException):
     def __init__(self, reason:str, *args: object, **kwargs: object) -> None:
         super().__init__(reason, *args, **kwargs)
 
+class Failed(BaseException):
+    '''Failed'''
+    def __init__(self, reason:str, *args: object, **kwargs: object) -> None:
+        super().__init__(reason, *args, **kwargs)
+
 __all__ = (
     'BaseException',
     *(

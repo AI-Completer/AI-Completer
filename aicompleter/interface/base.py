@@ -355,15 +355,6 @@ class Interface:
         '''
         Initial function for Interface
         '''
-        if self._user == None:
-            self._user = in_handler.assign_user()
-        if self._user.name == "":
-            self._user = in_handler.assign_user(
-                description=self._user.description,
-                in_group=self._user.in_group,
-                all_groups=self._user.all_groups,
-                support=self._user.support,
-            )
         self.logger.debug("Interface %s initializing" % self.id)
 
     async def final(self) -> None:

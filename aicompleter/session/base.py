@@ -327,6 +327,18 @@ class Message:
             dest_interface = None,
         )
     
+    def __getitem__(self, key):
+        return self.content[key]
+    
+    def __setitem__(self, key, value):
+        self.content[key] = value
+
+    def get(self, key, default=...):
+        if default is ...:
+            return self.content[key]
+        else:
+            return self.content.json.get(key, default)
+    
 class MessageQueue(asyncio.Queue[Message]):
     '''Message Queue'''
     def __init__(self, id:uuid.UUID = uuid.uuid4()):

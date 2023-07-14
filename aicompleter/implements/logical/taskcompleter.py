@@ -74,8 +74,8 @@ What you say is to be parsed by the system. So you should reply with the json fo
 If you execute commands, you will receive the return value from the command parser.
 You can execute multiple commands at once.
 Do not reply with anything else.
-You should execute the "stop" command to finish the task and return the message.
-You need to respond in the language of the task.
+You can use "$last_result" to refer to the last command result, including the error.
+You should execute the "stop" command to imply that you have finished the task and reply with the result.
 
 Your task is:
 {task}
@@ -91,7 +91,8 @@ Your task is:
         agent.on_call = on_call
         agent.enable_ask = False
         
-        agent.ask("Start the task now")
+        from ... import language
+        agent.ask(language.DICT[self.getconfig(session).get('language', 'en-us')]['start_task'])
         await agent.wait()
         return agent.result
         

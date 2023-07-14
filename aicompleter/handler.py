@@ -6,7 +6,7 @@ import copy
 import uuid
 from typing import Generator, Iterator, Optional, overload
 
-from aicompleter import memory
+from aicompleter import memory, utils
 
 from . import error, events, interface, log, session
 from .config import Config
@@ -93,11 +93,11 @@ class Handler:
     async def close(self):
         '''Close the handler'''
         self.logger.debug("Closing handler")
-        for i in self._interfaces:
-            await i.close()
         for i in self._running_sessions:
             if not i.closed:
                 await i.close()
+        for i in self._interfaces:
+            await i.close()
         self._closed.set()
 
     async def close_session(self, session:Session):
@@ -190,6 +190,18 @@ class Handler:
     async def add_interface(self, *interfaces:Interface) -> None:
         '''Add interface to the handler'''
         for i in interfaces:
+            utils.typecheck(i, Interface)
+            # Assign user if not assigned
+            if i._user == None:
+                i._user = self.assign_user()
+            if i._user.name == "":
+                i._user = self.assign_user(
+                    description=i._user.description,
+                    in_group=i._user.in_group,
+                    all_groups=i._user.all_groups,
+                    support=i._user.support,
+                )
+            
             self.logger.debug("Adding interface %s - %s", i.id, i.user.name)
             if i in self._interfaces:
                 raise error.Existed(i, handler=self)

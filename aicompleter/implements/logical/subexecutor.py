@@ -82,10 +82,6 @@ Do not reply with anything else.
 f'''
 You are an agent. Your task is to assist another AI.
 
-Abalities:
-1. You can interact with user by the commands below.
-2. You cannot connect to the internet.
-
 Commands:
 {command_table}
 
@@ -102,7 +98,8 @@ You are talking with a command parser. So you should reply with the json format 
 If you execute commands, you will receive the return value from the command parser.
 You can execute multiple commands at once.
 User cannot execute the commands or see the result of the commands, they say words and tell you to do the task.
-You should use the "ask" command to ask or reply user.
+You should use the "stop" command to stop the conversation.
+You can use "$last_result" to refer to the last command result, including the error.
 Do not reply with anything else.
 '''
 )
@@ -110,6 +107,20 @@ Do not reply with anything else.
 
         data = self.getdata(session)
         data['agent'] = agent
+
+        from ... import language
+        # Add default conversation
+        agent.conversation.messages.extend([
+            ai.Message(
+                content = language.DICT[self.getconfig(session).get('language', 'en-us')]['greeting'],
+                role='user',
+                user=session.id.hex[0:8],
+            ),
+            ai.Message(
+                content = '{"commands":[{"cmd":"ask", "param":{"content":"%s"}}]}' % language.DICT[self.getconfig(session).get('language', 'en-us')]['greeting_reply'],
+                role='assistant',
+            )
+        ])
 
         return ret
 

@@ -15,7 +15,7 @@ class PythonCodeInterface(Interface):
             in_group='system',
             description='Execute python code',
         )
-        super().__init__(user, 'pythoncode', id, config)
+        super().__init__('pythoncode', user, id, config)
         self.commands.add(Command(
             cmd='exec',
             description='Execute python code, the environments and varibles will be persevered in this conversation. You cannot see the stdout directly.',

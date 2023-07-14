@@ -176,29 +176,28 @@ class Agent:
                 request:ai.Message = await self._request_queue.get()
                 # Wait for other command output
                 await asyncio.sleep(0.1)
-                if self._request_queue.empty():
-                    self.logger.debug(f'Get request: {request}')
 
-                    raw = await self.ai.ask_once(
-                        history = self.conversation,
-                        message = request,
-                    )
+                requests = [request]
+                while not self._request_queue.empty():
+                    requests.append(self._request_queue.get_nowait())
+
+                # Remove None
+                requests = [i for i in requests if i is not None]
+                if len(requests) == 0:
+                    self.logger.debug('Empty request')
                 else:
-                    requests = [request]
-                    while not self._request_queue.empty():
-                        requests.append(self._request_queue.get_nowait())
                     self.logger.debug(f'Get requests: {requests}')
 
-                    _new_conversation = copy.deepcopy(self.conversation)
-                    for request in requests:
-                        _new_conversation.messages.append(request)
-                    raw = await self.ai.generate_text(conversation=_new_conversation)
-                    # Success
-                    _new_conversation.messages.append(ai.Message(
-                        content = raw,
-                        role = 'assistant',
-                    ))
-                    self.conversation = _new_conversation
+                _new_conversation = copy.deepcopy(self.conversation)
+                for request in requests:
+                    _new_conversation.messages.append(request)
+                raw = await self.ai.generate_text(conversation=_new_conversation)
+                # Success
+                _new_conversation.messages.append(ai.Message(
+                    content = raw,
+                    role = 'assistant',
+                ))
+                self.conversation = _new_conversation
 
                 self.logger.debug(f'AI response: {raw}')
                 if raw == '':

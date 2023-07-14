@@ -207,28 +207,18 @@ async def main():
 loop = asyncio.new_event_loop()
 if os.name == "nt":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-async def check_loop():
-    # Check if the loop is empty
-    # The one task is this function
-    while True:
-        try:
-            if len(asyncio.all_tasks(loop)) == 1:
-                loop.stop()
-                await asyncio.sleep(0)
-            else:
-                await asyncio.sleep(0.1)
-        except asyncio.CancelledError as e:
-            if len(asyncio.all_tasks(loop)) == 1:
-                loop.stop()
-                return
 
 loop.create_task(main())
-check_task = loop.create_task(check_loop())
 
 utils.launch(
     loop=loop,
     logger=logger,
-    expecttasks={check_task},
+)
+loop.create_task(handler_.close())
+# Create a new check task, because the task before has been cancelled
+utils.launch(
+    loop=loop,
+    logger=logger,
 )
 
 if config.varibles['disable_memory'] == False:
@@ -241,12 +231,13 @@ if config.varibles['disable_memory'] == False:
         with open(args.memory, 'w') as f:
             json.dump(ret, f, ensure_ascii=False, indent=4)
         logger.debug("Memory Saved")
-
+        
     try:
-        asyncio.run(save())
+        loop.run_until_complete(save())
     except Exception as e:
         logger.critical(f"Exception when saving memory: {e}")
         if logger.isEnabledFor(log.DEBUG):
             traceback.print_exc()
 
+loop.close()
 logger.debug("Loop Closed")

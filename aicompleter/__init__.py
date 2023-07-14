@@ -51,6 +51,7 @@ from . import (
     events,
     ai,
     implements,
+    language,
 )
 
 from .namespace import Namespace

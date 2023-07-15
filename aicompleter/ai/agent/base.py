@@ -118,7 +118,7 @@ class Agent:
             command_raw = raw
         else:
             if raw[0] == '{' and raw[-1] == '}':
-                raise ValueError('Parse error, please check the json format')
+                raise ValueError('Commands parse error, please check your json format and retry, the format: {"commands":[{...}]}')
 
             for line in raw.splitlines():
                 if _check_parse(line):
@@ -193,7 +193,7 @@ class Agent:
                     raw = '{"commands":[{"cmd":"ask","param":{"content":""}}]}'
 
                 # try to replace the variables
-                raw = raw.replace('$last_result', self._last_result or '')
+                raw = raw.replace('$last_result', str(self._last_result) or '')
 
                 try:
                     json_dat = self._parse(raw)
@@ -242,7 +242,7 @@ class Agent:
                         if not self.enable_ask:
                             self._request({
                                 'type':'error',
-                                'value':f"Ask command is not allowed"
+                                'value':f"Ask command is not allowed, if possible, use 'stop' instead"
                             })
                             continue
                         # This command will be hooked if the agent is a subagent

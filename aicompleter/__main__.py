@@ -2,11 +2,15 @@ import argparse
 import asyncio
 import importlib
 import os
+import sys
 import traceback
 
 from . import config
 from .config import Config
 from . import log
+
+if sys.version_info < (3, 11):
+    raise RuntimeError("Python 3.11+ is required")
 
 __DEBUG__:bool = False
 '''

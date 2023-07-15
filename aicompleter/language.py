@@ -1,7 +1,8 @@
 '''
 Language module
 
-This module is only recording some related information of the language.
+This module is only used to store the language data which will be used in the `implements` modules.
+If you want to store your own language data, just dynamically add a new key to the `DICT` dict.
 '''
 
 DICT = {
@@ -12,7 +13,7 @@ DICT = {
     },
     'en-us':{
         'greeting':'Hello',
-        'greeting_reply':'Hello, what can i do for you?',
+        'greeting_reply':'Hello, what can I do for you?',
         'start_task':'Please start your task',
     },
 }

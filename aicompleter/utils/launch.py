@@ -19,6 +19,9 @@ def launch(loop:asyncio.AbstractEventLoop, logger:logging.Logger, max_try:int = 
             except asyncio.CancelledError as e:
                 loop.stop()
                 return
+            except KeyboardInterrupt:
+                loop.stop()
+                await asyncio.sleep(0)
     expecttasks = {loop.create_task(check_loop())}
 
     try:

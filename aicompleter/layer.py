@@ -127,11 +127,18 @@ class CommandCallMap:
         :param str dest: dest command name
         '''
 
-    def add(self, src:Interface, dest:Interface, dest_cmd:str):
-        '''Add a edge'''
+    def add(self, src:Interface, dest:Interface, dest_cmd:Optional[str] = None):
+        '''
+        Add a edge
+        If dest_cmd is None, all commands in dest will be callable.
+        '''
         if (src, dest) not in self._src:
             self._src[(src, dest)] = set()
-        self._src[(src, dest)].add(dest_cmd)
+        if dest_cmd is None:
+            for cmd in dest.commands:
+                self._src[(src, dest)].add(cmd.cmd)
+        else:
+            self._src[(src, dest)].add(dest_cmd)
 
     @overload
     def remove(self, src:Interface) -> None:

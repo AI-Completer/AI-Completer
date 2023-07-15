@@ -26,7 +26,7 @@ class TaskCompleter(ai.ChatInterface):
         )
         self.commands.add(Command(
             cmd='task',
-            description='Execute a task, this will start an agent to help you finish the task, the task must be in natural language, which can easily understand by the AI.',
+            description='Execute a task, this will start an agent to help you finish the task, the task must be in natural language. You should always use this command when you want to execute a task which wll consume a lot of tokens.',
             callable_groups={'user'},
             overrideable=False,
             callback=self.cmd_task,
@@ -65,12 +65,8 @@ Commands:
 {command_table}
 
 What you say is to be parsed by the system. So you should reply with the json format below:
-{{
-    "commands":[{{
-        "cmd":<command name>,
-        "param":<parameters>
-    }}]
-}}
+{{"commands":[{{"cmd":<command name>,"param":<parameters>}}]}}
+
 If you execute commands, you will receive the return value from the command parser.
 You can execute multiple commands at once.
 Do not reply with anything else.
@@ -92,6 +88,7 @@ Your task is:
         agent.enable_ask = False
         
         from ... import language
+        
         agent.ask(language.DICT[self.getconfig(session).get('language', 'en-us')]['start_task'])
         await agent.wait()
         return agent.result

@@ -3,8 +3,6 @@ import sys
 import uuid
 from typing import Optional
 
-import bs4
-
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 
 from urllib import parse
@@ -34,22 +32,57 @@ class GoogleInterface(ac.Interface):
         )
         self.commands.add(ac.Command(
             cmd='google',
-            description='google search, get links and titles',
+            description='google search',
             in_interface=self,
             callback=self.cmd_google,
             to_return=True,
             force_await=True,
             format=CommandParamStruct({
-                'query': CommandParamElement(name='query', type=str, description='search query'),
+                'query': CommandParamElement(name='query', type=str, description='search query', tooltip='query'),
+                'num': CommandParamElement(name='num', type=int, description='number of results', tooltip='num', default=10, optional=True),
             })
         ))
 
-    async def yield_google(self, query:str,*, top_n:int = 10, proxy:Optional[str] = None,user_agent:Optional[str] = None, session:Optional[aiohttp.ClientSession] = None):
+    async def google(self, query:str, api:str, cx:str,*, proxy:Optional[str] = None, session:Optional[aiohttp.ClientSession] = None, num: int = 10, start:int=0):
+        '''
+        Google search(using Google API)
+        '''
+        # URL encode
+        query = parse.quote(query)
+        # Get the search result
+        if session:
+            async with session.get(
+                f'https://www.googleapis.com/customsearch/v1?key={api}&cx={cx}&q={query}&num={num}&start={start}',
+                proxy=proxy,
+                ) as resp:
+                data = await resp.json()
+        else:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f'https://www.googleapis.com/customsearch/v1?key={api}&cx={cx}&q={query}&num={num}&start={start}',
+                    proxy=proxy,
+                    ) as resp:
+                    data = await resp.json()
+
+        if 'error' in data:
+            raise ac.error.Failed(f'google search failed, {data["error"]["message"]}')
+        if 'items' not in data:
+            raise ac.error.NotFound('there is no result')
+        
+        # Return parsed data
+        return [{
+            'title': item['title'],
+            'link': item['link'],
+            'brief': item['snippet'],
+        } for item in data['items']]
+
+    async def yield_google_web(self, query:str,*, top_n:int = 10, proxy:Optional[str] = None,user_agent:Optional[str] = None, session:Optional[aiohttp.ClientSession] = None):
         '''
         google search
 
         Note: if possible, please use Google API instead of this method
         '''
+        import bs4
         query = parse.quote(query)
         # Get the search result
         async def _request():
@@ -111,14 +144,14 @@ class GoogleInterface(ac.Interface):
                 # 'brief': brief,
             }
 
-    async def google(self, query:str,*, top_n:int = 10, proxy:Optional[str] = None,user_agent:Optional[str] = None, session:Optional[aiohttp.ClientSession] = None):
+    async def google_web(self, query:str,*, top_n:int = 10, proxy:Optional[str] = None,user_agent:Optional[str] = None, session:Optional[aiohttp.ClientSession] = None):
         '''
         google search
 
         Note: if possible, please use Google API instead of this method
         '''
         results = []
-        async for result in self.yield_google(query, top_n=top_n, proxy=proxy, user_agent=user_agent, session=session):
+        async for result in self.yield_google_web(query, top_n=top_n, proxy=proxy, user_agent=user_agent, session=session):
             results.append(result)
         return results
     
@@ -133,13 +166,14 @@ class GoogleInterface(ac.Interface):
         '''
         data = self.getdata(session)
         config = self.getconfig(session)
-        query = message['query']
-        return self.google(query, 
-                           top_n=10,
-                           proxy=config.get('proxy', None),
-                           user_agent=config.get('user_agent', None),
-                           session=data['session'],
-                           )
+        return self.google(message['query'],
+                            api = config.require('api-key'),
+                            cx = config.require('cx'),
+                            num=message['num'],
+                            proxy=config.get('proxy', None),
+                            # user_agent=config.get('user_agent', None),
+                            session=data['session'],
+                            )
     
     async def session_final(self, session: ac.Session) -> None:
         ret = await super().session_final(session)

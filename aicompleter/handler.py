@@ -3,8 +3,9 @@ Handler between the interfaces
 '''
 import asyncio
 import copy
+import functools
 import uuid
-from typing import Generator, Iterator, Optional, overload
+from typing import Any, Generator, Iterator, Optional, overload
 
 from aicompleter import memory, utils
 
@@ -207,6 +208,7 @@ class Handler:
                 raise error.Existed(i, handler=self)
             self._interfaces.add(i)
             self._namespace.subnamespaces[i.namespace.name] = i.namespace
+        for i in interfaces:
             await i.init(self)
         self.reload()
 
@@ -239,20 +241,51 @@ class Handler:
         else:
             raise TypeError(f"Expected type Interface or uuid.UUID, got {type(param)}")
     
+    @overload
     def get_interface(self, id:uuid.UUID) -> Interface:
-        '''Get interface by id'''
-        for i in self._interfaces:
-            if i.id == id:
-                return i
-        raise error.NotFound(id, handler=self)
+        ...
+
+    @overload
+    def get_interface(self, groupname:str) -> list[Interface]:
+        ...
+
+    @overload
+    def get_interface(self, interface:Interface) -> Interface:
+        ...
+
+    @overload
+    def get_interface(self, cls:type) -> list[Interface]:
+        ...
     
-    def get_interfaces(self, groupname:str) -> set[Interface]:
-        '''Get interfaces by Group name'''
-        ret = set()
-        for i in self._interfaces:
-            if i.user.in_group == groupname:
-                ret.add(i)
-        return ret
+    def get_interface(self, param: uuid.UUID | str):
+        '''
+        Get interfaces which match the condition
+        :param id:uuid.UUID, the id of the interface
+        :param groupname:str, the groupname of the interface
+        '''
+        if isinstance(param, uuid.UUID):
+            for i in self._interfaces:
+                if i.id == param:
+                    return i
+            raise error.NotFound(param, handler=self)
+        elif isinstance(param, str):
+            ret = []
+            for i in self._interfaces:
+                if i.user.in_group == param:
+                    ret.append(i)
+            return ret
+        elif isinstance(param, Interface):
+            if param in self._interfaces:
+                return param
+            raise error.NotFound(param, handler=self)
+        elif issubclass(param, Interface):
+            ret = []
+            for i in self._interfaces:
+                if isinstance(i, param):
+                    ret.append(i)
+            return ret
+        else:
+            raise TypeError(f"Expected type Interface or uuid.UUID, got {type(param)}")
     
     def has_interface(self, cls:type) -> bool:
         # If cls is not a Interface type, raise TypeError

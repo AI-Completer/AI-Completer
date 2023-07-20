@@ -42,6 +42,7 @@ from .layer import (
 )
 
 from . import (
+    language,
     interface,
     session,
     error,
@@ -51,7 +52,6 @@ from . import (
     events,
     ai,
     implements,
-    language,
 )
 
 from .namespace import Namespace

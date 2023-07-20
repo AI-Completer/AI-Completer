@@ -4,11 +4,18 @@ including some template classes
 '''
 
 from abc import ABC, abstractmethod
+from asyncio import iscoroutine
+import asyncio
+import threading
 from typing import Any, Self
-
 import pickle
 
-class Serializable(ABC):
+class BaseTemplate(ABC):
+    '''
+    A template class for all the template classes in aicompleter
+    '''
+
+class Serializable(BaseTemplate):
     '''
     This class is used to serialize object to string
 
@@ -70,7 +77,7 @@ class AttrJSONSerializable(JSONSerializable):
     def deserialize(src: dict) -> Self:
         raise NotImplementedError('from_json is not implemented')
 
-class Saveable(ABC):
+class Saveable(BaseTemplate):
     '''
     This class is can save object to file
     '''
@@ -89,7 +96,7 @@ class Saveable(ABC):
         '''
         raise NotImplementedError('load is not implemented')
 
-class AsyncSaveable(ABC):
+class AsyncSaveable(BaseTemplate):
     '''
     This class is can save object to file asynchronously
     '''
@@ -107,3 +114,106 @@ class AsyncSaveable(ABC):
         Load from file
         '''
         raise NotImplementedError('load is not implemented')
+
+class ContentManager(BaseTemplate):
+    '''
+    This class is a template for content manager
+    '''
+    def __enter__(self) -> Any:
+        '''
+        Enter the context
+        '''
+        if hasattr(self, 'acquire') and callable(self.acquire):
+            self.acquire()
+        raise NotImplementedError('enter is not implemented')
+    
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        '''
+        Exit the context
+        '''
+        if hasattr(self, 'release') and callable(self.release):
+            self.release()
+        raise NotImplementedError('exit is not implemented')
+    
+class AsyncContentManager(BaseTemplate):
+    '''
+    This class is a template for asynchronous content manager
+    '''
+    async def __aenter__(self) -> Any:
+        '''
+        Enter the context
+        '''
+        if hasattr(self, 'acquire') and callable(self.acquire):
+            await self.acquire()
+        raise NotImplementedError('enter is not implemented')
+    
+    async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+        '''
+        Exit the context
+        '''
+        if hasattr(self, 'release') and callable(self.release):
+            ret = self.release()
+            if iscoroutine(ret):
+                return await ret
+        raise NotImplementedError('exit is not implemented')
+
+class LifeTimeManager(BaseTemplate):
+    '''
+    This class is a template for lifetime manager
+    '''
+    def __init__(self) -> None:
+        super().__init__()
+        self._close_event:threading.Event = threading.Event()
+
+    @property
+    def closed(self) -> bool:
+        '''
+        Whether the object is closed
+        '''
+        return self._close_event.is_set()
+    
+    def close(self) -> None:
+        '''
+        Close the object
+        '''
+        self._close_event.set()
+
+    def wait_close(self) -> None:
+        '''
+        Wait until the object is closed
+        '''
+        self._close_event.wait()
+
+class AsyncLifeTimeManager(BaseTemplate):
+    '''
+    This class is a template for asynchronous lifetime manager
+    '''
+    def __init__(self) -> None:
+        super().__init__()
+        self._close_event:asyncio.Event = asyncio.Event()
+
+    @property
+    def closed(self) -> bool:
+        '''
+        Whether the object is closed
+        '''
+        return self._close_event.is_set()
+    
+    def close(self) -> None:
+        '''
+        Close the object
+        '''
+        self._close_event.set()
+
+    async def wait_close(self) -> None:
+        '''
+        Wait until the object is closed
+        '''
+        await self._close_event.wait()
+
+__all__ = (
+    'BaseTemplate',
+    *(
+        i.__name__ for i in globals().values() if isinstance(i, type) and issubclass(i, BaseTemplate)
+    )
+)

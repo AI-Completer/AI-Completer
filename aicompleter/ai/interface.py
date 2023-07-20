@@ -39,7 +39,7 @@ class ChatInterface(TransformerInterface):
     '''
     Chat interface
     '''
-    def __init__(self, *, ai: ChatTransformer, namespace:str, user:Optional[str] = None, id: Optional[uuid.UUID] = None, config:Config=Config()):
+    def __init__(self, *, ai: ChatTransformer, namespace:str, user:Optional[User] = None, id: Optional[uuid.UUID] = None, config:Config=Config()):
         super().__init__(ai=ai,namespace=namespace, user=user, id=id, config=config)
         self.ai.config.update(config)
         utils.typecheck(self.ai, ChatTransformer)

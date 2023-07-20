@@ -395,7 +395,8 @@ class Interface:
         :param session: Session
         '''
         # There is a config conflict when using mutable interface
-        ret = copy.deepcopy(self.namespace.config)
+        ret = copy.deepcopy(session.config['global'])
+        ret.update(self.namespace.config)
         if session:
             ret.update(session.config[self.namespace.name])
         return ret

@@ -17,10 +17,10 @@ def launch(loop:asyncio.AbstractEventLoop, logger:logging.Logger, max_try:int = 
                 else:
                     await asyncio.sleep(0)
             except asyncio.CancelledError as e:
-                loop.stop()
                 return
             except KeyboardInterrupt:
                 loop.stop()
+                logger.critical("KeyboardInterrupt")
                 await asyncio.sleep(0)
     expecttasks = {loop.create_task(check_loop())}
 

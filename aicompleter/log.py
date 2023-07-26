@@ -82,31 +82,21 @@ class Logger(logging.Logger):
     '''
     Custom logger
     '''
-    def __init__(self, name:str, level:int = logging.NOTSET):
+    def __init__(self, name:str, level:int = logging.NOTSET, substruct:list[str] = []):
         super().__init__(name, level)
-        self._stack = []
-
-    def _update_formatter(self) -> None:
-        '''
-        Update formatter
-        '''
-        for handler in self.handlers:
-            if isinstance(handler.formatter, Formatter):
-                handler.formatter.substruct = self._stack
+        self._stack = substruct
 
     def push(self, name:str) -> None:
         '''
         Push a name to stack
         '''
         self._stack.append(str(name))
-        self._update_formatter()
 
     def pop(self) -> str:
         '''
         Pop a name from stack
         '''
         ret = self._stack.pop()
-        self._update_formatter()
         return ret
     
     async def _log_async(self, level: int, msg: object, args: _ArgsType = (), exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1) -> None:
@@ -197,6 +187,8 @@ class Logger(logging.Logger):
         return self.typewriter_log(logging.CRITICAL, msg, time_delta, *args, exc_info, extra, stack_info, stacklevel)
     
     typewriter_fatal = typewriter_critical
+
+
 
 def getLogger(name:str, substruct:list[str] = [], colormap:Optional[dict[int, str]] = None, log_level:Optional[int] = None) -> Logger:
     '''

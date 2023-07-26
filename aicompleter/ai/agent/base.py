@@ -7,11 +7,12 @@ from ... import *
 from ... import events
 from .. import ChatTransformer
 
-class Agent:
+class Agent(common.AsyncLifeTimeManager):
     '''
     AI Agent
     '''
     def __init__(self, chatai: ChatTransformer, init_prompt:str, user:Optional[str] = None):
+        super().__init__()
         self.ai = chatai
         self._init_prompt = init_prompt
         
@@ -27,11 +28,10 @@ class Agent:
         '''Enable the ask command'''
 
         self._result_queue: asyncio.Queue[interface.Result] = asyncio.Queue()
-        self._request_queue: asyncio.Queue[ai.Message] = asyncio.Queue()
+        self._request_queue: asyncio.Queue[ai.Message | None] = asyncio.Queue()
         self._handle_task = asyncio.get_event_loop().create_task(self._handle_result())
         self._loop_task = asyncio.get_event_loop().create_task(self._loop())
         self._result = ...
-        self._stop_event: asyncio.Event = asyncio.Event()
 
         self._subagents:dict[str, Self] = {}
 
@@ -56,20 +56,13 @@ class Agent:
             pass
         except Exception as e:
             asyncio.get_event_loop().create_task(self.on_exception(e))
-
-    @property
-    def stopped(self) -> bool:
-        '''
-        Whether the agent is stopped
-        '''
-        return self._stop_event.is_set()
     
     @property
     def result(self) -> Any:
         '''
         The result of the agent
         '''
-        if not self.stopped:
+        if not self.closed:
             raise error.AI_OnRun('The agent is not stopped yet')
         if isinstance(self._result, Exception):
             raise self._result
@@ -250,32 +243,37 @@ class Agent:
                             self._parent._subagent_ask(self._parent_name, cmd['param'])
                             await asyncio.sleep(0.1)
                             continue
+                    
+                    def wrap_context():
+                        curcmd = cmd
+                        def when_result(x: asyncio.Future):
+                            try:
+                                ret = x.result()
+                            except asyncio.CancelledError:
+                                return
+                            except Exception as e:
+                                # Unpack Exception, remove the interface & session (to reduce the lenght of the message)
+                                if isinstance(e, error.BaseException):
+                                    e.kwargs.pop('interface', None)
+                                    e.kwargs.pop('handler', None)
+                                    e.kwargs.pop('session', None)
+                                    e.parent = None
+                                self._result_queue.put_nowait(interface.Result(curcmd['cmd'], False, str(e)))
+                                self.logger.error(f'Exception when executing command {curcmd["cmd"]}: {e}')
+                            else:
+                                self._result_queue.put_nowait(interface.Result(curcmd['cmd'], True, ret))
+                                self.logger.info(f'Command {curcmd["cmd"]} executed successfully, Result: {ret}')
+                        asyncio.get_event_loop().create_task(self.on_call(curcmd['cmd'], curcmd['param'])).add_done_callback(when_result)
 
-                    def when_result(x: asyncio.Future):
-                        try:
-                            ret = x.result()
-                        except asyncio.CancelledError:
-                            return
-                        except Exception as e:
-                            # Unpack Exception, remove the interface & session (to reduce the lenght of the message)
-                            if isinstance(e, error.BaseException):
-                                e.interface = None
-                                e.kwargs.pop('handler', None)
-                                e.kwargs.pop('session', None)
-                                e.parent = None
-                            self._result_queue.put_nowait(interface.Result(cmd['cmd'], False, str(e)))
-                            self.logger.error(f'Exception when executing command {cmd["cmd"]}: {e}')
-                        else:
-                            self._result_queue.put_nowait(interface.Result(cmd['cmd'], True, ret))
-                            self.logger.info(f'Command {cmd["cmd"]} executed successfully, Result: {ret}')
-
-                    asyncio.get_event_loop().create_task(self.on_call(cmd['cmd'], cmd['param'])).add_done_callback(when_result)
+                    wrap_context()
             
         except asyncio.CancelledError as e:
             exception = e
         except Exception as e:
             exception = e
             self.logger.error(f'Exception: {e}')
+            if self.logger.isEnabledFor(log.DEBUG):
+                traceback.print_exc()
         finally:
             # The loop is done
             self._handle_task.remove_done_callback(self._unexception)
@@ -284,7 +282,7 @@ class Agent:
             self._handle_task = None
             self._loop_task = None
             self.logger.debug('The agent is stopped')
-            self._stop_event.set()
+            self.close()
             if exception is not None:
                 if isinstance(exception, asyncio.CancelledError):
                     raise exception
@@ -337,16 +335,29 @@ class Agent:
             'value': value,
         })
 
-    def wait(self):
+    def close(self):
         '''
-        Wait until the agent is stopped
+        Close the agent
         '''
-        return self._stop_event.wait()
-
-    def __del__(self):
+        if self.closed:
+            return
         if self._handle_task:
             self._handle_task.cancel()
             self._handle_task.remove_done_callback(self._unexception)
         if self._loop_task:
             self._loop_task.cancel()
             self._loop_task.remove_done_callback(self._unexception)
+        self._handle_task = None
+        self._loop_task = None
+        self.logger.debug('The agent is closed')
+        super().close()
+
+    def wait(self):
+        '''
+        Wait until the agent is stopped
+        '''
+        return self.wait_close()
+
+    def __del__(self):
+        if not self.closed:
+            self.close()

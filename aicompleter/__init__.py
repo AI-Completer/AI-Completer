@@ -11,6 +11,12 @@ __description__ = "AI-Completer, a framework for interaction among AI, human and
 # __url__ = ""
 # Unknown yet
 
+from . import (
+    common,
+    language,
+    utils,
+)
+
 from .config import (
     Config,
     EnhancedDict,
@@ -42,12 +48,10 @@ from .layer import (
 )
 
 from . import (
-    language,
     interface,
     session,
     error,
     config,
-    utils,
     log,
     events,
     ai,
@@ -56,7 +60,6 @@ from . import (
 
 from .namespace import Namespace
 
-if bool(config.varibles['disable_memory']) == False:
-    from . import (
-        memory,
-    )
+from . import (
+    memory,
+)

@@ -22,6 +22,16 @@ class BaseException(Exception):
         if cls.__doc__ == BaseException.__doc__:
             cls.__doc__ = None
         return super().__init_subclass__()
+    
+    @property
+    def interface(self):
+        '''Interface'''
+        return self.kwargs.get('interface', None)
+    
+    @property
+    def session(self):
+        '''Session'''
+        return self.kwargs.get('session', None)
 
 class ParamRequired(BaseException):
     '''Param Required'''

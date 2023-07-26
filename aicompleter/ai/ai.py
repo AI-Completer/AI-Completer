@@ -4,7 +4,7 @@ import copy
 import time
 import uuid
 from abc import abstractmethod
-from typing import Any, Coroutine, Optional, Self
+from typing import Any, Coroutine, Optional, Self, final
 
 import attr
 from ..common import JSONSerializable
@@ -17,13 +17,15 @@ class AI:
     '''
     Abstract class for AI
     '''
-    name: str = attr.ib(default="AI", converter=str)
+    name: str = attr.ib(default="AI", validator=attr.validators.instance_of(str))
     'AI name'
-    islocal: bool = attr.ib(default=True, converter=bool)
+    model: str = attr.ib(default="", validator=attr.validators.instance_of(str))
+    'Model of AI'
+    islocal: bool = attr.ib(default=True, validator=attr.validators.instance_of(bool))
     'Is AI local or remote'
-    isenabled: bool = attr.ib(default=True, converter=bool)
+    isenabled: bool = attr.ib(default=True, validator=attr.validators.instance_of(bool))
     'Is AI enabled'
-    support: set[str] = attr.ib(default={'text'}, converter=set)
+    support: set[str] = attr.ib(default={'text'}, validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(str), iterable_validator=attr.validators.instance_of(set)))
     'Supported types of AI'
     location: Optional[str] = attr.ib(
         default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
@@ -49,16 +51,16 @@ class AI:
         raise NotImplementedError(
             f"generate() is not implemented in {self.__class__.__name__}")
 
-
 class Transformer(AI):
     '''
     Abstract class for transformer
     '''
-    support = {'text'}
+    support: set[str] = attr.ib(default={'text'}, validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(str), iterable_validator=attr.validators.instance_of(set)))
     'Supported types of transformer'
-    encoding: str
+    encoding: str = attr.ib(default="", validator=attr.validators.instance_of(str))
     'Encoding of transformer'
-    max_tokens: Optional[int] = None
+    max_tokens: Optional[int] = attr.ib(
+        default=None, validator=attr.validators.optional(attr.validators.instance_of(int)))
     'Max tokens of transformer, will limit the length of generated content'
 
     @abstractmethod
@@ -68,23 +70,35 @@ class Transformer(AI):
         '''
         raise NotImplementedError(
             f"generate_many() is not implemented in {self.__class__.__name__}")
+    
+    def getToken(self, text: str) -> list[str]:
+        '''
+        Get token of text
+        '''
+        from .token import Encoder
+        if self.encoding:
+            return Encoder(encoding=self.encoding).encode(text)
+        elif self.model:
+            return Encoder(model = self.model).encode(text)
+        else:
+            raise Exception('No encoding or model specified')
 
 @attr.s(auto_attribs=True)
 class Message:
     '''
     Message of conversation
     '''
-    content: str
+    content: str = attr.ib(validator=attr.validators.instance_of(str))
     'Content of message'
-    role: str
+    role: str = attr.ib(validator=attr.validators.instance_of(str))
     'Role of message'
-    id: Optional[uuid.UUID] = None
+    id: Optional[uuid.UUID] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(uuid.UUID)))
     'ID of message'
-    user: Optional[str] = None
+    user: Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
     'User of message'
-    time: float = time.time()
+    time: float = attr.ib(factory=time.time, validator=attr.validators.instance_of(float))
     'Time of message'
-    data: dict = {}
+    data: dict = attr.ib(factory=dict, validator=attr.validators.instance_of(dict))
     'Extra data of message'
 
     def __str__(self):

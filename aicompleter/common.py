@@ -7,13 +7,31 @@ from abc import ABC, abstractmethod
 from asyncio import iscoroutine
 import asyncio
 import threading
-from typing import Any, Self
+from typing import Any, Generic, Self, TypeVar
 import pickle
 
 class BaseTemplate(ABC):
     '''
     A template class for all the template classes in aicompleter
     '''
+
+_T = TypeVar('_T')
+class AsyncTemplate(BaseTemplate, Generic[_T]):
+    '''
+    A template class for all the asynchronous template classes in aicompleter
+    :param _T: The type of the synchronous object(if exists)
+    '''
+    
+    # Hook the subclass and add attr __sync_class__
+    def __init_subclass__(cls, **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        args = [i for i in cls.__orig_bases__ if i.__origin__ == AsyncTemplate][0].__args__
+        if len(args) > 0:
+            cls.__sync_class__ = args[0]
+        else:
+            cls.__sync_class__ = None
+
+del _T
 
 class Serializable(BaseTemplate):
     '''
@@ -96,7 +114,7 @@ class Saveable(BaseTemplate):
         '''
         raise NotImplementedError('load is not implemented')
 
-class AsyncSaveable(BaseTemplate):
+class AsyncSaveable(AsyncTemplate[Saveable]):
     '''
     This class is can save object to file asynchronously
     '''
@@ -135,7 +153,7 @@ class ContentManager(BaseTemplate):
             self.release()
         raise NotImplementedError('exit is not implemented')
     
-class AsyncContentManager(BaseTemplate):
+class AsyncContentManager(AsyncTemplate[ContentManager]):
     '''
     This class is a template for asynchronous content manager
     '''
@@ -184,13 +202,20 @@ class LifeTimeManager(BaseTemplate):
         '''
         self._close_event.wait()
 
-class AsyncLifeTimeManager(BaseTemplate):
+class AsyncLifeTimeManager(AsyncTemplate[LifeTimeManager]):
     '''
     This class is a template for asynchronous lifetime manager
     '''
     def __init__(self) -> None:
         super().__init__()
         self._close_event:asyncio.Event = asyncio.Event()
+        '''
+        The close event
+        '''
+        self._close_tasks:set[asyncio.Future] = set()
+        '''
+        The tasks that will be waited when the object is closed
+        '''
 
     @property
     def closed(self) -> bool:
@@ -203,6 +228,9 @@ class AsyncLifeTimeManager(BaseTemplate):
         '''
         Close the object
         '''
+        for task in self._close_tasks:
+            if not task.done():
+                task.cancel()
         self._close_event.set()
 
     async def wait_close(self) -> None:
@@ -210,6 +238,10 @@ class AsyncLifeTimeManager(BaseTemplate):
         Wait until the object is closed
         '''
         await self._close_event.wait()
+        for task in self._close_tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*self._close_tasks)
 
 __all__ = (
     'BaseTemplate',

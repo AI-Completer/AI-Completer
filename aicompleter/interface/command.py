@@ -14,7 +14,7 @@ from typing import (Any, Callable, Coroutine, Generator, Iterable, Iterator,
 import attr
 
 import aicompleter
-from aicompleter.common import AttrJSONSerializable, JSONSerializable
+from aicompleter.common import JSONSerializable
 import aicompleter.error as error
 from aicompleter.session.base import MultiContent
 
@@ -29,7 +29,7 @@ Group = TypeVar('Group', bound='aicompleter.interface.Group')
 Handler = TypeVar('Handler', bound='aicompleter.handler.Handler')
 
 @attr.s(auto_attribs=True,frozen=True)
-class CommandParamElement(AttrJSONSerializable):
+class CommandParamElement(JSONSerializable):
     '''Command Parameter Element'''
     name:str = ""
     '''Name of the parameter'''
@@ -234,7 +234,7 @@ class CommandParamStruct(JSONSerializable):
         return json.dumps(_json_description(self._struct))
     
 @attr.s(auto_attribs=True)
-class CommandAuthority(AttrJSONSerializable):
+class CommandAuthority(JSONSerializable):
     '''
     The authority of a command
     '''
@@ -307,11 +307,7 @@ class Command:
     '''
 
     def __attrs_post_init__(self):
-        self.logger:log.Logger = log.Logger("Command", log.INFO)
-        formatter = log.Formatter([self.cmd])
-        _handler = log.ConsoleHandler()
-        _handler.setFormatter(formatter)
-        self.logger.addHandler(_handler)
+        self.logger = log.getLogger("Command")
         self.logger.push(self.in_interface.user.name if self.in_interface else 'Unknown')
         self.logger.push(self.cmd)
         if bool(os.environ.get("DEBUG",False)):

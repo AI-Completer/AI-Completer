@@ -287,7 +287,7 @@ class Chater(ChatTransformer,OpenAIGPT):
         '''
         Ask the message
         '''
-        new_his = history
+        new_his = copy.deepcopy(history)
         new_his.messages.append(message)
         new_his = self.limit_token(new_his, self.config['sys.max_token'])
         ret = await self.generate_text(new_his)

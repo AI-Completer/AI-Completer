@@ -165,15 +165,7 @@ class Session:
             
         self.logger:log.Logger=log.Logger('session')
         '''Logger'''
-        formatter = log.Formatter()
-        _handler = log.ConsoleHandler()
-        _handler.setFormatter(formatter)
-        self.logger.addHandler(_handler)
-        if handler.config['global.debug']:
-            self.logger.setLevel(logging.DEBUG)
-        else:
-            self.logger.setLevel(logging.INFO)
-        self.logger.push(self.id.hex[:8])
+        self.logger = log.getLogger('Session', [self.id.hex[:8]])
 
     @property
     def memory(self) -> Memory:

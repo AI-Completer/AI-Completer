@@ -10,7 +10,6 @@ from re import A
 from typing import Any
 
 from .error import ConfigureMissing
-
 from .utils import EnhancedDict
 
 Pointer = list

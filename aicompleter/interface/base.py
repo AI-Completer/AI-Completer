@@ -10,7 +10,6 @@ import warnings
 
 import attr
 from .. import memory
-from ..common import AttrJSONSerializable
 
 from .. import session
 from ..namespace import Namespace
@@ -18,11 +17,12 @@ from ..namespace import Namespace
 from .. import config, error, log, utils, handler
 from .command import Command, Commands
 from ..config import Config
+from ..common import JSONSerializable
 
 Handler = TypeVar('Handler', bound='handler.Handler')
 
 @attr.s(auto_attribs=True, kw_only=True, hash=False)
-class User(AttrJSONSerializable):
+class User(JSONSerializable):
     '''User'''
     name:str = ""
     '''

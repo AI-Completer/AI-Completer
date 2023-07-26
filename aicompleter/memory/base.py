@@ -12,7 +12,7 @@ from typing import Any, Callable, Iterable, Iterator, Optional, Self, overload
 
 import attr
 
-from ..common import AttrJSONSerializable, JSONSerializable, Saveable, Serializable
+from ..common import JSONSerializable, Saveable, Serializable
 
 class MemoryCategory:
     '''
@@ -39,7 +39,7 @@ class MemoryCategory:
         return hash(self.category)
 
 @attr.s(auto_attribs=True)
-class MemoryItem(AttrJSONSerializable):
+class MemoryItem(JSONSerializable):
     '''
     Memory Item
     '''

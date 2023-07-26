@@ -10,10 +10,10 @@ import attr
 from ..common import JSONSerializable
 
 from ..config import Config
-
+from ..memory import Memory, JsonMemory
 
 @attr.s(auto_attribs=True)
-class AI:
+class AI(JSONSerializable):
     '''
     Abstract class for AI
     '''
@@ -50,6 +50,11 @@ class AI:
         '''
         raise NotImplementedError(
             f"generate() is not implemented in {self.__class__.__name__}")
+    
+    @staticmethod
+    def deserialize(data:dict):
+        ret = AI.__new__()
+        return ret._deserialize_class(data)
 
 class Transformer(AI):
     '''
@@ -132,7 +137,7 @@ class FuncParam(JSONSerializable):
             raise ValueError(
                 f"name must be a valid identifier, not {value}")
         
-    def to_json(self):
+    def serialize(self):
         return {
             'name': self.name,
             'description': self.description,
@@ -143,7 +148,7 @@ class FuncParam(JSONSerializable):
         }
     
     @staticmethod
-    def from_json(data: dict[str, Any]) -> Self:
+    def deserialize(data: dict[str, Any]) -> Self:
         return FuncParam(
             name=data['name'],
             description=data['description'],
@@ -229,6 +234,14 @@ class Conversation:
         Generate json
         '''
         return attr.asdict(self)
+    
+    def to_memory(self):
+        '''
+        Convert to memory
+        '''
+        ret = JsonMemory()
+
+
 
 class ChatTransformer(Transformer):
     '''

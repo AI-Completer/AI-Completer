@@ -14,16 +14,19 @@ class FileInterface(Interface):
     Including File Read and Write
     '''
     def __init__(self, user: Optional[User] = None, id: Optional[uuid.UUID] = uuid.uuid4()):
-        user = user or User(
-            name="file",
-            in_group="system",
-            all_groups={"system","command"},
-            support={"text","file"}
+        super().__init__(
+            namespace="file",
+            user = user or User(
+                name="file",
+                in_group="system",
+                all_groups={"system","command"},
+                support={"text","file"}
+            ),
+            id=id
         )
-        super().__init__(user,namespace="file",id=id)
         self.commands.add(
             Command(
-                name='read',
+                cmd='read',
                 description='Read File',
                 callback=self.cmd_read,
                 format=CommandParamStruct({
@@ -38,13 +41,13 @@ class FileInterface(Interface):
                 )
             ),
             Command(
-                name='write',
+                cmd='write',
                 description='Write File',
                 callback=self.cmd_write,
                 format=CommandParamStruct({
                     'path': CommandParamElement('path', str, description='File Path',tooltip='The file path to write'),
                     'content': CommandParamElement('content', str, description='File Content',tooltip='The file content to write'),
-                    'append': CommandParamElement('append', bool, description='Append',tooltip='Whether to append to the file'),
+                    'append': CommandParamElement('append', bool, description='Append',tooltip='Whether to append to the file', optional=True, default=False),
                 }),
                 to_return=True,
                 force_await=True,
@@ -55,7 +58,7 @@ class FileInterface(Interface):
                 )
             ),
             Command(
-                name='listdir',
+                cmd='listdir',
                 description='List Directory',
                 callback=self.cmd_listdir,
                 format=CommandParamStruct({
@@ -66,7 +69,7 @@ class FileInterface(Interface):
                 callable_groups={'system','agent'},
                 in_interface=self,
                 authority=CommandAuthority(
-                    can_listdir=True,
+                    can_listfile=True,
                 )
             ),
         )
@@ -74,25 +77,25 @@ class FileInterface(Interface):
     async def session_init(self, session:Session):
         ret = await super().session_init(session)
         # This data will be reuseable in other interfaces
-        gdata = session.data['global']
-        gdata['filesystem'] = FileSystem(session.config[self.namespace.name].get('root', 'workspace'))
-        gdata['workspace'] = WorkSpace(gdata['filesystem'], '/')
+        data = self.getdata(session)
+        data['filesystem'] = FileSystem(session.config[self.namespace.name].get('root', 'workspace'))
+        data['workspace'] = WorkSpace(data['filesystem'], '/')
 
     async def cmd_read(self, session:Session, message:Message) -> str:
         '''Command for reading file'''
-        gdata = session.data['global']
+        data = self.getdata(session)
         path = message.content.json['path']
         if not path:
             raise ValueError('Path cannot be empty')
         path = normpath(path)
-        filesystem:FileSystem = gdata['filesystem']
-        workspace:WorkSpace = gdata['workspace']
-        file = workspace.get(path, session.id)
+        filesystem:FileSystem = data['filesystem']
+        workspace:WorkSpace = data['workspace']
+        file = workspace.get(path, message.src_interface.user if message.src_interface else None)
         if not file:
             raise FileNotFoundError(f'File {path} not found or no permission')
-        if not file.type == Type.file:
+        if not file.type == Type.File:
             raise FileNotFoundError(f'File {path} is not a file')
-        return file.read(session.id)
+        return file.read(message.src_interface.user if message.src_interface else None)
     
     async def cmd_write(self, session:Session, message:Message) -> str:
         '''Command for writing file'''
@@ -103,14 +106,16 @@ class FileInterface(Interface):
         path = normpath(path)
         filesystem:FileSystem = data['filesystem']
         workspace:WorkSpace = data['workspace']
-        file = workspace.get(path, session.id)
+        file = workspace.get(path, message.src_interface.user if message.src_interface else None)
         if not file:
-            raise FileNotFoundError(f'File {path} not found or no permission')
+            raise FileNotFoundError(f'File {path} no permission')
+        if not file.existed:
+            return file.write(message.content.json['content'], message.src_interface.user if message.src_interface else None)
         if not file.type == Type.File:
             raise FileNotFoundError(f'File {path} is not a file')
         if message.content.json['append']:
-            return file.write_append(message.content.json['content'], session.id)
-        return file.write(message.content.json['content'], session.id)
+            return file.write_append(message.content.json['content'], message.src_interface.user if message.src_interface else None)
+        return file.write(message.content.json['content'], message.src_interface.user if message.src_interface else None)
 
     async def cmd_listdir(self, session:Session, message:Message) -> list[str]:
         '''Command for listing directory'''
@@ -121,9 +126,9 @@ class FileInterface(Interface):
         path = normpath(path)
         filesystem:FileSystem = data['filesystem']
         workspace:WorkSpace = data['workspace']
-        file = workspace.get(path, session.id)
+        file = workspace.get(path, message.src_interface.user if message.src_interface else None)
         if not file:
             raise FileNotFoundError(f'Path {path} not found or no permission')
         if not file.type == Type.Folder:
             raise FileNotFoundError(f'Path {path} is not a directory')
-        return file.listdir(session.id)
+        return file.listdir(message.src_interface.user if message.src_interface else None)

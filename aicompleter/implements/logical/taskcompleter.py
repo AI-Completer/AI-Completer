@@ -6,36 +6,40 @@ Used to complete the task fully automatically
 import asyncio
 import json
 import time
-from typing import Any
+from typing import Any, Optional
+import uuid
 from aicompleter import *
+from aicompleter.ai.ai import ChatTransformer
 from aicompleter.utils import Struct
 
 class TaskCompleter(ai.ChatInterface):
     '''
     AI Executor of the state machine
     '''
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, ai:ChatTransformer, user:Optional[User] = None, id:uuid.UUID = uuid.uuid4(), config:Config = Config()):
+        super().__init__(
+            ai = ai,
+            namespace='taskcompleter',
+            user = user,
+            config = config,
+            id = id,
+        )
         self.commands.add(Command(
             cmd='task',
+            description='Execute a task, this will start an agent to help you finish the task, the task must be in natural language. You should always use this command when you want to execute a task which wll consume a lot of tokens.',
             callable_groups={'user'},
             overrideable=False,
             callback=self.cmd_task,
             in_interface=self,
+            format=CommandParamStruct({
+                'task':CommandParamElement(name='task', type=str, optional=False, description='The task to be executed (in natural language), must be a task', tooltip='task')
+            })
         ))
     
     async def cmd_task(self, session: Session, message: Message):
         '''
         Execute a task
         '''
-        if not Struct({
-                'task': str,
-            }).check(message.content.json):
-            raise error.FormatError(
-                message=message,
-                interface=self,
-                content='Unrecognized format'
-                )
         task = message.content.json['task']
         
         avaliable_commands = Commands()
@@ -55,38 +59,37 @@ class TaskCompleter(ai.ChatInterface):
             user = session.id.hex,
             init_prompt=f'''
 You are ChatGPT, an AI that do your task automatically.
-You should not ask for user'help.
+You should not ask for user's help.
 
 Commands:
 {command_table}
 
 What you say is to be parsed by the system. So you should reply with the json format below:
-{{
-    "commands":[{{
-        "cmd":<command name>,
-        "param":<parameters>
-    }}]
-}}
+{{"commands":[{{"cmd":<command name>,"param":<parameters>}}]}}
+
 If you execute commands, you will receive the return value from the command parser.
 You can execute multiple commands at once.
 Do not reply with anything else.
+You can use "$last_result" to refer to the last command result, including the error.
+You should execute the "stop" command to imply that you have finished the task and reply with the result.
 
 Your task is:
 {task}
-Respond in the language of the task.
 '''
         )
 
         def on_call(cmd:str, param:Any):
             return session.asend(Message(
                 content=param,
-                user=self._user,
+                cmd=cmd,
                 src_interface=self,
             ))
         agent.on_call = on_call
         agent.enable_ask = False
         
-        agent.ask("Start the task now")
+        from ... import language
+        
+        agent.ask(language.DICT[self.getconfig(session).get('language', 'en-us')]['start_task'])
         await agent.wait()
         return agent.result
         

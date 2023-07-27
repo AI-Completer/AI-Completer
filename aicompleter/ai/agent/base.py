@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import traceback
 from typing import Any, Callable, Coroutine, Optional, Self, overload
@@ -6,11 +7,12 @@ from ... import *
 from ... import events
 from .. import ChatTransformer
 
-class Agent:
+class Agent(common.AsyncLifeTimeManager):
     '''
     AI Agent
     '''
     def __init__(self, chatai: ChatTransformer, init_prompt:str, user:Optional[str] = None):
+        super().__init__()
         self.ai = chatai
         self._init_prompt = init_prompt
         
@@ -26,7 +28,7 @@ class Agent:
         '''Enable the ask command'''
 
         self._result_queue: asyncio.Queue[interface.Result] = asyncio.Queue()
-        self._request_queue: asyncio.Queue[ai.Message] = asyncio.Queue()
+        self._request_queue: asyncio.Queue[ai.Message | None] = asyncio.Queue()
         self._handle_task = asyncio.get_event_loop().create_task(self._handle_result())
         self._loop_task = asyncio.get_event_loop().create_task(self._loop())
         self._result = ...
@@ -45,6 +47,8 @@ class Agent:
         self._handle_task.add_done_callback(self._unexception)
         self._loop_task.add_done_callback(self._unexception)
 
+        self._last_result = None
+
     def _unexception(self,x:asyncio.Future):
         try:
             x.result()
@@ -52,21 +56,16 @@ class Agent:
             pass
         except Exception as e:
             asyncio.get_event_loop().create_task(self.on_exception(e))
-
-    @property
-    def stopped(self) -> bool:
-        '''
-        Whether the agent is stopped
-        '''
-        return self._result != Ellipsis
     
     @property
     def result(self) -> Any:
         '''
         The result of the agent
         '''
-        if not self.stopped:
-            raise RuntimeError('The agent is not stopped yet')
+        if not self.closed:
+            raise error.AI_OnRun('The agent is not stopped yet')
+        if isinstance(self._result, Exception):
+            raise self._result
         return self._result
 
     def new_subagent(self, name:str, init_words: str,init_prompt:Optional[str] = None, ai: Optional[ChatTransformer] = None , user:Optional[str] = None) -> Self:
@@ -99,21 +98,6 @@ class Agent:
         Parse the commands from AI
         '''
 
-        # Check this format : {"type":"ask", "message":"<message>"}
-        try:
-            json_dat = json.loads(raw)
-            if not isinstance(json_dat, dict):
-                raise ValueError('Invalid json format')
-            if not isinstance(json_dat.get('type', None), str):
-                raise ValueError('type not found')
-            if json_dat['type'].startwiths('ask') and 'message' in json_dat:
-                raw = json_dat['message']
-            if json_dat['type'].startwiths('ask') and 'value' in json_dat:
-                raw = json_dat['value']
-        except Exception:
-            pass
-
-
         def _check_parse(value:str) -> bool:
             try:
                 json.loads(value)['commands']
@@ -126,6 +110,9 @@ class Agent:
         if _check_parse(raw):
             command_raw = raw
         else:
+            if raw[0] == '{' and raw[-1] == '}':
+                raise ValueError('Commands parse error, please check your json format and retry, the format: {"commands":[{...}]}')
+
             for line in raw.splitlines():
                 if _check_parse(line):
                     command_raw = line
@@ -168,23 +155,44 @@ class Agent:
                 # Get all the requests
 
                 request:ai.Message = await self._request_queue.get()
+                # Wait for other command output
+                await asyncio.sleep(0.1)
 
-                self.logger.debug(f'Get requests: {request}')
+                requests = [request]
+                while not self._request_queue.empty():
+                    requests.append(self._request_queue.get_nowait())
 
-                raw = await self.ai.ask_once(
-                    history = self.conversation,
-                    message = request,
-                )
+                # Remove None
+                requests = [i for i in requests if i is not None]
+                if len(requests) == 0:
+                    self.logger.debug('Empty request')
+                else:
+                    self.logger.debug(f'Get requests: {requests}')
+
+                _new_conversation = copy.deepcopy(self.conversation)
+                for request in requests:
+                    _new_conversation.messages.append(request)
+                raw = await self.ai.generate_text(conversation=_new_conversation)
+                # Success
+                _new_conversation.messages.append(ai.Message(
+                    content = raw,
+                    role = 'assistant',
+                ))
+                self.conversation = _new_conversation
+
                 self.logger.debug(f'AI response: {raw}')
                 if raw == '':
                     # Self call ask command, do not input anything
                     raw = '{"commands":[{"cmd":"ask","param":{"content":""}}]}'
 
+                # try to replace the variables
+                raw = raw.replace('$last_result', str(self._last_result) or '')
+
                 try:
                     json_dat = self._parse(raw)
                 except ValueError as e:
                     # no wait to tell AI
-                    self.logger.error(f'Invalid json format: {raw}')
+                    self.logger.error(f'Value Error: {str(e)}')
                     self._request({
                         'type':'error',
                         'value':str(e),
@@ -227,7 +235,7 @@ class Agent:
                         if not self.enable_ask:
                             self._request({
                                 'type':'error',
-                                'value':f"Ask command is not allowed"
+                                'value':f"Ask command is not allowed, if possible, use 'stop' instead"
                             })
                             continue
                         # This command will be hooked if the agent is a subagent
@@ -235,29 +243,37 @@ class Agent:
                             self._parent._subagent_ask(self._parent_name, cmd['param'])
                             await asyncio.sleep(0.1)
                             continue
+                    
+                    def wrap_context():
+                        curcmd = cmd
+                        def when_result(x: asyncio.Future):
+                            try:
+                                ret = x.result()
+                            except asyncio.CancelledError:
+                                return
+                            except Exception as e:
+                                # Unpack Exception, remove the interface & session (to reduce the lenght of the message)
+                                if isinstance(e, error.BaseException):
+                                    e.kwargs.pop('interface', None)
+                                    e.kwargs.pop('handler', None)
+                                    e.kwargs.pop('session', None)
+                                    e.parent = None
+                                self._result_queue.put_nowait(interface.Result(curcmd['cmd'], False, str(e)))
+                                self.logger.error(f'Exception when executing command {curcmd["cmd"]}: {e}')
+                            else:
+                                self._result_queue.put_nowait(interface.Result(curcmd['cmd'], True, ret))
+                                self.logger.info(f'Command {curcmd["cmd"]} executed successfully, Result: {ret}')
+                        asyncio.get_event_loop().create_task(self.on_call(curcmd['cmd'], curcmd['param'])).add_done_callback(when_result)
 
-                    def when_result(x: asyncio.Future):
-                        try:
-                            ret = x.result()
-                        except asyncio.CancelledError:
-                            return
-                        except Exception as e:
-                            # Unpack Exception, remove the interface & session (to reduce the lenght of the message)
-                            if isinstance(e, error.BaseException):
-                                e.interface = None
-                                e.kwargs.pop('handler', None)
-                                e.kwargs.pop('session', None)
-                                e.parent = None
-                            self._result_queue.put_nowait(interface.Result(cmd['cmd'], False, str(e)))
-                            self.logger.error(f'Exception when executing command {cmd["cmd"]}: {e}')
-                        else:
-                            self._result_queue.put_nowait(interface.Result(cmd['cmd'], True, ret))
-                            self.logger.info(f'Command {cmd["cmd"]} executed successfully, Result: {ret}')
-
-                    asyncio.get_event_loop().create_task(self.on_call(cmd['cmd'], cmd['param'])).add_done_callback(when_result)
+                    wrap_context()
             
         except asyncio.CancelledError as e:
             exception = e
+        except Exception as e:
+            exception = e
+            self.logger.error(f'Exception: {e}')
+            if self.logger.isEnabledFor(log.DEBUG):
+                traceback.print_exc()
         finally:
             # The loop is done
             self._handle_task.remove_done_callback(self._unexception)
@@ -266,20 +282,24 @@ class Agent:
             self._handle_task = None
             self._loop_task = None
             self.logger.debug('The agent is stopped')
+            self.close()
             if exception is not None:
-                raise exception
+                if isinstance(exception, asyncio.CancelledError):
+                    raise exception
+                else:
+                    self._result = exception
             
         self.logger.debug('The loop is done')
 
     async def _handle_result(self):
         while True:
             result = await self._result_queue.get()
-
             if result.cmd == 'ask':
                 # Excpetion
                 self.ask(result.ret)
                 continue
 
+            self._last_result = result.ret
             self._request({
                 'type':'command-result',
                 'success': result.success,
@@ -297,6 +317,13 @@ class Agent:
             user = self.conversation.user,
         ))
 
+    def trigger(self):
+        '''
+        Do nothing, just trigger the agent to run
+        '''
+        self.logger.debug('Triggered')
+        self._request_queue.put_nowait(None)
+
     def _subagent_ask(self, name:str, value:str):
         '''
         Ask the agent to execute a command
@@ -308,17 +335,29 @@ class Agent:
             'value': value,
         })
 
-    async def wait(self):
+    def close(self):
         '''
-        Wait until the agent is stopped
+        Close the agent
         '''
-        while not self.stopped:
-            await asyncio.sleep(0.1)
-
-    def __del__(self):
+        if self.closed:
+            return
         if self._handle_task:
             self._handle_task.cancel()
             self._handle_task.remove_done_callback(self._unexception)
         if self._loop_task:
             self._loop_task.cancel()
             self._loop_task.remove_done_callback(self._unexception)
+        self._handle_task = None
+        self._loop_task = None
+        self.logger.debug('The agent is closed')
+        super().close()
+
+    def wait(self):
+        '''
+        Wait until the agent is stopped
+        '''
+        return self.wait_close()
+
+    def __del__(self):
+        if not self.closed:
+            self.close()

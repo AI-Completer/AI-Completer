@@ -3,10 +3,11 @@ Handler between the interfaces
 '''
 import asyncio
 import copy
+import functools
 import uuid
-from typing import Generator, Iterator, Optional, overload
+from typing import Any, Generator, Iterator, Optional, overload
 
-from aicompleter import memory
+from aicompleter import memory, utils
 
 from . import error, events, interface, log, session
 from .config import Config
@@ -93,11 +94,11 @@ class Handler:
     async def close(self):
         '''Close the handler'''
         self.logger.debug("Closing handler")
-        for i in self._interfaces:
-            await i.close()
         for i in self._running_sessions:
             if not i.closed:
                 await i.close()
+        for i in self._interfaces:
+            await i.close()
         self._closed.set()
 
     async def close_session(self, session:Session):
@@ -112,7 +113,10 @@ class Handler:
         # User
         self._userset.clear()
         for i in self._interfaces:
-            self._userset.add(i.user)
+            if i.user.name not in self._userset:
+                self._userset.add(i.user)
+            elif i.user != self._userset[i.user.name]:
+                raise error.Conflict('interface user conflict', name=i.user.name, interface=self)
         # Group
         groupnames:set[str] = set()
         for i in self._userset:
@@ -151,6 +155,30 @@ class Handler:
     
     def get_executable_cmds(self, *args, **wargs) -> Generator[Command, None, None]:
         return self._namespace.get_executable(*args, **wargs)
+    
+    def assign_user(self, 
+                    description:Optional[str] = None, 
+                    in_group:Optional[str] = "",
+                    all_groups:Optional[set[str]] = set(),
+                    support:Optional[set[str]] = set()) -> User:
+        '''
+        Assign a new user
+        '''
+        def _random_name():
+            import random
+            import string
+            return ''.join(random.choice(string.ascii_letters) for i in range(10))
+        while True:
+            name = _random_name()
+            if name not in self._userset:
+                break
+        return User(
+            name=name,
+            description=description,
+            in_group=in_group,
+            all_groups=all_groups,
+            support=support,
+        )
 
     @overload
     async def add_interface(self, interface:Interface) -> None:
@@ -163,12 +191,25 @@ class Handler:
     async def add_interface(self, *interfaces:Interface) -> None:
         '''Add interface to the handler'''
         for i in interfaces:
+            utils.typecheck(i, Interface)
+            # Assign user if not assigned
+            if i._user == None:
+                i._user = self.assign_user()
+            if i._user.name == "":
+                i._user = self.assign_user(
+                    description=i._user.description,
+                    in_group=i._user.in_group,
+                    all_groups=i._user.all_groups,
+                    support=i._user.support,
+                )
+            
             self.logger.debug("Adding interface %s - %s", i.id, i.user.name)
             if i in self._interfaces:
                 raise error.Existed(i, handler=self)
             self._interfaces.add(i)
             self._namespace.subnamespaces[i.namespace.name] = i.namespace
-            await i.init()
+        for i in interfaces:
+            await i.init(self)
         self.reload()
 
     @overload
@@ -200,20 +241,51 @@ class Handler:
         else:
             raise TypeError(f"Expected type Interface or uuid.UUID, got {type(param)}")
     
+    @overload
     def get_interface(self, id:uuid.UUID) -> Interface:
-        '''Get interface by id'''
-        for i in self._interfaces:
-            if i.id == id:
-                return i
-        raise error.NotFound(id, handler=self)
+        ...
+
+    @overload
+    def get_interface(self, groupname:str) -> list[Interface]:
+        ...
+
+    @overload
+    def get_interface(self, interface:Interface) -> Interface:
+        ...
+
+    @overload
+    def get_interface(self, cls:type) -> list[Interface]:
+        ...
     
-    def get_interfaces(self, groupname:str) -> set[Interface]:
-        '''Get interfaces by Group name'''
-        ret = set()
-        for i in self._interfaces:
-            if i.user.in_group == groupname:
-                ret.add(i)
-        return ret
+    def get_interface(self, param: uuid.UUID | str):
+        '''
+        Get interfaces which match the condition
+        :param id:uuid.UUID, the id of the interface
+        :param groupname:str, the groupname of the interface
+        '''
+        if isinstance(param, uuid.UUID):
+            for i in self._interfaces:
+                if i.id == param:
+                    return i
+            raise error.NotFound(param, handler=self)
+        elif isinstance(param, str):
+            ret = []
+            for i in self._interfaces:
+                if i.user.in_group == param:
+                    ret.append(i)
+            return ret
+        elif isinstance(param, Interface):
+            if param in self._interfaces:
+                return param
+            raise error.NotFound(param, handler=self)
+        elif issubclass(param, Interface):
+            ret = []
+            for i in self._interfaces:
+                if isinstance(i, param):
+                    ret.append(i)
+            return ret
+        else:
+            raise TypeError(f"Expected type Interface or uuid.UUID, got {type(param)}")
     
     def has_interface(self, cls:type) -> bool:
         # If cls is not a Interface type, raise TypeError
@@ -307,7 +379,6 @@ class Handler:
                 self._running_sessions.remove(i)
 
     async def new_session(self, 
-                          interface:Optional[Interface] = None,
                           config:Optional[Config] = None,
                           memoryConfigure:Optional[memory.MemoryConfigure] = None) -> session.Session:
         '''
@@ -318,10 +389,6 @@ class Handler:
         '''
         ret = session.Session(self, memoryConfigure)
         self.logger.debug("Creating new session %s", ret.id)
-        if interface:
-            if not isinstance(interface, Interface):
-                raise TypeError(f"Expected type Interface, got {type(interface)}")
-            ret.src_interface = interface
         # Initialize session
         ret.config = config
         if config == None: 

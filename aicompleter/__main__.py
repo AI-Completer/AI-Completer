@@ -2,11 +2,15 @@ import argparse
 import asyncio
 import importlib
 import os
+import sys
 import traceback
 
 from . import config
 from .config import Config
 from . import log
+
+if sys.version_info < (3, 11):
+    raise RuntimeError("Python 3.11+ is required")
 
 __DEBUG__:bool = False
 '''
@@ -37,7 +41,7 @@ helper_pareser = subparsers.add_parser('helper', help='The helper of AI Complete
 helper_pareser.add_argument('--ai', type=str, default='openaichat', choices=('openaichat', 'bingai'), help='The AI to use, default: openaichat, options: openaichat, bingai')
 helper_pareser.add_argument('--model', type=str, default='', help='The model to use, the choices differ from the AI, default: not set, options: openaichat: davinci, curie ,..., bingai: balanced, creative, precise')
 helper_pareser.add_argument('--enable-agent', action='store_true', help='Enable subagent, default: False', dest='enable_agent')
-helper_pareser.add_argument('-i','--include', type=str, nargs='+', default=[], choices=('pythoncode', 'searcher'), help='Include the extra interface, default: None, options: pythoncode')
+helper_pareser.add_argument('-i','--include', type=str, nargs='+', default=[], choices=('pythoncode', 'searcher', 'file'), help='Include the extra interface, default: None, options: pythoncode, searcher, file')
 helper_pareser.add_argument('-e','--extra-include', type=str, nargs='+', default=[], help='Include the extra interface, will find the interface in the specified python program path, format: path:interface:namespace')
 helper_pareser.add_argument('--disable-authority', action='store_true', help='Disable authority, default: False', dest='disable_authority')
 
@@ -90,6 +94,7 @@ __AI_map__ = {
 __Int_map__ = {
     'pythoncode': (implements.PythonCodeInterface, {}),
     'searcher': (implements.SearchInterface, {'config':config_['bingai']}),
+    'file': (implements.system.FileInterface, {}),
 }
 
 handler_ = Handler(config_)
@@ -206,49 +211,19 @@ async def main():
 loop = asyncio.new_event_loop()
 if os.name == "nt":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-async def check_loop():
-    # Check if the loop is empty
-    # The one task is this function
-    while True:
-        try:
-            if len(asyncio.all_tasks(loop)) == 1:
-                loop.stop()
-                await asyncio.sleep(0)
-            else:
-                await asyncio.sleep(0.1)
-        except asyncio.CancelledError as e:
-            if len(asyncio.all_tasks(loop)) == 1:
-                loop.stop()
-                return
-try:
-    loop.create_task(main())
-    check_task = loop.create_task(check_loop())
-    loop.run_forever()
-except KeyboardInterrupt:
-    logger.critical("KeyboardInterrupt")
-except BaseException as e:
-    logger.critical(f"Unexception: {e}")
-    if logger.isEnabledFor(log.DEBUG):
-        traceback.print_exc()
-finally:
-    if not loop.is_closed():
-        max_try = 10
-        try_time = 0
-        while not all(task.done() for task in asyncio.all_tasks(loop) if task != check_task) and try_time < max_try:
-            try_time += 1
-            for task in asyncio.all_tasks(loop):
-                if task == check_task:
-                    continue
-                task.cancel()
-            loop.run_forever()
 
-        if try_time >= max_try:
-            logger.critical("Force Quit")
-        else:
-            # Stop check_task
-            check_task.cancel()
-            loop.run_until_complete(check_task)
-        loop.close()
+loop.create_task(main())
+
+utils.launch(
+    loop=loop,
+    logger=logger,
+)
+loop.create_task(handler_.close())
+# Create a new check task, because the task before has been cancelled
+utils.launch(
+    loop=loop,
+    logger=logger,
+)
 
 if config.varibles['disable_memory'] == False:
     async def save():
@@ -260,12 +235,13 @@ if config.varibles['disable_memory'] == False:
         with open(args.memory, 'w') as f:
             json.dump(ret, f, ensure_ascii=False, indent=4)
         logger.debug("Memory Saved")
-
+        
     try:
-        asyncio.run(save())
+        loop.run_until_complete(save())
     except Exception as e:
         logger.critical(f"Exception when saving memory: {e}")
         if logger.isEnabledFor(log.DEBUG):
             traceback.print_exc()
 
+loop.close()
 logger.debug("Loop Closed")

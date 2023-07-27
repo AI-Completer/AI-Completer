@@ -3,16 +3,23 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
-from typing import Any, Callable, Optional, overload
+from typing import Any, Callable, Optional, Self, overload
+from ..common import JSONSerializable, serialize
 
-
-class defaultdict(dict):
+class defaultdict(dict, JSONSerializable):
     '''
     Dict that can automatically create new keys
     '''
     def __missing__(self, key):
         self[key] = defaultdict()
         return self[key]
+    
+    def serialize(self) -> dict:
+        return serialize(self.__dict__)
+    
+    @staticmethod
+    def deserialize(data:dict) -> Self:
+        return defaultdict(data)
 
 class EnhancedDict(defaultdict):
     '''
@@ -203,3 +210,8 @@ class EnhancedDict(defaultdict):
         Copy the dict
         '''
         return copy.deepcopy(self)
+
+    @staticmethod
+    def deserialize(data: dict) -> Self:
+        return EnhancedDict(data)
+    

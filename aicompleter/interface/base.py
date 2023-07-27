@@ -5,25 +5,30 @@ import copy
 import os
 import uuid
 from abc import abstractmethod
-from typing import Optional, Self, overload
+from typing import Optional, Self, TypeVar, overload
 import warnings
 
 import attr
 from .. import memory
-from ..common import AttrJSONSerializable
 
 from .. import session
 from ..namespace import Namespace
 
-from .. import config, error, log, utils
+from .. import config, error, log, utils, handler
 from .command import Command, Commands
 from ..config import Config
+from ..common import JSONSerializable
+
+Handler = TypeVar('Handler', bound='handler.Handler')
 
 @attr.s(auto_attribs=True, kw_only=True, hash=False)
-class User(AttrJSONSerializable):
+class User(JSONSerializable):
     '''User'''
     name:str = ""
-    '''Name of the user'''
+    '''
+    Name of the user
+    If the name is empty, the user will be assigned a name by the handler
+    '''
     id:uuid.UUID = uuid.uuid4()
     '''ID of the user'''
     description:Optional[str] = None
@@ -278,7 +283,7 @@ class GroupSet:
 #      def __init__(self, config:Config, id:uuid.UUID = uuid.uuid4()):
 class Interface:
     '''Interface of AI Completer'''
-    def __init__(self, user:User, namespace:Optional[str] = None,id:uuid.UUID = uuid.uuid4(), config: config.Config = config.Config()):
+    def __init__(self,  namespace:str, user:User,id:uuid.UUID = uuid.uuid4(), config: config.Config = config.Config()):
         self._user = user
         '''Character of the interface'''
         self._closed:bool = False
@@ -346,7 +351,7 @@ class Interface:
                     return i
         return None
     
-    async def init(self) -> None:
+    async def init(self, in_handler:Handler) -> None:
         '''
         Initial function for Interface
         '''
@@ -390,7 +395,8 @@ class Interface:
         :param session: Session
         '''
         # There is a config conflict when using mutable interface
-        ret = copy.deepcopy(self.namespace.config)
+        ret = copy.deepcopy(session.config['global'])
+        ret.update(self.namespace.config)
         if session:
             ret.update(session.config[self.namespace.name])
         return ret
@@ -428,3 +434,16 @@ class Interface:
             *args,
             **kwargs
         ))
+
+    def rename_cmd(self, old:str, new:str):
+        '''
+        Rename a command
+        This method is used to handle a conflict of command name
+        :param old: Old name
+        :param new: New name
+        '''
+        for cmd in self.commands:
+            if cmd.cmd == old:
+                cmd.cmd = new
+            if new in cmd.alias:
+                cmd.alias.remove(new)

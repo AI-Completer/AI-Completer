@@ -12,7 +12,12 @@ from typing import Any, Callable, Iterable, Iterator, Optional, Self, overload
 
 import attr
 
-from ..common import AttrJSONSerializable, JSONSerializable, Saveable, Serializable
+from ..common import JSONSerializable, Saveable, serialize, deserialize, BaseTemplate
+
+class Memoryable(BaseTemplate):
+    '''
+    This class is a template for memoryable class
+    '''
 
 class MemoryCategory:
     '''
@@ -39,7 +44,7 @@ class MemoryCategory:
         return hash(self.category)
 
 @attr.s(auto_attribs=True)
-class MemoryItem(AttrJSONSerializable):
+class MemoryItem(JSONSerializable):
     '''
     Memory Item
     '''
@@ -68,15 +73,7 @@ class MemoryItem(AttrJSONSerializable):
                         category=MemoryCategory(src['category']),
                         timestamp=src['timestamp'])
         if 'data' in src:
-            ret.data = src['data']
-            if isinstance(ret.data, (dict, list)):
-                return ret
-            try:
-                ret.data = json.loads(ret.data)
-                if 'type' in ret.data and ret.data['type'] == 'memory':
-                    ret.data = Memory.from_json(ret.data)
-            except json.JSONDecodeError:
-                pass
+            ret.data = deserialize(src['data'], globals())
         return ret
     
     def serialize(self) -> dict:
@@ -91,18 +88,7 @@ class MemoryItem(AttrJSONSerializable):
         }
         if self.data == None:
             return ret
-        if isinstance(self.data, (dict, list)):
-            ret['data'] = self.data
-            return ret
-        try:
-            if issubclass(type(self.data), Serializable):
-                ret['data'] = self.data.serialize()
-            elif hasattr(self.data, 'to_json'):
-                ret['data'] = self.data.to_json()
-            else:
-                ret['data'] = str(self.data)
-        except AttributeError:
-            ret['data'] = str(self.data)
+        ret['data'] = serialize(self.data)
         return ret
 
 @attr.s

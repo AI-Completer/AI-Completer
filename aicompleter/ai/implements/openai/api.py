@@ -163,10 +163,9 @@ class Chater(ChatTransformer,OpenAIGPT):
     def update_config(self, config:Config):
         '''
         Update the config
-
-        *Note*:Model will not be updated
         '''
         self.config = config
+        self.model = self.config.get('model', 'gpt-3.5-turbo')
         self.api_key:str = self.config.require('openai.api-key')
         self.proxy:Optional[str] = self.config.get('proxy', None)
         self.api_url = self.config.get('openai.api-url', DEFAULT_API_URL)
@@ -190,7 +189,7 @@ class Chater(ChatTransformer,OpenAIGPT):
                 json=dict(
                     **conversation.generate_json(),
                     **self.config['chat'],
-                    model = self.name,
+                    model = self.model,
                 ),
                 proxy=self.proxy if self.proxy else None,
                 headers={
@@ -288,7 +287,7 @@ class Chater(ChatTransformer,OpenAIGPT):
         '''
         Ask the message
         '''
-        new_his = history
+        new_his = copy.deepcopy(history)
         new_his.messages.append(message)
         new_his = self.limit_token(new_his, self.config['sys.max_token'])
         ret = await self.generate_text(new_his)
@@ -347,6 +346,12 @@ class Chater(ChatTransformer,OpenAIGPT):
             ret_messages.append(message)
         new_his.messages = ret_messages
         return new_his
+    
+    def getToken(self, text: str) -> list[int]:
+        '''
+        Get the token of the text
+        '''
+        return Encoder(model = self.model).encode(text)
     
 class Completer(TextTransformer,OpenAIGPT):
     '''

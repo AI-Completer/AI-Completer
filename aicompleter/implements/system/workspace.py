@@ -22,6 +22,10 @@ def normpath(path:str):
     '''Normalize path'''
     return os.path.normpath(path).replace('\\', '/')
 
+def issamepath(path1:str, path2:str):
+    '''Check if two path is the same'''
+    return normpath(path1) == normpath(path2)
+
 @enum.unique
 class Type(enum.Enum):
     '''Type for file/folder'''
@@ -87,13 +91,15 @@ class File:
         
         if self.existed:
             if os.path.isfile(self._true_path):
-                self.premission = File.default_permission
+                self.permission = File.default_permission
                 '''Permission of file'''
             elif os.path.isdir(self._true_path):
-                self.premission = File.default_folder_permission
+                self.permission = File.default_folder_permission
                 '''Permission of folder'''
             else:
                 raise NotImplementedError('Unimplemented File Type')
+        else:
+            self.permission = File.default_permission
 
     @property
     def _true_path(self):
@@ -126,21 +132,21 @@ class File:
         '''
         If file is a dir
         '''
-        return self.premission.type == Type.Folder
+        return self.permission.type == Type.Folder
     
     @property
     def isfile(self):
         '''
         If file is a file
         '''
-        return self.premission.type == Type.File
+        return self.permission.type == Type.File
     
     @property
     def type(self):
         '''
         Type of file
         '''
-        return self.premission.type
+        return self.permission.type
     
     def _check_file_exists(self):
         '''
@@ -157,10 +163,10 @@ class File:
         '''
         self._check_file_exists()
         if self.owner == user:
-            return self.premission.owner
+            return self.permission.owner
         if self.owner_group in user.all_groups:
-            return self.premission.group
-        return self.premission.other
+            return self.permission.group
+        return self.permission.other
 
     def read(self, user:Optional[User] = None) -> str:
         '''
@@ -171,7 +177,7 @@ class File:
         force = user == None
         if not force and not self.get_permission(user).readable:
             raise error.PermissionDenied('Permission Denied', file=self.path)
-        with open(self._true_path, 'r') as f:
+        with open(self._true_path, 'r', encoding='utf-8') as f:
             return f.read()
 
     def write(self, content:str, user:Optional[User] = None) -> None:
@@ -181,9 +187,9 @@ class File:
         :param user: User
         '''
         force = user == None
-        if not force and not self.get_permission(user).writable:
+        if not force and self.existed and not self.get_permission(user).writable:
             raise error.PermissionDenied('Permission Denied', file=self.path)
-        with open(self._true_path, 'w') as f:
+        with open(self._true_path, 'w', encoding='utf-8') as f:
             f.write(content)
 
     def write_append(self, content:str, user:Optional[User] = None) -> None:
@@ -195,8 +201,8 @@ class File:
         force = user == None
         if not force and not self.get_permission(user).writable:
             raise error.PermissionDenied('Permission Denied', file=self.path)
-        with open(self._true_path, 'a') as f:
-            f.write(content)
+        with open(self._true_path, 'a', encoding='utf-8') as f:
+            f.write(content + '\n')
 
     def execute(self, user:Optional[User] = None, *args:object, **kwargs:object):
         '''
@@ -210,7 +216,7 @@ class File:
         force = user == None
         if not force and not self.get_permission(user).executable:
             raise error.PermissionDenied('Permission Denied', file=self.path)
-        if self.premission.type == Type.Folder:
+        if self.permission.type == Type.Folder:
             raise error.PermissionDenied('Folder Not Executable', file=self.path)
         import asyncio.subprocess as subprocess
         return subprocess.create_subprocess_exec(self.path, *args, **kwargs)
@@ -221,7 +227,7 @@ class File:
         :param user: Optional[User] if not None, will check permission
         '''
         self._check_file_exists()
-        if self.premission.type == Type.File:
+        if self.permission.type == Type.File:
             raise error.PermissionDenied('File Not Listable', file=self.path)
         if user:
             if not self.get_permission(user).executable:
@@ -239,7 +245,7 @@ class File:
         force = user == None
         if not re.match(r'^[a-zA-Z0-9_\-\.]+$', name):
             raise error.InvalidPath('Invalid Name', name=name)
-        if self.premission.type == Type.File:
+        if self.permission.type == Type.File:
             raise error.PermissionDenied('File Not Listable', file=self.path)
         if not self.get_permission(user).executable:
             raise error.PermissionDenied('Permission Denied', file=self.path)
@@ -256,8 +262,12 @@ class File:
         :param args: args for open
         :param kwargs: kwargs for open
         '''
-        self._check_file_exists()
-        pre = self.get_permission(user)
+        if not self.existed:
+            if 'w' not in mode and 'a' not in mode and '+' not in mode:
+                raise error.NotFound('File Not Found', file=self.path)
+            pre = self.default_permission.owner
+        else:
+            pre = self.get_permission(user)
         if 'r' in mode and not pre.readable:
             raise error.PermissionDenied('Permission Denied', file=self.path)
         if ('w' in mode or '+' in mode) and not pre.writable:
@@ -316,10 +326,10 @@ class FileSystem:
         :param path: Absolute path
         :return: File
         '''
-        path = normpath(path)
+        path = os.path.normpath(path)
         # This will not check if the file exists
         for file in self._files:
-            if file._true_path == path:
+            if issamepath(file._true_path,path):
                 return file
         file = File('/' + str(path[len(self.root):]).replace('\\','/'), self)
         self._files.add(file)
@@ -340,8 +350,8 @@ class FileSystem:
         :param path: Path(abs)
         '''
         path = normpath(path)
-        if path == self._root:
-            return
+        if issamepath(path, self._root):
+            return True
         parent = os.path.dirname(path)
         if parent != self._root:
             if not self._check_list_dir_permission(user, parent):
@@ -489,7 +499,7 @@ class FileSystem:
                 raise error.PermissionDenied('Permission Denied', file=path)
         if os.path.exists(path):
             raise error.Existed('Already Exists', file=path)
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             pass
         # Create File Object
         return self._get_by_abspath(path)
@@ -507,7 +517,7 @@ class WorkSpace:
         self._file = filesystem.get(init_path)
         if self._file is None:
             raise error.NotFound('Folder Not Found', file=init_path)
-        if self._file.premission.type != Type.Folder:
+        if self._file.permission.type != Type.Folder:
             raise error.PermissionDenied('Not a Folder', file=init_path)
 
     def new(self, path:os.PathLike, user:Optional[User] = None) -> File:

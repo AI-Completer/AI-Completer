@@ -9,6 +9,7 @@ from .base import (
     Memory,
     MemoryCategory,
     MemoryConfigure,
+    Memoryable,
 )
 
 # from .utils import (

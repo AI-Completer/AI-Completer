@@ -119,6 +119,9 @@ class MultiContent(Content):
     def json(self) -> dict:
         '''Get json content.'''
         return json.loads(self.pure_text)
+    
+    def __getitem__(self, key):
+        return self.json[key]
 
 @enum.unique
 class MessageStatus(enum.Enum):
@@ -162,15 +165,7 @@ class Session:
             
         self.logger:log.Logger=log.Logger('session')
         '''Logger'''
-        formatter = log.Formatter()
-        _handler = log.ConsoleHandler()
-        _handler.setFormatter(formatter)
-        self.logger.addHandler(_handler)
-        if handler.config['global.debug']:
-            self.logger.setLevel(logging.DEBUG)
-        else:
-            self.logger.setLevel(logging.INFO)
-        self.logger.push(self.id.hex[:8])
+        self.logger = log.getLogger('Session', [self.id.hex[:8]])
 
     @property
     def memory(self) -> Memory:
@@ -323,6 +318,18 @@ class Message:
             src_interface = None,
             dest_interface = None,
         )
+    
+    def __getitem__(self, key):
+        return self.content[key]
+    
+    def __setitem__(self, key, value):
+        self.content[key] = value
+
+    def get(self, key, default=...):
+        if default is ...:
+            return self.content[key]
+        else:
+            return self.content.json.get(key, default)
     
 class MessageQueue(asyncio.Queue[Message]):
     '''Message Queue'''

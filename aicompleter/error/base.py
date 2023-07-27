@@ -2,7 +2,6 @@
 This is the base module of all error in AICompleter
 '''
 from __future__ import annotations
-from .. import log
 
 class BaseException(Exception):
     '''Base Exception for all AICompleter error'''
@@ -11,7 +10,8 @@ class BaseException(Exception):
         self.parent = kwargs.pop('parent', None)
         super().__init__(*args)
         self.kwargs = kwargs
-
+        
+        from .. import log
         self._logger:log.Logger = log.getLogger('Exception', [self.__class__.__name__])
         self._logger.debug(f"Exception raised. interface={interface} parent={self.parent} args={args} kwargs={kwargs}")
 
@@ -22,6 +22,16 @@ class BaseException(Exception):
         if cls.__doc__ == BaseException.__doc__:
             cls.__doc__ = None
         return super().__init_subclass__()
+    
+    @property
+    def interface(self):
+        '''Interface'''
+        return self.kwargs.get('interface', None)
+    
+    @property
+    def session(self):
+        '''Session'''
+        return self.kwargs.get('session', None)
 
 class ParamRequired(BaseException):
     '''Param Required'''
@@ -52,6 +62,16 @@ class Interrupted(BaseException):
 
 class AuthorityError(BaseException):
     '''Authority Error'''
+
+class Conflict(BaseException):
+    '''Conflict'''
+    def __init__(self, reason:str, *args: object, **kwargs: object) -> None:
+        super().__init__(reason, *args, **kwargs)
+
+class Failed(BaseException):
+    '''Failed'''
+    def __init__(self, reason:str, *args: object, **kwargs: object) -> None:
+        super().__init__(reason, *args, **kwargs)
 
 __all__ = (
     'BaseException',

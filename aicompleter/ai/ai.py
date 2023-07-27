@@ -4,26 +4,28 @@ import copy
 import time
 import uuid
 from abc import abstractmethod
-from typing import Any, Coroutine, Optional, Self
+from typing import Any, Coroutine, Optional, Self, final
 
 import attr
+
 from ..common import JSONSerializable
-
 from ..config import Config
-
+from ..memory import JsonMemory, Memory, Memoryable
 
 @attr.s(auto_attribs=True)
-class AI:
+class AI(JSONSerializable):
     '''
     Abstract class for AI
     '''
-    name: str = attr.ib(default="AI", converter=str)
+    name: str = attr.ib(default="AI", validator=attr.validators.instance_of(str))
     'AI name'
-    islocal: bool = attr.ib(default=True, converter=bool)
+    model: str = attr.ib(default="", validator=attr.validators.instance_of(str))
+    'Model of AI'
+    islocal: bool = attr.ib(default=True, validator=attr.validators.instance_of(bool))
     'Is AI local or remote'
-    isenabled: bool = attr.ib(default=True, converter=bool)
+    isenabled: bool = attr.ib(default=True, validator=attr.validators.instance_of(bool))
     'Is AI enabled'
-    support: set[str] = attr.ib(default={'text'}, converter=set)
+    support: set[str] = attr.ib(default={'text'}, validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(str), iterable_validator=attr.validators.instance_of(set)))
     'Supported types of AI'
     location: Optional[str] = attr.ib(
         default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
@@ -49,42 +51,53 @@ class AI:
         raise NotImplementedError(
             f"generate() is not implemented in {self.__class__.__name__}")
 
-
 class Transformer(AI):
     '''
     Abstract class for transformer
     '''
-    support = {'text'}
+    support: set[str] = attr.ib(default={'text'}, validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(str), iterable_validator=attr.validators.instance_of(set)))
     'Supported types of transformer'
-    encoding: str
+    encoding: str = attr.ib(default="", validator=attr.validators.instance_of(str))
     'Encoding of transformer'
-    max_tokens: Optional[int] = None
+    max_tokens: Optional[int] = attr.ib(
+        default=None, validator=attr.validators.optional(attr.validators.instance_of(int)))
     'Max tokens of transformer, will limit the length of generated content'
 
-    @abstractmethod
     def generate_many(self, *args, num: int,  **kwargs) -> Coroutine[list[Any], Any, None]:
         '''
         Generate many possible content (if supported)
         '''
         raise NotImplementedError(
             f"generate_many() is not implemented in {self.__class__.__name__}")
+    
+    def getToken(self, text: str) -> list[str]:
+        '''
+        Get token of text
+        '''
+        from .token import Encoder
+        if self.encoding:
+            return Encoder(encoding=self.encoding).encode(text)
+        elif self.model:
+            return Encoder(model = self.model).encode(text)
+        else:
+            raise Exception('No encoding or model specified')
 
 @attr.s(auto_attribs=True)
-class Message:
+class Message(JSONSerializable):
     '''
     Message of conversation
     '''
-    content: str
+    content: str = attr.ib(validator=attr.validators.instance_of(str))
     'Content of message'
-    role: str
+    role: str = attr.ib(validator=attr.validators.instance_of(str))
     'Role of message'
-    id: Optional[uuid.UUID] = None
+    id: Optional[uuid.UUID] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(uuid.UUID)))
     'ID of message'
-    user: Optional[str] = None
+    user: Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
     'User of message'
-    time: float = time.time()
+    time: float = attr.ib(factory=time.time, validator=attr.validators.instance_of(float))
     'Time of message'
-    data: dict = {}
+    data: dict = attr.ib(factory=dict, validator=attr.validators.instance_of(dict))
     'Extra data of message'
 
     def __str__(self):
@@ -117,27 +130,6 @@ class FuncParam(JSONSerializable):
         if not value.isidentifier():
             raise ValueError(
                 f"name must be a valid identifier, not {value}")
-        
-    def to_json(self):
-        return {
-            'name': self.name,
-            'description': self.description,
-            'type': self.type,
-            'default': self.default,
-            'enum': self.enum,
-            'required': self.required,
-        }
-    
-    @staticmethod
-    def from_json(data: dict[str, Any]) -> Self:
-        return FuncParam(
-            name=data['name'],
-            description=data['description'],
-            type=data['type'],
-            default=data['default'],
-            enum=data['enum'],
-            required=data['required'],
-        )
 
 @attr.s(auto_attribs=True)
 class Function(JSONSerializable):
@@ -160,24 +152,9 @@ class Function(JSONSerializable):
         if not value.isidentifier():
             raise ValueError(
                 f"name must be a valid identifier, not {value}")
-        
-    def to_json(self):
-        return {
-            'name': self.name,
-            'description': self.description,
-            'parameters': [param.to_json() for param in self.parameters],
-        }
-    
-    @staticmethod
-    def from_json(data: dict[str, Any]) -> Self:
-        return Function(
-            name=data['name'],
-            description=data['description'],
-            parameters=[FuncParam.from_json(param) for param in data['parameters']],
-        )
 
 @attr.s(auto_attribs=True)
-class Funccall:
+class Funccall(JSONSerializable):
     '''
     Function call of AI
     '''
@@ -188,8 +165,8 @@ class Funccall:
     parameters: dict[str, Any] = attr.ib(factory=dict, validator=attr.validators.deep_mapping(key_validator=attr.validators.instance_of(str), value_validator=attr.validators.instance_of(str)))
     'Parameters of function call'
 
-@attr.s(auto_attribs=True)
-class Conversation:
+@attr.dataclass
+class Conversation(JSONSerializable, Memoryable):
     '''
     Conversation
     '''
@@ -207,14 +184,11 @@ class Conversation:
     data: dict = attr.ib(factory=dict, validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(str), iterable_validator=attr.validators.instance_of(dict)))
     'Extra data of conversation'
     functions: Optional[list[Function]] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.deep_iterable(member_validator=attr.validators.instance_of(Function), iterable_validator=attr.validators.instance_of(list))))
-    'Functions of conversation, this function is callable by AI, when it\'s none, no parameter will be passed to AI, note: AI may not support this feature'
-
-    @abstractmethod
-    def generate_json(self) -> dict[str, Any]:
-        '''
-        Generate json
-        '''
-        return attr.asdict(self)
+    '''
+    Functions of conversation, this function is callable by AI, when it\'s none, no parameter will be passed to AI, note: AI may not support this feature
+    
+    *Note*: Not fully implemented, do NOT use this feature
+    '''
 
 class ChatTransformer(Transformer):
     '''
@@ -231,14 +205,12 @@ class ChatTransformer(Transformer):
                 Message(content=init_prompt, role='system', user=user))
         return ret
 
-    @abstractmethod
     def generate(self, conversation: Conversation, *args, **kwargs) -> Coroutine[Message, Any, None]:
         '''
         Generate content
         '''
         return super().generate( conversation=conversation, *args, **kwargs)
 
-    @abstractmethod
     def generate_many(self, conversation: Conversation, num: int, *args,  **kwargs) -> Coroutine[list[Message], Any, None]:
         '''
         Generate many possible content (if supported)
@@ -273,7 +245,7 @@ class ChatTransformer(Transformer):
         '''
         rvalue = ''
         async for value in self.generate(*args, **kwargs):
-            rvalue = value
+            rvalue = value.content
         return rvalue
 
     async def generate_many_texts(self, *args, num: int, **kwargs) -> list[str]:
@@ -302,7 +274,6 @@ class TextTransformer(Transformer):
     async def generate(self, *args, prompt: str, **kwargs) -> Coroutine[str, Any, None]:
         return super().generate(*args, prompt=prompt, **kwargs)
 
-    @abstractmethod
     async def generate_many(self, *args, prompt: str, num: int,  **kwargs) -> Coroutine[list[str], Any, None]:
         '''
         Generate many possible content (if supported)

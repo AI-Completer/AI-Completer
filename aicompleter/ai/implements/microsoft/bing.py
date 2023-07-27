@@ -25,7 +25,6 @@ class BingAI(ChatTransformer):
     def __init__(self, config:config.Config) -> None:
         super().__init__(
             name="BingAI",
-            description="Microsoft Bing AI",
             config=config,
         )
         match self.config.get('model', 'balanced'):
@@ -51,13 +50,16 @@ class BingAI(ChatTransformer):
         '''
         return Conversation(user=user, id=id or uuid.uuid4(), time=time.time(), timeout=60*60*3, data={'num':0,'continue':True})
     
-    async def ask(self, message: Message, history: Conversation, search_result:bool = True) -> Coroutine[str, Any, None]:
+    async def ask(self, message: Message, history: Conversation) -> Coroutine[str, Any, None]:
         '''
         Ask the AI
         '''
+        cookies = self.config.get('cookies', None)
+        search_result = self.config.get('search_result', True)
+        
         id = history.id
         if id not in self._bot_map:
-            self._bot_map[id] = await Chatbot.create(proxy=self.proxy)
+            self._bot_map[id] = await Chatbot.create(proxy=self.proxy, cookies=cookies)
         bot = self._bot_map[id]
 
         if not history.data['continue']:

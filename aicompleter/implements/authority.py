@@ -22,7 +22,7 @@ class AuthorInterface(Interface):
     '''
     def __init__(self, config:Config = Config(), id:uuid.UUID = uuid.uuid4()) -> None:
         super().__init__(
-            User(name='authority',description='Authority Interface',in_group='system'),
+            user = User(name='authority',description='Authority Interface',in_group='system'),
             namespace='authority',
             config= config or Config({
                 'level': 15,

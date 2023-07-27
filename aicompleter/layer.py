@@ -61,6 +61,8 @@ class DiGraph(Generic[_T]):
     
     def __str__(self) -> str:
         return repr(self)
+    
+del _T
 
 class InterfaceDiGraph(DiGraph[Interface]):
     '''
@@ -108,7 +110,8 @@ class InterfaceDiGraph(DiGraph[Interface]):
 
     async def setup(self, handler:Handler):
         '''Setup the tree'''
-        handler._interfaces.clear()
+        for i in handler.interfaces:
+            handler.rm_interface(i)
         await handler.add_interface(*self.allinterfaces)
         self._update_groups()
         handler.reload()
@@ -124,11 +127,18 @@ class CommandCallMap:
         :param str dest: dest command name
         '''
 
-    def add(self, src:Interface, dest:Interface, dest_cmd:str):
-        '''Add a edge'''
+    def add(self, src:Interface, dest:Interface, dest_cmd:Optional[str] = None):
+        '''
+        Add a edge
+        If dest_cmd is None, all commands in dest will be callable.
+        '''
         if (src, dest) not in self._src:
             self._src[(src, dest)] = set()
-        self._src[(src, dest)].add(dest_cmd)
+        if dest_cmd is None:
+            for cmd in dest.commands:
+                self._src[(src, dest)].add(cmd.cmd)
+        else:
+            self._src[(src, dest)].add(dest_cmd)
 
     @overload
     def remove(self, src:Interface) -> None:
@@ -228,7 +238,8 @@ class CommandCallMap:
 
     async def setup(self, handler:Handler):
         '''Setup the tree'''
-        handler._interfaces.clear()
+        for i in handler.interfaces:
+            handler.rm_interface(i)
         _interfaces:set[Interface] = set()
         for i in self._src:
             _interfaces.add(i[0])

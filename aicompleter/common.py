@@ -3,7 +3,7 @@ This is a common module for aicompleter
 including some template classes
 '''
 
-from abc import ABC, abstractmethod
+from abc import ABC, ABCMeta, abstractmethod
 from asyncio import iscoroutine
 import asyncio
 import threading
@@ -39,69 +39,72 @@ class Serializable(BaseTemplate):
 
     Warning: Unsecure and unstable for different python version and program version
     '''
-    def serialize(self) -> bytes:
+    def __serialize__(self) -> bytes:
         '''
         Convert to string format
         '''
         return pickle.dumps(self)
     
     @staticmethod
-    def deserialize(src: bytes) -> Self:
+    def __deserialize__(src: bytes) -> Self:
         '''
         Get a object from a string
 
         This method will not verify the type of the object, you may not get a object of the same type
         '''
         return pickle.loads(src)
+    
+    # If possible, use serialize global method instead
+    serialize = __serialize__
+    deserialize = __deserialize__
 
-class JSONSerializable(Serializable):
+class JSONSerializableMeta(ABCMeta):
+    '''
+    The mata class for JSONSerializable
+    '''
+    def __new__(cls, name, bases, attrs):
+        # Rewrite __deserialize__ method
+        def _deserialize(data:list):
+            import importlib
+            module_ = importlib.import_module(attrs['__module__'])
+            # Split the submodule
+            for i in attrs['__qualname__'].split('.'):
+                if i == '<locals>':
+                    raise TypeError('Cannot deserialize a local class')
+                module_ = getattr(module_, i)
+            cls_ = module_
+            ret = cls_.__new__(cls_)
+
+            ret.__dict__.update({
+                deserialize(item['key']): deserialize(item['value']) for item in data
+            })
+            return ret
+        if not(getattr(cls, '__deserialize__', False) and getattr(cls.__deserialize__, '__isabstractmethod__', False)):
+            attrs['__deserialize__'] = staticmethod(_deserialize)
+        return ABCMeta.__new__(cls, name, bases, attrs)
+
+class JSONSerializable(Serializable, metaclass=JSONSerializableMeta):
     '''
     This class is used to serialize object to json
     '''
-    def serialize(self) -> dict:
+    def __serialize__(self) -> list:
         '''
         Convert to json format
         '''
         # Load from __dict__
-        return {
-            'type': 'class',
-            'data': [
-                {
-                    'key': serialize(key),
-                    'value': serialize(value),
-                } for key, value in self.__dict__.items()
-            ]
-        }
+        return [
+            {
+                'key': serialize(key),
+                'value': serialize(value),
+            } for key, value in self.__dict__.items()
+        ]
 
-    @staticmethod
     @abstractmethod
-    def deserialize(src: dict) -> Self:
+    def __deserialize__(data:list) -> Self:
         '''
-        Get a object from a dict
-
-        *Note*: Beacuse it's imposible for static method to get the current type, this method is not implemented
-        Implement this below:
-        ```py
-        @staticmethod
-        def deserialize(src: dict) -> Self:
-            ret = <class>()
-            return ret._deserialize_class(src)
+        Get a object from a json, this method will be implemented by metaclass
         '''
         raise NotImplementedError('deserialize is not implemented')
-    
-    @staticmethod
-    def _deserialize_class(cls:type, src: dict) -> Self:
-        '''
-        Get a object from a dict
-        '''
-        ret = cls.__new__(cls)
-        if '__dict__' not in src:
-            raise TypeError(f'Cannot deserialize {src}({type(src)}), use method "deserialize" instead')
-        ret.__dict__.update({
-            deserialize(item['key']): deserialize(item['value']) for item in src['data']
-        })
-        return ret
-    
 
 class Saveable(BaseTemplate):
     '''
@@ -264,7 +267,7 @@ def serialize(data:Any, pickle_all:bool = False) -> Any:
             'subtype': 'class',
             'module': data.__module__,
             'class': data.__class__.__qualname__,
-            'data': data.serialize(),
+            'data': data.__serialize__(),
         }
     elif isinstance(data, (list, set, tuple)):
         subtype = 'list' if isinstance(data, list) else 'set' if isinstance(data, set) else 'tuple'
@@ -329,7 +332,7 @@ def deserialize(data:dict, global_:Optional[dict[str, Any]] = None, unpickle_all
             cls = global_
             for i in data['class'].split('.'):
                 cls = cls[i]
-        return cls.deserialize(data['data'])
+        return cls.__deserialize__(data['data'])
     elif subtype in ('list', 'set', 'tuple'):
         return globals()[subtype]([deserialize(item) for item in data['data']])
     elif subtype == 'dict':

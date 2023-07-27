@@ -7,10 +7,10 @@ from abc import abstractmethod
 from typing import Any, Coroutine, Optional, Self, final
 
 import attr
-from ..common import JSONSerializable
 
+from ..common import JSONSerializable
 from ..config import Config
-from ..memory import Memory, JsonMemory
+from ..memory import JsonMemory, Memory, Memoryable
 
 @attr.s(auto_attribs=True)
 class AI(JSONSerializable):
@@ -50,11 +50,6 @@ class AI(JSONSerializable):
         '''
         raise NotImplementedError(
             f"generate() is not implemented in {self.__class__.__name__}")
-    
-    @staticmethod
-    def deserialize(data:dict):
-        ret = AI.__new__()
-        return ret._deserialize_class(data)
 
 class Transformer(AI):
     '''
@@ -68,7 +63,6 @@ class Transformer(AI):
         default=None, validator=attr.validators.optional(attr.validators.instance_of(int)))
     'Max tokens of transformer, will limit the length of generated content'
 
-    @abstractmethod
     def generate_many(self, *args, num: int,  **kwargs) -> Coroutine[list[Any], Any, None]:
         '''
         Generate many possible content (if supported)
@@ -89,7 +83,7 @@ class Transformer(AI):
             raise Exception('No encoding or model specified')
 
 @attr.s(auto_attribs=True)
-class Message:
+class Message(JSONSerializable):
     '''
     Message of conversation
     '''
@@ -136,27 +130,6 @@ class FuncParam(JSONSerializable):
         if not value.isidentifier():
             raise ValueError(
                 f"name must be a valid identifier, not {value}")
-        
-    def serialize(self):
-        return {
-            'name': self.name,
-            'description': self.description,
-            'type': self.type,
-            'default': self.default,
-            'enum': self.enum,
-            'required': self.required,
-        }
-    
-    @staticmethod
-    def deserialize(data: dict[str, Any]) -> Self:
-        return FuncParam(
-            name=data['name'],
-            description=data['description'],
-            type=data['type'],
-            default=data['default'],
-            enum=data['enum'],
-            required=data['required'],
-        )
 
 @attr.s(auto_attribs=True)
 class Function(JSONSerializable):
@@ -179,24 +152,9 @@ class Function(JSONSerializable):
         if not value.isidentifier():
             raise ValueError(
                 f"name must be a valid identifier, not {value}")
-        
-    def to_json(self):
-        return {
-            'name': self.name,
-            'description': self.description,
-            'parameters': [param.to_json() for param in self.parameters],
-        }
-    
-    @staticmethod
-    def from_json(data: dict[str, Any]) -> Self:
-        return Function(
-            name=data['name'],
-            description=data['description'],
-            parameters=[FuncParam.from_json(param) for param in data['parameters']],
-        )
 
 @attr.s(auto_attribs=True)
-class Funccall:
+class Funccall(JSONSerializable):
     '''
     Function call of AI
     '''
@@ -207,8 +165,8 @@ class Funccall:
     parameters: dict[str, Any] = attr.ib(factory=dict, validator=attr.validators.deep_mapping(key_validator=attr.validators.instance_of(str), value_validator=attr.validators.instance_of(str)))
     'Parameters of function call'
 
-@attr.s(auto_attribs=True)
-class Conversation:
+@attr.dataclass
+class Conversation(JSONSerializable, Memoryable):
     '''
     Conversation
     '''
@@ -226,22 +184,11 @@ class Conversation:
     data: dict = attr.ib(factory=dict, validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(str), iterable_validator=attr.validators.instance_of(dict)))
     'Extra data of conversation'
     functions: Optional[list[Function]] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.deep_iterable(member_validator=attr.validators.instance_of(Function), iterable_validator=attr.validators.instance_of(list))))
-    'Functions of conversation, this function is callable by AI, when it\'s none, no parameter will be passed to AI, note: AI may not support this feature'
-
-    @abstractmethod
-    def generate_json(self) -> dict[str, Any]:
-        '''
-        Generate json
-        '''
-        return attr.asdict(self)
+    '''
+    Functions of conversation, this function is callable by AI, when it\'s none, no parameter will be passed to AI, note: AI may not support this feature
     
-    def to_memory(self):
-        '''
-        Convert to memory
-        '''
-        ret = JsonMemory()
-
-
+    *Note*: Not fully implemented, do NOT use this feature
+    '''
 
 class ChatTransformer(Transformer):
     '''
@@ -258,14 +205,12 @@ class ChatTransformer(Transformer):
                 Message(content=init_prompt, role='system', user=user))
         return ret
 
-    @abstractmethod
     def generate(self, conversation: Conversation, *args, **kwargs) -> Coroutine[Message, Any, None]:
         '''
         Generate content
         '''
         return super().generate( conversation=conversation, *args, **kwargs)
 
-    @abstractmethod
     def generate_many(self, conversation: Conversation, num: int, *args,  **kwargs) -> Coroutine[list[Message], Any, None]:
         '''
         Generate many possible content (if supported)
@@ -329,7 +274,6 @@ class TextTransformer(Transformer):
     async def generate(self, *args, prompt: str, **kwargs) -> Coroutine[str, Any, None]:
         return super().generate(*args, prompt=prompt, **kwargs)
 
-    @abstractmethod
     async def generate_many(self, *args, prompt: str, num: int,  **kwargs) -> Coroutine[list[str], Any, None]:
         '''
         Generate many possible content (if supported)

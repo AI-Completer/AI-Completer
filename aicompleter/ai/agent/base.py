@@ -192,7 +192,7 @@ class Agent(common.AsyncLifeTimeManager):
                     json_dat = self._parse(raw)
                 except ValueError as e:
                     # no wait to tell AI
-                    self.logger.error(f'Invalid json format: {raw}')
+                    self.logger.error(f'Value Error: {str(e)}')
                     self._request({
                         'type':'error',
                         'value':str(e),

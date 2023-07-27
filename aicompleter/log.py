@@ -188,6 +188,23 @@ class Logger(logging.Logger):
             # Use the original log function to log the output
             self._log(level, output, args, exc_info, extra, stack_info, stacklevel)
 
+    def debug_stream(self, msg: asyncio.StreamReader, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
+        return self.log_stream(logging.DEBUG, msg, *args, exc_info, extra, stack_info, stacklevel)
+    
+    def info_stream(self, msg: asyncio.StreamReader, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
+        return self.log_stream(logging.INFO, msg, *args, exc_info, extra, stack_info, stacklevel)
+    
+    def warning_stream(self, msg: asyncio.StreamReader, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
+        return self.log_stream(logging.WARNING, msg, *args, exc_info, extra, stack_info, stacklevel)
+    
+    def error_stream(self, msg: asyncio.StreamReader, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
+        return self.log_stream(logging.ERROR, msg, *args, exc_info, extra, stack_info, stacklevel)
+    
+    def critical_stream(self, msg: asyncio.StreamReader, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
+        return self.log_stream(logging.CRITICAL, msg, *args, exc_info, extra, stack_info, stacklevel)
+    
+    fatal_stream = critical_stream
+
     async def typewriter_log(self, level: int, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1) -> None:
         loop = asyncio.get_event_loop()
         reader = asyncio.StreamReader(limit=1, loop=loop)
@@ -215,24 +232,27 @@ class Logger(logging.Logger):
     
     typewriter_fatal = typewriter_critical
 
-_common_streamhandler = None
-def getLogger(name:str, substruct:list[str] = [], log_level:Optional[int] = None) -> Logger:
+_common_handlers = [
+    StreamHandler()
+]
+_common_handlers[0].setFormatter(Formatter(ColorStrFormatStyle(
+    "{asctime} - {levelname} [{name}]{substruct} {message}"
+)))
+
+def configHandlers(handlers:Iterable[logging.Handler]) -> None:
+    '''
+    Config handlers
+    '''
+    global _common_handlers
+    _common_handlers = handlers
+
+def getLogger(name:str, substruct:list[str] = []) -> Logger:
     '''
     Get a logger
     '''
-    global _common_streamhandler
-    if _common_streamhandler == None:
-        _common_streamhandler = StreamHandler()
-        _common_streamhandler.setFormatter(Formatter(ColorStrFormatStyle(
-            "{asctime} - {levelname} [{name}]{substruct} {message}"
-        )))
-    
     _log = Logger(name, substruct=substruct)
-    if log_level == None:
-        _log.setLevel(config.varibles['log_level'])
-    else:
-        _log.setLevel(log_level)
-    _log.addHandler(_common_streamhandler)
+    _log.setLevel(config.varibles['log_level'])
+    _log.handlers = _common_handlers
     return _log
 
 del _ArgsType

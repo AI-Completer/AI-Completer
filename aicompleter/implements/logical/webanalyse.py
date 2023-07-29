@@ -27,8 +27,6 @@ class WebAnalyse(Interface):
                 'url': CommandParamElement('url', str, description='The url of the web page', tooltip='url'),
                 'request': CommandParamElement('request', str, description='The extra request about the text', tooltip='request', optional=True, default=''),
             }),
-            to_return=True,
-            force_await=True,
             callback=self.cmd_analyse,
         ))
 

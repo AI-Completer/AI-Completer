@@ -25,8 +25,6 @@ class ExecutorInt(ChatInterface):
                 description='Analyze the task, this will split the task into subtasks in natural language',
                 expose=True,
                 in_interface=self,
-                to_return=True,
-                force_await=True,
                 callback=self.cmd_task_anylyze,
                 format=CommandParamStruct({
                     'task': CommandParamElement('task', str, description='The subtask in natural language')
@@ -37,8 +35,6 @@ class ExecutorInt(ChatInterface):
                 description='Execute the task in natural language',
                 expose=True,
                 in_interface=self,
-                to_return=True,
-                force_await=True,
                 callback=self.cmd_execute,
                 format=CommandParamStruct({
                     'tasks': [CommandParamElement('task', str, description='The subtask in natural language')]

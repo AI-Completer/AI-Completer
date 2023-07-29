@@ -32,8 +32,6 @@ class DownloadInterface(Interface):
             description='Download a file(Sync)',
             expose=True,
             in_interface=self,
-            to_return=True,
-            force_await=True,
             callback=self.cmd_download,
             format=CommandParamStruct({
                 'path':CommandParamElement(name='path', type=str, optional=False, description='The path of the file'),

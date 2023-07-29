@@ -346,8 +346,6 @@ class Handler:
         cmd = self.get_cmd(message.cmd, message.dest_interface, message.src_interface)
         if cmd == None:
             raise error.CommandNotImplement(message.cmd, self)
-        if cmd.force_await:
-            raise error.PermissionDenied("Command is forced to be awaited.", cmd = cmd.cmd , dest = message.dest_interface, interface=message.src_interface, handler=self)
 
         async def _handle_call():
             try:

@@ -35,8 +35,6 @@ class GoogleInterface(ac.Interface):
             description='google search',
             in_interface=self,
             callback=self.cmd_google,
-            to_return=True,
-            force_await=True,
             format=CommandParamStruct({
                 'query': CommandParamElement(name='query', type=str, description='search query', tooltip='query'),
                 'num': CommandParamElement(name='num', type=int, description='number of results', tooltip='num', default=10, optional=True),

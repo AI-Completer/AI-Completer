@@ -62,7 +62,7 @@ class User(JSONSerializable):
         self.all_groups.add(self.in_group)
 
     @staticmethod
-    def deserialize(src:dict) -> Self:
+    def __deserialize__(src:dict) -> Self:
         return User(
             name=src['name'],
             id=uuid.UUID(src['id']),

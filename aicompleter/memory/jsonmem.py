@@ -5,6 +5,7 @@ JSON memory
 import json
 from typing import Iterable, Iterator, Self
 import uuid
+from aicompleter.common import serialize
 
 from aicompleter.memory.base import MemoryItem
 from .base import Memory, MemoryItem, Query
@@ -49,18 +50,18 @@ class JsonMemory(Memory):
         '''
         return self._record.values()
     
-    def serialize(self) -> dict:
+    def __serialize__(self) -> dict:
         '''
         Convert to json format
         '''
         return {
             'type': 'memory',
             'subtype': 'jsonmemory',
-            'data': [item.serialize() for item in self._record.values()],
+            'data': [item.__serialize__() for item in self._record.values()],
         }
     
     @staticmethod
-    def deserialize(data: dict) -> Self:
+    def __deserialize__(data: dict) -> Self:
         '''
         Load from json format
         '''
@@ -70,5 +71,5 @@ class JsonMemory(Memory):
             raise ValueError(f"Expect subtype 'jsonmemory', got '{data['subtype']}'")
         ret = JsonMemory()
         for item in data['data']:
-            ret.put(MemoryItem.deserialize(item))
+            ret.put(MemoryItem.__deserialize__(item))
         return ret

@@ -5,6 +5,7 @@ import os
 import sys
 import traceback
 
+from .common import serialize
 from . import config
 from .config import Config
 from . import log
@@ -228,7 +229,7 @@ utils.launch(
 if config.varibles['disable_memory'] == False:
     async def save():
         memory = new_session.memory
-        ret = memory.serialize()
+        ret = serialize(memory)
         ret['interfaces'] = []
         for interface in handler_.interfaces:
             ret['interfaces'].append(interface.to_json(new_session))

@@ -53,10 +53,6 @@ class Serializable(BaseTemplate):
         This method will not verify the type of the object, you may not get a object of the same type
         '''
         return pickle.loads(src)
-    
-    # If possible, use serialize global method instead
-    serialize = __serialize__
-    deserialize = __deserialize__
 
 class JSONSerializableMeta(ABCMeta):
     '''

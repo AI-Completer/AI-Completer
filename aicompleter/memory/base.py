@@ -64,7 +64,7 @@ class MemoryItem(JSONSerializable):
     'The timestamp of the item'
 
     @staticmethod
-    def deserialize(src: dict) -> Self:
+    def __deserialize__(src: dict) -> Self:
         '''
         Get a MemoryItem from a dict
         '''
@@ -76,7 +76,7 @@ class MemoryItem(JSONSerializable):
             ret.data = deserialize(src['data'], globals())
         return ret
     
-    def serialize(self) -> dict:
+    def __serialize__(self) -> dict:
         '''
         Get a dict from a MemoryItem
         '''
@@ -177,7 +177,7 @@ class Memory(Saveable, JSONSerializable):
         You can modify this function to support other file format
         '''
         with open(path, 'w') as f:
-            json.dump(self.serialize(), f, ensure_ascii=False, indent=4)
+            json.dump(self.__serialize__(), f, ensure_ascii=False, indent=4)
     
     @staticmethod
     def load(path:str) -> Self:
@@ -187,7 +187,7 @@ class Memory(Saveable, JSONSerializable):
         '''
         with open(path, 'r') as f:
             data = json.load(f)
-            return Memory.deserialize(data)
+            return Memory.__deserialize__(data)
 
 @attr.s(auto_attribs=True)
 class MemoryConfigure:

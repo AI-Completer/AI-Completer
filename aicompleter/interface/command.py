@@ -48,7 +48,7 @@ class CommandParamElement(JSONSerializable):
     tooltip:str = ""
     '''Tooltip of the parameter'''
 
-    def serialize(self):
+    def __serialize__(self):
         return {
             "name":self.name,
             "type":self.type.__name__ if isinstance(self.type,type) else '',
@@ -59,7 +59,7 @@ class CommandParamElement(JSONSerializable):
         }
     
     @staticmethod
-    def deserialize(data:dict):
+    def __deserialize__(data:dict):
         raise NotImplementedError("CommandParamElement.deserialize is not implemented")
         return CommandParamElement(
             name=data['name'],
@@ -175,7 +175,7 @@ class CommandParamStruct(JSONSerializable):
         _set(self._struct, data)
         return data
     
-    def serialize(self):
+    def __serialize__(self):
         '''
         Get the json description of the struct
         '''
@@ -188,20 +188,20 @@ class CommandParamStruct(JSONSerializable):
             elif isinstance(struct, list):
                 return [_json(struct[0])]
             elif isinstance(struct, CommandParamElement):
-                return struct.serialize()
+                return struct.__serialize__()
             else:
                 raise TypeError("struct must be a dict, list or CommandParamElement instance")
         return _json(self._struct)
     
     @staticmethod
-    def deserialize(data:dict):
+    def __deserialize__(data:dict):
         '''
         Get the struct from json description
         '''
         def _from_json(struct:dict|list|str):
             if isinstance(struct, dict):
                 if 'name' in struct and isinstance(struct['name'], str):
-                    return CommandParamElement.deserialize(struct)
+                    return CommandParamElement.__deserialize__(struct)
                 ret = {}
                 for key,value in struct.items():
                     ret[key] = _from_json(value)
@@ -246,15 +246,6 @@ class CommandAuthority(JSONSerializable):
     '''Whether the command can list file'''
     can_execute:bool = attr.ib(default=False)
     '''Whether the command can execute the operation system command'''
-
-    @staticmethod
-    def deserialize(data:dict) -> Self:
-        return CommandAuthority(
-            can_readfile=data.get('can_readfile',False),
-            can_writefile=data.get('can_writefile',False),
-            can_listfile=data.get('can_listfile',False),
-            can_execute=data.get('can_execute',False),
-        )
     
     def get_authority_level(self):
         '''Get the authority level'''
@@ -410,12 +401,12 @@ class Command(JSONSerializable):
             "cmd":self.cmd,
             "alias":list(self.alias),
             "description":self.description,
-            "format":self.format.serialize() if self.format else None,
+            "format":self.format.__serialize__() if self.format else None,
             "callable_groups":list(self.callable_groups),
             "overrideable":self.overrideable,
             "extra":self.extra,
             "expose":self.expose,
-            "authority":self.authority.serialize(),
+            "authority":self.authority.__serialize__(),
             "to_return":self.to_return,
             "callback":self.callback.__qualname__ if self.callback else None,
             "in_interface":self.in_interface.id.hex if self.in_interface else None,

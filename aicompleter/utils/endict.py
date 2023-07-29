@@ -14,11 +14,11 @@ class defaultdict(dict, JSONSerializable):
         self[key] = defaultdict()
         return self[key]
     
-    def serialize(self) -> dict:
+    def __serialize__(self) -> dict:
         return serialize(self.__dict__)
     
     @staticmethod
-    def deserialize(data:dict) -> Self:
+    def __deserialize__(data:dict) -> Self:
         return defaultdict(data)
 
 class EnhancedDict(defaultdict):
@@ -167,7 +167,7 @@ class EnhancedDict(defaultdict):
     def __bool__(self) -> bool:
         return self.__len__() != 0
 
-    class __Session:
+    class Session:
         '''
         Open a session to modify the EnhancedDict
         '''
@@ -185,14 +185,14 @@ class EnhancedDict(defaultdict):
         async def __aexit__(self, exc_type, exc_value, traceback) -> None:
             self._dict._lock.release()
 
-    def session(self, locked:bool = True, save:bool = True) -> __Session:
+    def session(self, locked:bool = True, save:bool = True) -> Session:
         '''
         Open a session to modify the EnhancedDict
         param:
             locked: Whether the session is locked, this will occupy the dict, if the save is False
             save: Whether to save the dict after the session
         '''
-        return self.__Session(self, locked, save)
+        return self.Session(self, locked, save)
     
     def each(self, func:Callable[[str, Any], Any], filter:Optional[Callable[[str, Any], bool]] = None) -> None:
         '''
@@ -212,6 +212,6 @@ class EnhancedDict(defaultdict):
         return copy.deepcopy(self)
 
     @staticmethod
-    def deserialize(data: dict) -> Self:
+    def __deserialize__(data: dict) -> Self:
         return EnhancedDict(data)
     

@@ -21,8 +21,6 @@ class DifficultyTestInt(ChatInterface):
                 description='Mark the difficulty of the task',
                 expose=True,
                 in_interface=self,
-                to_return=True,
-                force_await=True,
                 callback=self.cmd_mark,
             )
         )

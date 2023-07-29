@@ -52,7 +52,6 @@ class ChatInterface(TransformerInterface):
                     expose=True,
                     in_interface=self,
                     to_return=True,
-                    force_await=True,
                     callback=self.ask,
                 )
             )

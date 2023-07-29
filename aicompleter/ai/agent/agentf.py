@@ -45,8 +45,6 @@ class AgentF:
             description='Create a subagent to help finish the task, if the subagent is already created, you can speak to it directly, you should not use this command easily',
             expose=True,
             in_interface=None,
-            to_return=True,
-            force_await=True,
             callback=None,
             format = CommandParamStruct({
                 'name':CommandParamElement('name', str, 'The name of the subagent'),
@@ -57,8 +55,6 @@ class AgentF:
             description='Stop this conversation, and return the result',
             expose=True,
             in_interface=None,
-            to_return=True,
-            force_await=True,
             callback=None,
             format = CommandParamStruct({
                 'result':CommandParamElement('result', object, 'The result of the result'),

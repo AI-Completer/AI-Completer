@@ -31,8 +31,6 @@ class SearchInterface(ai.ChatInterface):
             }),
             callback = self.cmd_search,
             in_interface=self,
-            to_return=True,
-            force_await=True,
         ))
 
     async def session_init(self, session: Session):

@@ -32,8 +32,6 @@ class FileInterface(Interface):
                 format=CommandParamStruct({
                     'path': CommandParamElement('path', str, description='File Path',tooltip='The file path to read')
                 }),
-                to_return=True,
-                force_await=True,
                 callable_groups={'system','agent'},
                 in_interface=self,
                 authority=CommandAuthority(
@@ -49,8 +47,6 @@ class FileInterface(Interface):
                     'content': CommandParamElement('content', str, description='File Content',tooltip='The file content to write'),
                     'append': CommandParamElement('append', bool, description='Append',tooltip='Whether to append to the file', optional=True, default=False),
                 }),
-                to_return=True,
-                force_await=True,
                 callable_groups={'system','agent'},
                 in_interface=self,
                 authority=CommandAuthority(
@@ -64,8 +60,6 @@ class FileInterface(Interface):
                 format=CommandParamStruct({
                     'path': CommandParamElement('path', str, description='Directory Path',tooltip='The directory path to list')
                 }),
-                to_return=True,
-                force_await=True,
                 callable_groups={'system','agent'},
                 in_interface=self,
                 authority=CommandAuthority(

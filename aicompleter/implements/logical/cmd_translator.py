@@ -20,8 +20,6 @@ class CmdTranslator(ChatInterface):
                 description='Translate the natural language to command',
                 expose=True,
                 in_interface=self,
-                to_return=True,
-                force_await=True,
                 callback=self.cmd_translate,
             )
         )

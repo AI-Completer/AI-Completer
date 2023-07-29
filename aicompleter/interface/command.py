@@ -269,7 +269,7 @@ class CommandAuthority(JSONSerializable):
 
 
 @attr.s(auto_attribs=True,hash=False)
-class Command:
+class Command(JSONSerializable):
     '''Command Struct'''
     cmd:str = ""
     '''Command'''
@@ -297,13 +297,9 @@ class Command:
     Call Function To Call The Command
     If None, the command will be called by in_interface
     '''
-    to_return:bool = False
+    to_return:bool = True
     '''
     Whether the command will return a value
-    '''
-    force_await:bool = False
-    '''
-    Whether the command will force await
     '''
 
     def __attrs_post_init__(self):
@@ -409,7 +405,7 @@ class Command:
             self.overrideable, tuple(self.extra.items()), 
             self.expose))
     
-    def to_json(self):
+    def __serialize__(self):
         return {
             "cmd":self.cmd,
             "alias":list(self.alias),
@@ -421,23 +417,13 @@ class Command:
             "expose":self.expose,
             "authority":self.authority.serialize(),
             "to_return":self.to_return,
-            "force_await":self.force_await,
             "callback":self.callback.__qualname__ if self.callback else None,
             "in_interface":self.in_interface.id.hex if self.in_interface else None,
         }
     
-    # @staticmethod
-    # def __from_json__(data:dict):
-    #     return Command(
-    #         cmd=data['cmd'],
-    #         alias=set(data.get('alias',[])),
-    #         description=data.get('description',''),
-    #         format=CommandParamStruct.__from_json__(data['format']) if data['format'] else None,
-    #         callable_groups=set(data.get('callable_groups',[])),
-    #         overrideable=bool(data.get('overrideable',False)),
-    #         extra=data.get('extra',{}),
-    #         expose=data.get('expose',True),
-    #     )
+    @staticmethod
+    def __deserialize__(self, data:dict):
+        raise NotImplementedError("Command.__deserialize__ is not implemented")
 
 class Commands(dict[str,Command]):
     '''

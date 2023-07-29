@@ -24,8 +24,6 @@ class PythonCodeInterface(Interface):
                 'type': CommandParamElement(name='type', type=str, description='Type of the code, can be "exec" or "eval".', tooltip='exec/eval (default to exec)', default='exec', optional=True)
             }),
             callable_groups={'user','agent'},
-            force_await=True,
-            to_return=True,
             callback=self.cmd_exec,
             authority=CommandAuthority(
                 can_execute=True,

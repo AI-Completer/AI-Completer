@@ -32,8 +32,6 @@ class SSHInterface(Interface):
                 format=CommandParamStruct({
                     'cmd': CommandParamElement('cmd', str, description='Shell Command',tooltip='The shell command to run')
                 }),
-                to_return=True,
-                force_await=True,
                 callable_groups={'system','agent'},
             )
         )

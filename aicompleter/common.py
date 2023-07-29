@@ -225,8 +225,13 @@ class AsyncLifeTimeManager(AsyncTemplate[LifeTimeManager]):
         '''
         self._close_tasks:set[asyncio.Future] = set()
         '''
-        The tasks that will be waited when the object is closed
+        The tasks that will be awaited when the object is closed
         '''
+        self._to_cancel_tasks:set[asyncio.Task] = set()
+        '''
+        The tasks that will be cancelled when the object is closed
+        '''
+        
 
     @property
     def closed(self) -> bool:
@@ -239,9 +244,8 @@ class AsyncLifeTimeManager(AsyncTemplate[LifeTimeManager]):
         '''
         Close the object
         '''
-        for task in self._close_tasks:
-            if not task.done():
-                task.cancel()
+        for task in self._to_cancel_tasks:
+            task.cancel()
         self._close_event.set()
 
     async def wait_close(self) -> None:
@@ -249,10 +253,16 @@ class AsyncLifeTimeManager(AsyncTemplate[LifeTimeManager]):
         Wait until the object is closed
         '''
         await self._close_event.wait()
-        for task in self._close_tasks:
-            if not task.done():
-                task.cancel()
         await asyncio.gather(*self._close_tasks)
+        for i in await asyncio.gather(*self._to_cancel_tasks, return_exceptions=True):
+            if isinstance(i, asyncio.CancelledError):
+                continue
+            if isinstance(i, Exception):
+                raise i
+
+    def __del__(self) -> None:
+        if not self.closed:
+            self.close()
 
 def serialize(data:Any, pickle_all:bool = False) -> Any:
     '''

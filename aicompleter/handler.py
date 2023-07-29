@@ -7,7 +7,8 @@ import functools
 import uuid
 from typing import Any, Generator, Iterator, Optional, overload
 
-from aicompleter import memory, utils
+from . import memory, utils
+from .common import AsyncLifeTimeManager
 
 from . import error, events, interface, log, session
 from .config import Config
@@ -17,7 +18,7 @@ from .session.base import Session
 
 from .namespace import Namespace
 
-class Handler:
+class Handler(AsyncLifeTimeManager):
     '''
     Handler for AI-Completer
     The handler will transfer various information between Interfaces, 
@@ -34,8 +35,6 @@ class Handler:
     def __init__(self, config:Optional[Config] = Config()) -> None:
         self._interfaces:set[Interface] = set()
         '''Interfaces of Handler'''
-        self._closed:asyncio.Event = asyncio.Event()
-        '''Closed'''
         self.on_exception:events.Exception = events.Exception(Exception)
         '''Event of Exception'''
         self.on_keyboardinterrupt:events.Exception = events.Exception(KeyboardInterrupt)
@@ -91,15 +90,15 @@ class Handler:
     def __len__(self) -> int:
         return len(self._interfaces)
     
-    async def close(self):
+    def close(self):
         '''Close the handler'''
         self.logger.debug("Closing handler")
         for i in self._running_sessions:
             if not i.closed:
-                await i.close()
+                self._close_tasks.add(asyncio.create_task(i.close()))
         for i in self._interfaces:
-            await i.close()
-        self._closed.set()
+            self._close_tasks.add(asyncio.create_task(i.close()))
+        super().close()
 
     async def close_session(self, session:Session):
         '''Close the session'''

@@ -28,11 +28,11 @@ AI Completer
 An AI assistant to help you complete your work
 '''
 parser = argparse.ArgumentParser(description=__help__)
-parser.add_argument('--debug', action='store_true', help='Enable debug mode, default: False, if the environment variable DEBUG is set to True, this option will be ignored')
+parser.add_argument('--debug', action='store_true', help='Enable debug mode, if the environment variable DEBUG is set to True, this option will be ignored')
 parser.add_argument('--config', type=str, default='config.json', help='Specify the config file, default: config.json')
 parser.add_argument('--memory', type=str, default='memory.json', help='Specify the memory file, default: memory.json')
-parser.add_argument('--disable-memory', action='store_true', help='Disable memory, default: False', dest='disable_memory')
-parser.add_argument('--disable-faiss', action='store_true', help='Disable faiss, default: False', dest='disable_faiss')
+parser.add_argument('--disable-memory', action='store_true', help='Disable memory', dest='disable_memory')
+parser.add_argument('--disable-faiss', action='store_true', help='Disable faiss', dest='disable_faiss')
 subparsers = parser.add_subparsers(dest='subcommand', help='subcommands', description='subcommands, including:\n\ttalk: Talk with the AI\n\thelper: The helper of AI Completer, this will launcher a AI assistant to help you solve the problem')
 subparsers.required = True
 talk_pareser = subparsers.add_parser('talk', help='Talk with the AI')
@@ -41,7 +41,7 @@ talk_pareser.add_argument('--model', type=str, default='', help='The model to us
 helper_pareser = subparsers.add_parser('helper', help='The helper of AI Completer, this will launcher a AI assistant to help you solve the problem')
 helper_pareser.add_argument('--ai', type=str, default='openaichat', choices=('openaichat', 'bingai'), help='The AI to use, default: openaichat, options: openaichat, bingai')
 helper_pareser.add_argument('--model', type=str, default='', help='The model to use, the choices differ from the AI, default: not set, options: openaichat: davinci, curie ,..., bingai: balanced, creative, precise')
-helper_pareser.add_argument('--enable-agent', action='store_true', help='Enable subagent, default: False', dest='enable_agent')
+helper_pareser.add_argument('--enable-agent', action='store_true', help='Enable subagent', dest='enable_agent')
 helper_pareser.add_argument('-i','--include', type=str, nargs='+', default=[], choices=('pythoncode', 'searcher', 'file'), help='Include the extra interface, default: None, options: pythoncode, searcher, file')
 helper_pareser.add_argument('-e','--extra-include', type=str, nargs='+', default=[], help='Include the extra interface, will find the interface in the specified python program path, format: path:interface:namespace')
 helper_pareser.add_argument('--disable-authority', action='store_true', help='Disable authority, default: False', dest='disable_authority')
@@ -209,10 +209,10 @@ async def main():
                 session = new_session,
             ))
 
-loop = asyncio.new_event_loop()
-if os.name == "nt":
+if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
+loop = asyncio.new_event_loop()
 loop.create_task(main())
 
 utils.launch(

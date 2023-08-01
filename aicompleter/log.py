@@ -99,7 +99,7 @@ class Formatter(logging.Formatter):
         self._fmt = self._style._fmt
         self.datefmt = datefmt
 
-StreamHandler = logging.StreamHandler
+StreamHandler: TypeAlias = logging.StreamHandler
 
 class Logger(logging.Logger):
     '''
@@ -121,11 +121,7 @@ class Logger(logging.Logger):
         '''
         ret = self._stack.pop()
         return ret
-    
-    async def _log_async(self, level: int, msg: object, args: _ArgsType = (), exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1) -> None:
-        async with _on_reading:
-            return super()._log(level, msg, args, exc_info, extra, stack_info, stacklevel)
-    
+
     def makeRecord(self, name, level, fn, lno, msg, args, exc_info,
                    func=None, extra=None, sinfo=None):
         """

@@ -4,13 +4,13 @@ import copy
 import time
 import uuid
 from abc import abstractmethod
-from typing import Any, Coroutine, Optional, Self, final
+from typing import Any, AsyncGenerator, Coroutine, Generator, Optional, Self, final
 
 import attr
 
-from ..common import JSONSerializable
+from ..common import JSONSerializable, deserialize, serialize
 from ..config import Config
-from ..memory import JsonMemory, Memory, Memoryable
+from ..memory import JsonMemory, Memory, Memoryable, MemoryItem
 
 @attr.s(auto_attribs=True)
 class AI(JSONSerializable):
@@ -43,7 +43,7 @@ class AI(JSONSerializable):
         return 'image' in self.support
 
     @abstractmethod
-    def generate(self, *args, **kwargs):
+    def generate(self, *args, **kwargs) -> AsyncGenerator[Any, None]:
         '''
         Generate content
         *Require Coroutine*, this abstract method will raise NotImplementedError if not implemented
@@ -106,6 +106,17 @@ class Message(JSONSerializable):
     def __repr__(self):
         return f"{{content: {self.content}, role: {self.role}, id: {self.id}, user: {self.user}}}"
     
+    def getMemoryItem(self) -> MemoryItem:
+        '''
+        Convert to memory item
+        '''
+        return MemoryItem(id=self.id or uuid.uuid4(), data={
+            'content': self.content,
+            'role': self.role,
+            'user': self.user,
+            'data': self.data,
+        }, timestamp=self.time, user=self.user, content=self.content, category='message')
+    
 @attr.s(auto_attribs=True)
 class FuncParam(JSONSerializable):
     '''
@@ -166,7 +177,7 @@ class Funccall(JSONSerializable):
     'Parameters of function call'
 
 @attr.dataclass
-class Conversation(JSONSerializable, Memoryable):
+class Conversation(JSONSerializable):
     '''
     Conversation
     '''
@@ -189,6 +200,11 @@ class Conversation(JSONSerializable, Memoryable):
     
     *Note*: Not fully implemented, do NOT use this feature
     '''
+    def getMemory(self, memoryFactory:type[Memory] = JsonMemory) -> Memory:
+        ret = memoryFactory()
+        for message in self.messages:
+            ret.put(message.getMemoryItem())
+        return ret
 
 class ChatTransformer(Transformer):
     '''
@@ -205,20 +221,20 @@ class ChatTransformer(Transformer):
                 Message(content=init_prompt, role='system', user=user))
         return ret
 
-    def generate(self, conversation: Conversation, *args, **kwargs) -> Coroutine[Message, Any, None]:
+    def generate(self, conversation: Conversation, *args, **kwargs) -> AsyncGenerator[Message, None]:
         '''
         Generate content
         '''
         return super().generate( conversation=conversation, *args, **kwargs)
 
-    def generate_many(self, conversation: Conversation, num: int, *args,  **kwargs) -> Coroutine[list[Message], Any, None]:
+    def generate_many(self, conversation: Conversation, num: int, *args,  **kwargs) -> AsyncGenerator[list[Message], None]:
         '''
         Generate many possible content (if supported)
         '''
         raise NotImplementedError(
             f"generate_many() is not implemented in {self.__class__.__name__}")
 
-    async def ask(self, history: Conversation, message: Message, *args, **kwargs) -> Coroutine[str, Any, None]:
+    async def ask(self, history: Conversation, message: Message, *args, **kwargs) -> AsyncGenerator[str, None]:
         '''
         Ask the AI
         '''
@@ -271,10 +287,10 @@ class TextTransformer(Transformer):
     Abstract class for Text transformer
     '''
     @abstractmethod
-    async def generate(self, *args, prompt: str, **kwargs) -> Coroutine[str, Any, None]:
+    async def generate(self, *args, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
         return super().generate(*args, prompt=prompt, **kwargs)
 
-    async def generate_many(self, *args, prompt: str, num: int,  **kwargs) -> Coroutine[list[str], Any, None]:
+    async def generate_many(self, *args, prompt: str, num: int,  **kwargs) -> AsyncGenerator[list[str], None]:
         '''
         Generate many possible content (if supported)
         '''

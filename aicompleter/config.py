@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import os
 from re import A
-from typing import Any
+from typing import Any, Self
 
 from .error import ConfigureMissing
 from .utils import EnhancedDict
@@ -71,6 +71,13 @@ class Config(EnhancedDict):
                 raise TypeError(f"Invalid value type: {value!r}")
         _check(__key, __value)
         return super().__setitem__(__key, __value)
+    
+    @staticmethod
+    def __deserialize__(data:dict) -> Self:
+        '''
+        Deserialize a value
+        '''
+        return Config(data)
     
 def loadConfig(path:str) -> Config:
     '''Load configuration from file'''

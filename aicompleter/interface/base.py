@@ -5,19 +5,18 @@ import copy
 import os
 import uuid
 from abc import abstractmethod
-from typing import Optional, Self, TypeVar, overload
-import warnings
+from typing import Coroutine, Optional, Self, TypeVar, Union, overload
+import asyncio
 
 import attr
-from .. import memory
 
-from .. import session
-from ..namespace import Namespace
-
-from .. import config, error, log, utils, handler
-from .command import Command, Commands
+from .. import config, error, handler, log, memory, session, utils
+from ..common import AsyncLifeTimeManager, BaseTemplate, JSONSerializable
 from ..config import Config
-from ..common import JSONSerializable
+from ..namespace import Namespace
+from ..utils import EnhancedDict
+from ..memory import Memory, JsonMemory
+from .command import Command, Commands
 
 Handler = TypeVar('Handler', bound='handler.Handler')
 
@@ -29,15 +28,15 @@ class User(JSONSerializable):
     Name of the user
     If the name is empty, the user will be assigned a name by the handler
     '''
-    id:uuid.UUID = uuid.uuid4()
+    id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
     '''ID of the user'''
-    description:Optional[str] = None
+    description:Optional[str] = attr.ib(default=None)
     '''Description of the user'''
     in_group:str = attr.ib(default="",on_setattr=lambda self, attr, value: self.all_groups.add(value))
     '''Main Group that the user in'''
-    all_groups:set[str] = set()
+    all_groups:set[str] = attr.ib(factory=set)
     '''Groups that the user in'''
-    support:set[str] = set()
+    support:set[str] = attr.ib(factory=set)
     '''Supports of the user'''
 
     @property
@@ -60,17 +59,6 @@ class User(JSONSerializable):
     
     def __attrs_post_init__(self):
         self.all_groups.add(self.in_group)
-
-    @staticmethod
-    def __deserialize__(src:dict) -> Self:
-        return User(
-            name=src['name'],
-            id=uuid.UUID(src['id']),
-            description=src['description'],
-            in_group=src['in_group'],
-            all_groups=set(src['all_groups']),
-            support=set(src['support']),
-        )
 
 class Group:
     '''
@@ -129,7 +117,7 @@ class Group:
         '''Users in the group'''
         return self._users
     
-class UserSet:
+class UserSet(JSONSerializable):
     '''Set of User'''
     def __init__(self) -> None:
         self._set:set[User] = set()
@@ -199,7 +187,7 @@ class UserSet:
         '''Clear the set'''
         self._set.clear()
     
-class GroupSet:
+class GroupSet(JSONSerializable):
     '''Set of Group'''
     def __init__(self) -> None:
         self._set:set[Group] = set()
@@ -281,13 +269,12 @@ class GroupSet:
 #      the subclass of Interface (implemented not abstract) should only have one constructor with keyword config, id
 #      The constructor should have a format like this:
 #      def __init__(self, config:Config, id:uuid.UUID = uuid.uuid4()):
-class Interface:
+class Interface(AsyncLifeTimeManager):
     '''Interface of AI Completer'''
     def __init__(self,  namespace:str, user:User,id:uuid.UUID = uuid.uuid4(), config: config.Config = config.Config()):
+        super().__init__()
         self._user = user
         '''Character of the interface'''
-        self._closed:bool = False
-        '''Closed'''
         utils.typecheck(id, uuid.UUID)
         self._id:uuid.UUID = id
         '''ID'''
@@ -301,29 +288,18 @@ class Interface:
         self.logger:log.Logger = log.getLogger("interface", ['%s - %s' % (self.namespace.name, str(self._id))])
         '''Logger of Interface'''
 
-# Due to the variable parameter of the constructor, this check is not available
-#     def __init_subclass__(cls) -> None:
-#         # Check the constructor
-#         if not set(('config', 'id')) <= set(cls.__init__.__annotations__):
-#             warnings.warn(
-# """
-# The constructor of %s should have a format like this:
-# def __init__(self, config:Config, id:uuid.UUID = uuid.uuid4()):
-# """ % cls.__name__
-#             , SyntaxWarning, stacklevel=2)
-
     @property
-    def data(self):
+    def data(self) -> EnhancedDict:
         '''Data of the interface'''
         return self.namespace.data
     
     @property
-    def commands(self):
+    def commands(self) -> Commands:
         '''Commands of the interface'''
         return self.namespace.commands
     
     @property
-    def config(self):
+    def config(self) -> Config:
         '''Config of the interface'''
         return self.namespace.config
 
@@ -351,43 +327,23 @@ class Interface:
                     return i
         return None
     
-    async def init(self, in_handler:Handler) -> None:
+    async def init(self, in_handler:Handler) -> Coroutine[None, None, None]:
         '''
         Initial function for Interface
         '''
         self.logger.debug("Interface %s initializing" % self.id)
 
-    async def final(self) -> None:
+    async def final(self) -> Coroutine[None, None, None]:
         '''Finial function for Interface'''
         self.logger.debug("Interface %s finalizing" % self.id)
 
-    @abstractmethod
-    async def session_init(self,session:session.Session) -> None:
+    async def session_init(self,session:session.Session):
         '''Initial function for Session'''
         pass
 
-    @abstractmethod
-    async def session_final(self,session:session.Session) -> None:
+    async def session_final(self,session:session.Session):
         '''Finial function for Session'''
         pass
-    
-    def to_json(self, session:session.Session) -> dict:
-        '''Get the history of the interface'''
-        return {
-            'type': 'history',
-            'subtype': 'interface',
-            'class': self.__class__.__qualname__,
-            'id': self.id.hex,
-            'user': {
-                'name': self.user.name,
-                'id': self.user.id.hex,
-                'description': self.user.description,
-                'in_group': self.user.in_group,
-                'all_groups': list(self.user.all_groups),
-                'support': list(self.user.support),
-            },
-            'commands': [i.to_json() for i in self.commands],
-        }
 
     def getconfig(self, session:Optional[session.Session] = None) -> Config:
         '''
@@ -408,7 +364,6 @@ class Interface:
         '''
         return session.data[self.id.hex]
 
-    @abstractmethod
     async def call(self, session:session.Session, message:session.Message):
         '''
         Call the command
@@ -419,12 +374,29 @@ class Interface:
         :param session: Session
         :param message: Message
         '''
+        raise NotImplementedError("Interface.call() is not implemented")
+
+    def getStorage(self, session:session.Session) -> Optional[dict]:
+        '''
+        Get the Storage of the interface (if any)
+
+        :param session: Session
+        :return: Storage, if there is nothing to store, return None
+        '''
+        return None
+    
+    def setStorage(self, session:session.Session, data:dict):
+        '''
+        Set the Storage of the interface (if any)
+
+        :param session: Session
+        '''
         pass
     
-    async def close(self):
+    def close(self):
         '''Close the interface'''
-        self._closed = True
-        await self.final()
+        self._close_tasks.append(asyncio.get_event_loop().create_task(self.final()))
+        super().close()
 
     def register_cmd(self, *args, **kwargs):
         '''Register a command'''

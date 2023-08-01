@@ -15,7 +15,9 @@ class defaultdict(dict, JSONSerializable):
         return self[key]
     
     def __serialize__(self) -> dict:
-        return serialize(self.__dict__)
+        return {
+            key: value for key, value in self.items() if isinstance(key, str) and not key.startswith('_')
+        }
     
     @staticmethod
     def __deserialize__(data:dict) -> Self:
@@ -138,12 +140,9 @@ class EnhancedDict(defaultdict):
                 self[key].update(value)
             else:
                 self[key] = value
-        
-    def __str__(self) -> str:
-        return json.dumps(self, indent=4)
     
     def __repr__(self) -> str:
-        return f"<Config {str(self)}>"
+        return f"<{self.__class__.__name__} {str(self)}>"
     
     def __delitem__(self, __key: Any) -> None:
         return super().__delitem__(__key)

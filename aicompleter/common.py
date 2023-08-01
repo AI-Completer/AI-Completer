@@ -7,7 +7,7 @@ from abc import ABC, ABCMeta, abstractmethod
 from asyncio import iscoroutine
 import asyncio
 import threading
-from typing import Any, Generic, Optional, Self, TypeVar
+from typing import Any, Callable, Coroutine, Generic, Optional, Self, TypeVar, overload
 import pickle
 
 class BaseTemplate(ABC):
@@ -31,14 +31,13 @@ class AsyncTemplate(BaseTemplate, Generic[_T]):
         else:
             cls.__sync_class__ = None
 
-del _T
-
 class Serializable(BaseTemplate):
     '''
     This class is used to serialize object to string
 
     Warning: Unsecure and unstable for different python version and program version
     '''
+    __slots__ = ()
     def __serialize__(self) -> bytes:
         '''
         Convert to string format
@@ -60,7 +59,7 @@ class JSONSerializableMeta(ABCMeta):
     '''
     def __new__(cls, name, bases, attrs):
         # Rewrite __deserialize__ method
-        def _deserialize(data:list):
+        def _deserialize(data:dict[str, Any]):
             import importlib
             module_ = importlib.import_module(attrs['__module__'])
             # Split the submodule
@@ -72,10 +71,10 @@ class JSONSerializableMeta(ABCMeta):
             ret = cls_.__new__(cls_)
 
             ret.__dict__.update({
-                deserialize(item['key']): deserialize(item['value']) for item in data
+                key: deserialize(value) for key, value in data.items()
             })
             return ret
-        if not(getattr(cls, '__deserialize__', False) and getattr(cls.__deserialize__, '__isabstractmethod__', False)):
+        if '__deserialize__' not in attrs or getattr(attrs['__deserialize__'], '__isabstractmethod__', False):
             attrs['__deserialize__'] = staticmethod(_deserialize)
         return ABCMeta.__new__(cls, name, bases, attrs)
 
@@ -87,13 +86,9 @@ class JSONSerializable(Serializable, metaclass=JSONSerializableMeta):
         '''
         Convert to json format
         '''
-        # Load from __dict__
-        return [
-            {
-                'key': serialize(key),
-                'value': serialize(value),
-            } for key, value in self.__dict__.items()
-        ]
+        return {
+            key: serialize(value) for key, value in self.__dict__.items()
+        }
 
     @abstractmethod
     def __deserialize__(data:list) -> Self:
@@ -144,6 +139,7 @@ class ContentManager(BaseTemplate):
     '''
     This class is a template for content manager
     '''
+    __slots__ = ()
     def __enter__(self) -> Any:
         '''
         Enter the context
@@ -164,6 +160,7 @@ class AsyncContentManager(AsyncTemplate[ContentManager]):
     '''
     This class is a template for asynchronous content manager
     '''
+    __slots__ = ()
     async def __aenter__(self) -> Any:
         '''
         Enter the context
@@ -219,15 +216,10 @@ class AsyncLifeTimeManager(AsyncTemplate[LifeTimeManager]):
         '''
         The close event
         '''
-        self._close_tasks:set[asyncio.Future] = set()
+        self._close_tasks:list[asyncio.Future] = []
         '''
         The tasks that will be awaited when the object is closed
         '''
-        self._to_cancel_tasks:set[asyncio.Task] = set()
-        '''
-        The tasks that will be cancelled when the object is closed
-        '''
-        
 
     @property
     def closed(self) -> bool:
@@ -240,27 +232,95 @@ class AsyncLifeTimeManager(AsyncTemplate[LifeTimeManager]):
         '''
         Close the object
         '''
-        for task in self._to_cancel_tasks:
-            task.cancel()
         self._close_event.set()
 
-    async def wait_close(self) -> None:
+    async def wait_close(self) -> Coroutine[None, None, None]:
         '''
         Wait until the object is closed
         '''
         await self._close_event.wait()
-        await asyncio.gather(*self._close_tasks)
-        for i in await asyncio.gather(*self._to_cancel_tasks, return_exceptions=True):
-            if isinstance(i, asyncio.CancelledError):
-                continue
-            if isinstance(i, Exception):
-                raise i
+        while self._close_tasks:
+            await asyncio.wait(self._close_tasks)
+            for task in self._close_tasks:
+                if task.done():
+                    self._close_tasks.remove(task)
 
     def __del__(self) -> None:
         if not self.closed:
             self.close()
 
-def serialize(data:Any, pickle_all:bool = False) -> Any:
+SERIALIZE_TYPE = TypeVar('SERIALIZE_TYPE')
+
+class SerializeHandler(Generic[_T]):
+    '''
+    The class for serialize handler
+
+    :param _T: The type of the object
+    '''
+    _serialize_handlers: dict[type, Self] = {}
+
+    def __new__(cls, param: type[_T]) -> Self:
+        if not isinstance(param, type):
+            raise TypeError("Require type parameter")
+        if param in cls._serialize_handlers:
+            return cls._serialize_handlers[param]
+        else:
+            ret = super().__new__(cls)
+            cls._serialize_handlers[param] = ret
+            return ret
+
+    def serializer(self, func: Callable[[_T], dict]):
+        '''
+        Register the serialize handler
+        '''
+        self.__serializer = func
+
+    def deserializer(self, func: Callable[[dict], _T]):
+        '''
+        Register the deserializer handler
+        '''
+        self.__deserializer = func
+
+    def serialize(self, data:_T) -> dict:
+        return self.__serializer(data)
+    
+    def deserialize(self, data:dict) -> _T:
+        return self.__deserializer(data)
+    
+    @staticmethod
+    @overload
+    def support(type_:type):...
+    
+    @staticmethod
+    @overload
+    def support(data: Any):...
+
+    @staticmethod
+    def support(param: Any):
+        if isinstance(param, type):
+            return issubclass(param, tuple(SerializeHandler._serialize_handlers.keys()))
+        else:
+            return isinstance(param, tuple(SerializeHandler._serialize_handlers.keys()))
+        
+    @staticmethod
+    def serializeData(data: Any):
+        if not SerializeHandler.support(data):
+            raise TypeError("The data type is not support")
+        # Get the type
+        for type_ in SerializeHandler._serialize_handlers:
+            if isinstance(data, type_):
+                return type_, SerializeHandler(type_).serialize(data)
+        raise Exception("Unknown Error")
+
+def _get_class(module:str, class_:str):
+    import importlib
+    module_ = importlib.import_module(module)
+    # Split the submodule
+    for i in class_.split('.'):
+        module_ = getattr(module_, i)
+    return module_
+
+def serialize(data:Any, pickle_all:bool = False) -> SERIALIZE_TYPE:
     '''
     Convert to serial format (in json)
 
@@ -269,8 +329,7 @@ def serialize(data:Any, pickle_all:bool = False) -> Any:
     '''
     if isinstance(data, Serializable):
         return {
-            'type': 'serial',
-            'subtype': 'class',
+            'type': 'class',
             'module': data.__module__,
             'class': data.__class__.__qualname__,
             'data': data.__serialize__(),
@@ -278,44 +337,55 @@ def serialize(data:Any, pickle_all:bool = False) -> Any:
     elif isinstance(data, (list, set, tuple)):
         subtype = 'list' if isinstance(data, list) else 'set' if isinstance(data, set) else 'tuple'
         return {
-            'type': 'serial',
-            'subtype': subtype,
+            'type': subtype,
             'data': [serialize(item) for item in data],
         }
     elif isinstance(data, dict):
         return {
-            'type': 'serial',
-            'subtype': 'dict',
-            'data': [{
-                'key': serialize(key),
-                'value': serialize(value),
-            } for key, value in data.items()],
+            'type': 'dict',
+            'data': {
+                key: serialize(value) for key, value in data.items()
+            },
         }
-    elif isinstance(data, (int, float, str, bool, type(None), bytes)):
+    elif isinstance(data, (int, float, str, bool, type(None))):
         subtype = data.__class__.__qualname__
-        if subtype not in ('int', 'float', 'str', 'bool', 'NoneType', 'bytes'):
+        if subtype not in ('int', 'float', 'str', 'bool', 'NoneType'):
             if pickle_all:
                 return {
-                    'type': 'serial',
-                    'subtype': 'pickle',
+                    'type': 'pickle',
                     'data': pickle.dumps(data),
                 }
             raise TypeError(f'Cannot serialize {data}({type(data)}), this class is inherited from {subtype}')
+        return data
+    elif isinstance(data, bytes):
         return {
-            'type': 'serial',
-            'subtype': subtype,
-            'data': data,
+            'type': 'bytes',
+            'data': data.hex(),
+        }
+    elif SerializeHandler.support(data):
+        # Search the match type
+        cls, ddata = SerializeHandler.serializeData(data)
+        return {
+            'type': 'handler',
+            'module': cls.__module__,
+            'class': cls.__qualname__,
+            'data': ddata,
+        }
+    elif hasattr(data, '__setstate__') and hasattr(data, '__getstate__'):
+        # Allow secure pickle
+        return {
+            'type': 'secure-pickle',
+            'data': pickle.dumps(data).hex(),
         }
     else:
         if pickle_all:
             return {
-                'type': 'serial',
-                'subtype': 'pickle',
+                'type': 'pickle',
                 'data': pickle.dumps(data),
             }
         raise TypeError(f'Cannot serialize {data}({type(data)})')
 
-def deserialize(data:dict, global_:Optional[dict[str, Any]] = None, unpickle_all:bool = False) -> Any:
+def deserialize(data:SERIALIZE_TYPE, global_:Optional[dict[str, Any]] = None, unpickle_all:bool = False) -> Any:
     '''
     Get a object from serial format (in json)
 
@@ -323,34 +393,65 @@ def deserialize(data:dict, global_:Optional[dict[str, Any]] = None, unpickle_all
     :param global_: The global variables, if none, will try import the module(warning: this is dangerous)
     :param unpickle_all: Whether to unpickle all the data, this is dangerous because it will execute the code in the data
     '''
-    if data['type'] != 'serial':
+    if isinstance(data, (int, float, str, bool, type(None))):
+        return data
+    if 'type' not in data:
         raise TypeError(f'Cannot deserialize {data}({type(data)})')
-    subtype = data['subtype']
+    subtype = data['type']
     if subtype == 'class':
         if global_ is None:
-            import importlib
-            module_ = importlib.import_module(data['module'])
-            # Split the submodule
-            for i in data['class'].split('.'):
-                module_ = getattr(module_, i)
-            cls = module_
+            cls = _get_class(data['module'], data['class'])
         else:
             cls = global_
             for i in data['class'].split('.'):
                 cls = cls[i]
+        if not issubclass(cls, Serializable):
+            raise TypeError(f'Cannot deserialize {data}({type(data)}), this class is not inherited from Serializable')
         return cls.__deserialize__(data['data'])
     elif subtype in ('list', 'set', 'tuple'):
-        return globals()[subtype]([deserialize(item) for item in data['data']])
+        import builtins
+        return getattr(builtins, subtype)([deserialize(item) for item in data['data']])
     elif subtype == 'dict':
-        return {deserialize(item['key']): deserialize(item['value']) for item in data['data']}
-    elif subtype in ('int', 'float', 'str', 'bool', 'NoneType', 'bytes'):
-        return data['data']
+        return {key: deserialize(value) for key, value in data['data'].items()}
+    elif subtype == 'bytes':
+        # hex转bytes
+        return bytes.fromhex(data['data'])
+    elif subtype == 'handler':
+        cls = _get_class(data['module'], data['class'])
+        if not SerializeHandler.support(cls):
+            raise ValueError("Serializer type not support")
+        return SerializeHandler(cls).deserialize(data['data'])
+    elif subtype == 'secure-pickle':
+        # Consider to remove this feature
+        # Because it's difficult to verify the security of the pickle
+        return pickle.loads(bytes.fromhex(data['data']))
     elif subtype == 'pickle':
         if unpickle_all:
             return pickle.loads(data['data'])
-        raise TypeError(f'Cannot deserialize {data}({type(data)}), this class is inherited from {subtype}')
+        raise TypeError(f'Cannot deserialize {data}({subtype}), this class is a pickle object')
     else:
-        raise TypeError(f'Cannot deserialize {data}({type(data)})')
+        raise TypeError(f'Cannot deserialize {data}({subtype}), unknown type')
+
+# add default handler
+import uuid
+@SerializeHandler(uuid.UUID).serializer
+def _(data:uuid.UUID) -> str:
+    return data.hex
+
+@SerializeHandler(uuid.UUID).deserializer
+def _(data:str) -> uuid.UUID:
+    return uuid.UUID(data)
+
+@SerializeHandler(asyncio.Lock).serializer
+def _(data: asyncio.Lock) -> bool:
+    return data.locked()
+
+@SerializeHandler(asyncio.Lock).deserializer
+def _(data: bool) -> asyncio.Lock:
+    lock = asyncio.Lock()
+    if data:
+        asyncio.run(lock.acquire())
+    return lock
 
 __all__ = (
     'BaseTemplate',
@@ -360,4 +461,5 @@ __all__ = (
 
     'serialize',
     'deserialize',
+    'SerializeHandler',
 )

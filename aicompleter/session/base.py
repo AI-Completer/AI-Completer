@@ -11,6 +11,7 @@ import uuid
 from typing import Any, Coroutine, Optional, Self, TypeVar, overload
 
 import aiohttp
+from asyncio import CancelledError
 import attr
 
 import aicompleter
@@ -227,7 +228,7 @@ class Session:
         for task in self._running_tasks:
             task.cancel()
         result = await asyncio.gather(*self._running_tasks, return_exceptions=True)
-        if any([isinstance(r, Exception) for r in result]):
+        if any([isinstance(r, Exception) and not isinstance(r, CancelledError) for r in result]):
             self.logger.exception(f"Error when closing session" + "\n".join([str(r) for r in result if isinstance(r, Exception)]))
         for interface in self.in_handler._interfaces:
             await interface.session_final(self)
@@ -237,6 +238,23 @@ class Session:
         for task in self._running_tasks:
             if task.done() or task.cancelled():
                 self._running_tasks.remove(task)
+
+    @property
+    def json_data(self):
+        ret = {
+            'id': self.id.hex,
+            'config': self.config,
+            'storage': []
+        }
+        for i in self.in_handler._interfaces:
+            data = i.getStorage(self)
+            if data == None:
+                continue
+            ret['storage'].append({
+                'id': i.id.hex,
+                'data': data
+            })
+        return ret
 
 @attr.s(auto_attribs=True, kw_only=True)
 class Message:

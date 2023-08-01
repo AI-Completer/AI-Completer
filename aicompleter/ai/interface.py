@@ -6,13 +6,14 @@ from __future__ import annotations
 
 import uuid
 from typing import Optional, TypeVar
-from aicompleter import memory, session
 
-import aicompleter.session as session
-from aicompleter import *
-from aicompleter.ai import ChatTransformer, Conversation, Transformer
-from aicompleter.config import Config
-from aicompleter.interface import Command, Interface, User
+from aicompleter import session
+
+from .. import *
+from ..ai import ChatTransformer, Conversation, Transformer
+from ..config import Config
+from ..interface import Command, Interface, User
+from ..common import deserialize, serialize
 
 from . import *
 
@@ -107,9 +108,11 @@ class ChatInterface(TransformerInterface):
     def __hash__(self):
         return hash(self.id)
 
-    def to_json(self, session: Session) -> dict:
-        ret = super().to_json(session)
-        conversation:Conversation = self.getdata(session)['conversation']
-        ret['conversation'] = conversation.generate_json()
-        return ret
+    def getStorage(self, session: Session) -> Optional[dict]:
+        conversation: Conversation = self.getdata(session)['conversation']
+        return serialize(conversation)
     
+    def setStorage(self, session: Session, data: dict):
+        conversation = deserialize(data)
+        self.getdata(session)['conversation'] = conversation
+

@@ -4,6 +4,7 @@ Handler between the interfaces
 import asyncio
 import copy
 import functools
+import importlib
 import uuid
 from typing import Any, Generator, Iterator, Optional, overload
 
@@ -33,7 +34,8 @@ class Handler(AsyncLifeTimeManager):
         pass
 
     def __init__(self, config:Optional[Config] = Config()) -> None:
-        self._interfaces:set[Interface] = set()
+        super().__init__()
+        self._interfaces:list[Interface] = []
         '''Interfaces of Handler'''
         self.on_exception:events.Exception = events.Exception(Exception)
         '''Event of Exception'''
@@ -43,7 +45,7 @@ class Handler(AsyncLifeTimeManager):
         '''User Set of Handler'''
         self._groupset:GroupSet = GroupSet()
         '''Group Set of Handler'''
-        self._running_sessions:set[Session] = set()
+        self._running_sessions:list[Session] = []
         '''Running Sessions of Handler'''
         self.on_call:events.Event = events.Event(type=events.Type.Hook)
         '''
@@ -95,9 +97,10 @@ class Handler(AsyncLifeTimeManager):
         self.logger.debug("Closing handler")
         for i in self._running_sessions:
             if not i.closed:
-                self._close_tasks.add(asyncio.create_task(i.close()))
+                self._close_tasks.append(asyncio.get_event_loop().create_task(i.close()))
         for i in self._interfaces:
-            self._close_tasks.add(asyncio.create_task(i.close()))
+            i.close()
+            self._close_tasks.extend(i._close_tasks)
         super().close()
 
     async def close_session(self, session:Session):
@@ -205,7 +208,7 @@ class Handler(AsyncLifeTimeManager):
             self.logger.debug("Adding interface %s - %s", i.id, i.user.name)
             if i in self._interfaces:
                 raise error.Existed(i, handler=self)
-            self._interfaces.add(i)
+            self._interfaces.append(i)
             self._namespace.subnamespaces[i.namespace.name] = i.namespace
         for i in interfaces:
             await i.init(self)
@@ -396,8 +399,77 @@ class Handler(AsyncLifeTimeManager):
             )
         for i in self._interfaces:
             await i.session_init(ret)
-        self._running_sessions.add(ret)
+        self._running_sessions.append(ret)
         return ret
+    
+    def loadSession(self, data:dict[str, Any]) -> session.Session:
+        '''Load session'''
+        self.logger.debug("Loading session %s", data['id'])
+        ret = session.Session(self)
+        ret.config = Config.__deserialize__(data['config'])
+        ret._id = uuid.UUID(data['id'])
+        for i in data['storage']:
+            for j in self._interfaces:
+                if j.id.hex == i['id']:
+                    j.setStorage(ret, i['data'])
+                    break
+            else:
+                raise error.NotFound("Interface %s not found" % i['id'], handler=self)
+        self._running_sessions.append(ret)
+        return ret
+    
+    def getstate(self):
+        '''Get state of handler'''
+        return {
+            'interfaces': [
+                {
+                    'id': i.id.hex,
+                    'module': i.__module__,
+                    'class': i.__class__.__qualname__,
+                    'config': i.config.__serialize__(),
+                    'user': i.user.__serialize__(),
+                } for i in self._interfaces
+            ]
+        }
+    
+    def setstate(self, state:dict[str, Any]):
+        '''Set state of handler'''
+        # Require preload interfaces, because the interface init method varies
+        self.logger.debug("Set state of handler")
+        _loaded_interfaces = []
+        def get_interface(type_: type[Interface]):
+            for i in self._interfaces:
+                if i not in _loaded_interfaces:
+                    if i.__class__ == type_:
+                        _loaded_interfaces.append(i)
+                        return i
+            return None
+        for i in state['interfaces']:
+            module = importlib.import_module(i['module'])
+            for name in i['class'].split('.'):
+                module = getattr(module, name)
+            cls:type[Interface] = module
+            if not issubclass(cls, Interface):
+                raise TypeError(f"Expected type Interface, got {type(cls)}")
+            # Check if the interface is already loaded
+            _inter = get_interface(cls)
+            if _inter:
+                _inter.namespace.config = Config.__deserialize__(i['config'])
+                _inter._user = User.__deserialize__(i['user'])
+                _inter._id = uuid.UUID(i['id'])
+                assert _inter in self._interfaces, "Interface not in handler"
+            else:
+                try:
+                    to_add = cls(
+                        id = uuid.UUID(i['id']),
+                        config = Config.__deserialize__(i['config']),
+                    )
+                except TypeError as e:
+                    self.logger.error("Exception: %s", e)
+                    self.logger.fatal("Failed to initialize interface %s(%s)", i['id'], cls.__name__)
+                    raise e
+                to_add._user = User.__deserialize__(i['user'])
+                self._interfaces.append(to_add)
 
 __all__ = (
     'Handler',

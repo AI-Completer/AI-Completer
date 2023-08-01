@@ -12,6 +12,7 @@ import uuid
 from aicompleter import *
 from aicompleter import Session
 from aicompleter.ai.ai import ChatTransformer
+from aicompleter.common import deserialize, serialize
 
 class SelfStateExecutor(ai.ChatInterface):
     '''
@@ -26,10 +27,8 @@ class SelfStateExecutor(ai.ChatInterface):
             callback=self.cmd_agent,
             in_interface=self,
         ))
-        
-    async def session_init(self, session: Session):
-        ret = await super().session_init(session)
 
+    def _gen_agent(self, session: Session):
         avaliable_commands = Commands()
         avaliable_commands.add(*session.in_handler.get_executable_cmds(self._user))
         
@@ -121,7 +120,11 @@ Do not reply with anything else.
                 role='assistant',
             )
         ])
-
+        return agent
+        
+    async def session_init(self, session: Session):
+        ret = await super().session_init(session)
+        self._gen_agent(session)
         return ret
 
     async def cmd_agent(self, session: Session, message: Message):
@@ -139,3 +142,12 @@ Do not reply with anything else.
         agent.ask(_cr_message(message.content.pure_text))
         
         return None
+
+    def setStorage(self, session: Session, data: dict):
+        conversation = deserialize(data)
+        agent = self._gen_agent(session)
+        agent.conversation = conversation
+
+    def getStorage(self, session: Session) -> dict:
+        return serialize(self.getdata(session)['agent'].conversation)
+    

@@ -2,7 +2,7 @@ import asyncio
 import copy
 import json
 import traceback
-from typing import Any, Callable, Coroutine, Optional, Self, overload
+from typing import Any, Callable, Coroutine, NoReturn, Optional, Self, Union, overload
 from ... import *
 from ... import events
 from .. import ChatTransformer
@@ -11,7 +11,7 @@ class Agent(common.AsyncLifeTimeManager):
     '''
     AI Agent
     '''
-    def __init__(self, chatai: ChatTransformer, init_prompt:str, user:Optional[str] = None):
+    def __init__(self, chatai: ChatTransformer, init_prompt:Optional[str] = None, user:Optional[str] = None):
         super().__init__()
         self.ai = chatai
         self._init_prompt = init_prompt
@@ -276,11 +276,6 @@ class Agent(common.AsyncLifeTimeManager):
                 traceback.print_exc()
         finally:
             # The loop is done
-            self._handle_task.remove_done_callback(self._unexception)
-            self._loop_task.remove_done_callback(self._unexception)
-            self._handle_task.cancel()
-            self._handle_task = None
-            self._loop_task = None
             self.logger.debug('The agent is stopped')
             self.close()
             if exception is not None:
@@ -291,7 +286,7 @@ class Agent(common.AsyncLifeTimeManager):
             
         self.logger.debug('The loop is done')
 
-    async def _handle_result(self):
+    async def _handle_result(self) -> Coroutine[None, None, NoReturn]:
         while True:
             result = await self._result_queue.get()
             if result.cmd == 'ask':
@@ -344,9 +339,11 @@ class Agent(common.AsyncLifeTimeManager):
         if self._handle_task:
             self._handle_task.cancel()
             self._handle_task.remove_done_callback(self._unexception)
+            self._close_tasks.append(self._handle_task)
         if self._loop_task:
             self._loop_task.cancel()
             self._loop_task.remove_done_callback(self._unexception)
+            self._close_tasks.append(self._loop_task)
         self._handle_task = None
         self._loop_task = None
         self.logger.debug('The agent is closed')

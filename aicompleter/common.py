@@ -10,6 +10,31 @@ import threading
 from typing import Any, Callable, Coroutine, Generic, Optional, Self, TypeVar, overload
 import pickle
 
+class JsonTypeMeta(type):
+    def __instancecheck__(self, __instance: Any) -> bool:
+        if isinstance(__instance, (str, int, float, bool, type(None))):
+            return True
+        if isinstance(__instance, list):
+            return all(isinstance(i, self) for i in __instance)
+        if isinstance(__instance, dict):
+            return all(isinstance(i, str) and isinstance(j, self) for i, j in __instance.items())
+        return False
+
+class JsonType(metaclass=JsonTypeMeta):
+    '''
+    The type of json
+    '''
+    __slots__ = ()
+    def __new__(cls, *param) -> dict[str, Self] | list[Self] | str | int | float | bool | None:
+        if len(param) > 1:
+            raise TypeError(f'JsonType accept no more than 1 parameter, got {len(param)}')
+        if len(param) == 0:
+            return {}
+        return param[0]
+
+    def __init_subclass__(cls) -> None:
+        raise TypeError(f"Cannot subclass {cls.__name__}")
+
 class BaseTemplate(ABC):
     '''
     A template class for all the template classes in aicompleter
@@ -25,7 +50,16 @@ class AsyncTemplate(BaseTemplate, Generic[_T]):
     # Hook the subclass and add attr __sync_class__
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
-        args = [i for i in cls.__orig_bases__ if i.__origin__ == AsyncTemplate][0].__args__
+        args = None
+        for i in cls.__bases__:
+            if i == AsyncTemplate:
+                raise TypeError('AsyncTemplate should be subscripted with a type')
+            if hasattr(i, '__origin__') and i.__origin__ == AsyncTemplate:
+                if args != None:
+                    if args != i.__args__:
+                        raise TypeError('Conflicting type arguments')
+                else:
+                    args = i.__args__
         if len(args) > 0:
             cls.__sync_class__ = args[0]
         else:
@@ -249,8 +283,6 @@ class AsyncLifeTimeManager(AsyncTemplate[LifeTimeManager]):
         if not self.closed:
             self.close()
 
-SERIALIZE_TYPE = TypeVar('SERIALIZE_TYPE')
-
 class SerializeHandler(Generic[_T]):
     '''
     The class for serialize handler
@@ -269,22 +301,27 @@ class SerializeHandler(Generic[_T]):
             cls._serialize_handlers[param] = ret
             return ret
 
-    def serializer(self, func: Callable[[_T], dict]):
+    def serializer(self, func: Callable[[_T], JsonType]):
         '''
         Register the serialize handler
         '''
         self.__serializer = func
 
-    def deserializer(self, func: Callable[[dict], _T]):
+    def deserializer(self, func: Callable[[JsonType], _T]):
         '''
         Register the deserializer handler
         '''
         self.__deserializer = func
 
-    def serialize(self, data:_T) -> dict:
-        return self.__serializer(data)
+    def serialize(self, data:_T) -> JsonType:
+        ret = self.__serializer(data)
+        if not isinstance(ret, JsonType):
+            raise TypeError("The return value of serializer must be JsonType")
+        return ret
     
-    def deserialize(self, data:dict) -> _T:
+    def deserialize(self, data:JsonType) -> _T:
+        if not isinstance(data, JsonType):
+            raise TypeError("The data must be JsonType")
         return self.__deserializer(data)
     
     @staticmethod
@@ -320,7 +357,7 @@ def _get_class(module:str, class_:str):
         module_ = getattr(module_, i)
     return module_
 
-def serialize(data:Any, pickle_all:bool = False) -> SERIALIZE_TYPE:
+def serialize(data:Any, pickle_all:bool = False) -> JsonType:
     '''
     Convert to serial format (in json)
 
@@ -385,7 +422,7 @@ def serialize(data:Any, pickle_all:bool = False) -> SERIALIZE_TYPE:
             }
         raise TypeError(f'Cannot serialize {data}({type(data)})')
 
-def deserialize(data:SERIALIZE_TYPE, global_:Optional[dict[str, Any]] = None, unpickle_all:bool = False) -> Any:
+def deserialize(data: JsonType, global_:Optional[dict[str, Any]] = None, unpickle_all:bool = False) -> Any:
     '''
     Get a object from serial format (in json)
 
@@ -462,4 +499,5 @@ __all__ = (
     'serialize',
     'deserialize',
     'SerializeHandler',
+    'JsonType',
 )

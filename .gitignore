@@ -172,7 +172,7 @@ config.toml
 workspace/
 
 # Memory file
-memory.json
+history.json
 
 # Temporary test scripts
-test_*.py
+temp_*.py

@@ -22,6 +22,9 @@ if os.environ['DEBUG'] == "True":
     __DEBUG__ = True
 
 logger = log.getLogger("Main")
+logger.setLevel(log.INFO)
+if __DEBUG__ == True:
+    logger.setLevel(log.DEBUG)
 
 __help__='''
 AI Completer
@@ -30,9 +33,12 @@ An AI assistant to help you complete your work
 parser = argparse.ArgumentParser(description=__help__)
 parser.add_argument('--debug', action='store_true', help='Enable debug mode, if the environment variable DEBUG is set to True, this option will be ignored')
 parser.add_argument('--config', type=str, default='config.json', help='Specify the config file, default: config.json')
-parser.add_argument('--memory', type=str, default='memory.json', help='Specify the memory file, default: memory.json')
-parser.add_argument('--disable-memory', action='store_true', help='Disable memory', dest='disable_memory')
-parser.add_argument('--disable-faiss', action='store_true', help='Disable faiss', dest='disable_faiss')
+parser.add_argument('--history', type=str, default='history.json', help='Specify the history file, default: history.json')
+parser.add_argument('--load-history', action='store_true', help='Load history without asking for user. This is priorer than --disable-history', dest='load_history')
+parser.add_argument('--save-history', action='store_true', help='Save history without asking for user. This is priorer than --disable-history', dest='save_history')
+parser.add_argument('--disable-history', action='store_true', help='Disable history', dest='disable_history')
+parser.add_argument('--enable-memory', action='store_true', help='Enable memory', dest='enable_memory')
+# parser.add_argument('--disable-faiss', action='store_true', help='Disable faiss', dest='disable_faiss')
 subparsers = parser.add_subparsers(dest='subcommand', help='subcommands', description='subcommands, including:\n\ttalk: Talk with the AI\n\thelper: The helper of AI Completer, this will launcher a AI assistant to help you solve the problem')
 subparsers.required = True
 talk_pareser = subparsers.add_parser('talk', help='Talk with the AI')
@@ -56,7 +62,7 @@ if not os.path.exists(args.config):
 else:
     logger.info(f"{args.config} Found. Reading configure")
     config_ = Config.loadFromFile(args.config)
-config_.setdefault("global.debug", False)
+
 if config_["global.debug"]:
     __DEBUG__ = True
 
@@ -67,10 +73,8 @@ if __DEBUG__ == True:
     config.varibles['debug'] = True
     config.varibles['log_level'] = log.DEBUG
 
-if args.disable_memory:
-    config.varibles['disable_memory'] = True
-if args.disable_faiss:
-    config.varibles['disable_faiss'] = True
+# if args.disable_faiss:
+#     config.varibles['disable_faiss'] = True
 
 # Check the model
 if args.model:
@@ -101,6 +105,48 @@ __Int_map__ = {
 handler_ = Handler(config_)
 new_session:Session = None
 
+has_loadHistory = False
+def loadHistory() -> bool:
+    global has_loadHistory
+    path = args.history
+    if not os.path.exists(path):
+        if args.load_history:
+            logger.warning(f"History file {path} not found. Ignore")
+        return False
+    if not args.load_history:
+        # ask for user
+        if not utils.is_enable(input("Load history?(Y/n) "), default=True):
+            return
+        # load history
+        logger.info(f"Loading history from {path}")
+        has_loadHistory = True
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        handler_.setstate(data['state'])
+        global new_session
+        new_session = handler_.loadSession(data['data'])
+        return True
+    else:
+        return False
+
+def saveHistory() -> bool:
+    path = args.history
+    if not (args.save_history or args.disable_history):
+        # ask for user
+        if not utils.is_enable(input("Save history?(Y/n) "), default=True):
+            return False
+        logger.info(f"Saving history to {path}")
+        if not has_loadHistory:
+            logger.warning("Overwrite the history file without loading it")
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump({
+                'state': handler_.getstate(),
+                'data': new_session.json_data,
+            }, f, indent=4)
+        return True
+    else:
+        return False
+
 async def main():
     global new_session
     # Analyse args
@@ -117,10 +163,14 @@ async def main():
             ai_interface = ai.ChatInterface(ai=ai_, namespace=ai_name)
             con_interface = ConsoleInterface()
             await handler_.add_interface(ai_interface, con_interface)
-            new_session = await handler_.new_session()
+            if loadHistory():
+                # load success
+                pass
+            else:
+                new_session = await handler_.new_session()
 
             usercontent = None
-            await aprint("Please Start Your Conversation")
+            await aprint("Please %s Your Conversation" % ("Start" if not has_loadHistory else "Continue"))
             while True:
                 usercontent = await ainput(">>> ")
                 ret:str = await new_session.asend(Message(
@@ -192,11 +242,16 @@ async def main():
                 graph.add(ai_interface, the_interface)
 
             await graph.setup(handler_)
-            new_session = await handler_.new_session()
+
+            if loadHistory():
+                # load success
+                pass
+            else:
+                new_session = await handler_.new_session()
 
             ret = await new_session.asend(Message(
                 content = {
-                    'content': 'Please Start Your Conversation',
+                    'content': 'Please %s Your Conversation' % ("Start" if not has_loadHistory else "Continue"),
                 },
                 cmd = 'ask',
                 dest_interface=console_interface,
@@ -215,34 +270,19 @@ if sys.platform == 'win32':
 loop = asyncio.new_event_loop()
 loop.create_task(main())
 
-utils.launch(
-    loop=loop,
-    logger=logger,
-)
-loop.create_task(handler_.close())
-# Create a new check task, because the task before has been cancelled
+# start the loop
 utils.launch(
     loop=loop,
     logger=logger,
 )
 
-if config.varibles['disable_memory'] == False:
-    async def save():
-        memory = new_session.memory
-        ret = serialize(memory)
-        ret['interfaces'] = []
-        for interface in handler_.interfaces:
-            ret['interfaces'].append(interface.to_json(new_session))
-        with open(args.memory, 'w') as f:
-            json.dump(ret, f, ensure_ascii=False, indent=4)
-        logger.debug("Memory Saved")
-        
-    try:
-        loop.run_until_complete(save())
-    except Exception as e:
-        logger.critical(f"Exception when saving memory: {e}")
-        if logger.isEnabledFor(log.DEBUG):
-            traceback.print_exc()
+loop.create_task(handler_.close())
+utils.launch(
+    loop=loop,
+    logger=logger,
+)
+
+saveHistory()
 
 loop.close()
 logger.debug("Loop Closed")

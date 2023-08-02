@@ -4,6 +4,7 @@ Custom logging module
 
 import asyncio
 import copy
+import functools
 import logging
 import os
 import sys
@@ -11,6 +12,7 @@ from collections.abc import Mapping
 from types import TracebackType
 from typing import Any, Iterable, Optional, TypeAlias
 from . import config
+from .utils.etype import hookclass
 
 import colorama
 
@@ -242,13 +244,25 @@ def configHandlers(handlers:Iterable[logging.Handler]) -> None:
     global _common_handlers
     _common_handlers = handlers
 
+root = Logger('ROOT')
+root.handlers = _common_handlers
+
 def getLogger(name:str, substruct:list[str] = []) -> Logger:
     '''
     Get a logger
     '''
-    _log = Logger(name, substruct=substruct)
-    _log.setLevel(config.varibles['log_level'])
-    _log.handlers = _common_handlers
+    # _log = Logger(name, substruct=substruct)
+    # if level != None:
+    #     _log.setLevel(level)
+    # else:
+    #     _log.setLevel(config.varibles['log_level'])
+    # _log.handlers = _common_handlers
+
+    # Below is a hack to make the logger share a same class and level
+    _log = hookclass(root, {
+        'name': name,
+        '_stack': copy.copy(substruct),
+    })
     return _log
 
 del _ArgsType

@@ -1,4 +1,5 @@
 
+import functools
 from typing import Any, Callable, Literal, TypeVar, Self
 import typing
 import inspect
@@ -169,3 +170,81 @@ class overload_func:
             return func(*args, **kwargs)
         return self.func(*args, **kwargs)
 
+_T = TypeVar('_T')
+def hookclass(obj:_T, hooked_vars:dict[str, Any])-> _T:
+    '''
+    Hook class varible
+    After wrapped by this function
+    You will have a copy of the hooked_vars when using the class,
+    Note: When passing list, dict, or so on of cantainer type in hooked_vars, you should use a copy
+    '''
+    class Deleted:
+        ...
+    class _HookClass:
+        def __init__(self):
+            self.__old_vars = {}
+
+        def __enter__(self):
+            for k, v in hooked_vars.items():
+                self.__old_vars[k] = getattr(obj, k)
+                if v is Deleted:
+                    delattr(obj, k)
+                else:
+                    setattr(obj, k, v)
+            return obj
+        
+        def __exit__(self, exc_type, exc_value, traceback):
+            for k, v in self.__old_vars.items():
+                hooked_vars[k] = getattr(obj, k, Deleted)
+                setattr(obj, k, v)
+    hooker_env = _HookClass()
+    
+    class HookMeta(type):
+        def __new__(cls, name, bases, namespace):
+            def _wrap(name):
+                @functools.wraps(getattr(obj, name))
+                def _wrapped(*args, **kwargs):
+                    with hooker_env as obj:
+                        if len(args) >= 1 and isinstance(args[0], HookClass):
+                            args = args[1:]
+                        return getattr(obj, name)(*args, **kwargs)
+                return _wrapped
+            for k, v in type(obj).__dict__.items():
+                if k in ('__setattr__', '__getattribute__', '__delattr__', '__init__', '__new__'):
+                    continue
+                if callable(v):
+                    namespace[k] = _wrap(k)
+            namespace['__wrapped__'] = obj
+            
+            ret = super().__new__(cls, name, bases, namespace)
+            return ret
+        
+    class HookClass(metaclass=HookMeta):
+
+        @functools.wraps(obj.__setattr__)
+        def __setattr__(self, __name: str, __value: Any) -> None:
+            if __name.startswith("__") or __name.startswith("_HookClass__"):
+                return super().__setattr__(__name, __value)
+            with hooker_env as obj:
+                return setattr(obj, __name, __value)
+            
+        @functools.wraps(obj.__getattribute__)
+        def __getattribute__(self, __name: str) -> Any:
+            with hooker_env as obj:
+                ret = getattr(obj, __name)
+                if hasattr(ret, '__call__'):
+                    @functools.wraps(ret)
+                    def _wrapped(*args, **kwargs):
+                        with hooker_env as obj:
+                            return getattr(obj, __name)(*args, **kwargs)
+                    return _wrapped
+                return ret
+        
+        @functools.wraps(obj.__delattr__)
+        def __delattr__(self, __name: str) -> None:
+            if __name.startswith("__") or __name.startswith("_HookClass__"):
+                return super().__delattr__(__name)
+            with hooker_env as obj:
+                return delattr(obj, __name)
+
+    return HookClass()

@@ -6,10 +6,13 @@ AI-Completer is a framework for interaction among AI, human and system.
 __version__ = "0.0.1beta"
 __author__ = "Li Yan"
 __package__ = "aicompleter"
-__license__ = "GPLv3"
+__license__ = "GPL-3.0"
 __description__ = "AI-Completer, a framework for interaction among AI, human and system."
-# __url__ = ""
-# Unknown yet
+
+import sys
+if sys.version_info < (3, 11):
+    raise RuntimeError('Python 3.11 or higher is required.')
+del sys
 
 from . import (
     common,

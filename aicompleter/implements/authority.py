@@ -8,13 +8,6 @@ import aicompleter.session as session
 from .. import *
 from ..utils import Struct
 
-def is_enable(srctext:Any) -> bool:
-    if srctext in ('enable', 'true', 'True', '1', True, 'yes', 'y', 't'):
-        return True
-    if srctext in ('disable', 'false', 'False', '0', False, 'no', 'n', 'f'):
-        return False
-    raise ValueError(f"Cannot convert {srctext} to bool")
-
 class AuthorInterface(Interface):
     '''
     Authority Interface
@@ -71,7 +64,7 @@ class AuthorInterface(Interface):
             )
         )
         try:
-            enabled = is_enable(ret)
+            enabled = utils.is_enable(ret)
         except ValueError:
             raise error.AuthorityError(
                 ret,

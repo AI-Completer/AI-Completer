@@ -87,12 +87,10 @@ def loadConfig(path:str) -> Config:
 varibles = Config({
     'debug': False,
     'log_level': 'INFO',
-    'disable_memory': False,
     'disable_faiss': False,
 })
 
 __map_environment__ = {
-    'DISABLE_MEMORY': ('disable_memory', bool),
     'DISABLE_FAISS': ('disable_faiss', bool),
 }
 

@@ -428,6 +428,10 @@ class Handler(AsyncLifeTimeManager):
                     'class': i.__class__.__qualname__,
                     'config': i.config.__serialize__(),
                     'user': i.user.__serialize__(),
+                    'commands': [{
+                        'name': cmd.cmd,
+                        'callable_groups': list(cmd.callable_groups),
+                    } for cmd in i.commands]
                 } for i in self._interfaces
             ]
         }
@@ -460,7 +464,7 @@ class Handler(AsyncLifeTimeManager):
                 assert _inter in self._interfaces, "Interface not in handler"
             else:
                 try:
-                    to_add = cls(
+                    _inter = cls(
                         id = uuid.UUID(i['id']),
                         config = Config.__deserialize__(i['config']),
                     )
@@ -468,8 +472,12 @@ class Handler(AsyncLifeTimeManager):
                     self.logger.error("Exception: %s", e)
                     self.logger.fatal("Failed to initialize interface %s(%s)", i['id'], cls.__name__)
                     raise e
-                to_add._user = User.__deserialize__(i['user'])
-                self._interfaces.append(to_add)
+                _inter._user = User.__deserialize__(i['user'])
+                self._interfaces.append(_inter)
+            for cmd in i['commands']:
+                if cmd['name'] not in _inter.commands:
+                    raise error.NotFound(cmd['name'], interface=_inter, handler=self)
+                _inter.commands[cmd['name']].callable_groups = set(cmd['callable_groups'])
 
 __all__ = (
     'Handler',

@@ -334,21 +334,15 @@ class Command(JSONSerializable):
             raise e
         except Exception as e:
             raise error.Interrupted(f"Call interrupted by exception: Command.call",message=message,interface=self.in_interface, error=e) from e
-
-        if bool(config.varibles['disable_memory']) == False:
-            # Add Memory
-            session._memory.put(MemoryItem(
-                content=message.content.text,
-                category=f"command",
-                data={
-                    'cmd':self.cmd,
-                    'from':message.src_interface.id.hex if message.src_interface else None,
-                    'to': message.dest_interface.id.hex if message.dest_interface else None,
-                },
-            ))
         
         if self.callback is not None:
-            task = asyncio.get_event_loop().create_task(self.callback(session, message))
+            extra_params = {}
+            if 'config' in self.callback.__annotations__:
+                extra_params['config'] = self.in_interface.getconfig(session)
+            if 'data' in self.callback.__annotations__:
+                extra_params['data'] = self.in_interface.getdata(session)
+            
+            task = asyncio.get_event_loop().create_task(self.callback(session=session, message=message, **extra_params))
             session._running_tasks.append(task)
             try:
                 ret = await task

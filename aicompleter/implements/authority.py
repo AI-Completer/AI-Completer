@@ -92,7 +92,7 @@ class AuthorInterface(Interface):
         }).check(self.getconfig(session)) == False:
             raise ValueError(f"Config error: {self.getconfig(session)}")
         
-        session.in_handler.on_call.add_callback(self.hook)    
+        session.on_call.add_callback(self.hook)
         return await super().session_init(session)
 
     async def session_final(self, session: Session) -> None:

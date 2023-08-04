@@ -16,6 +16,7 @@ import attr
 
 import aicompleter
 from aicompleter import memory
+from aicompleter import events
 from aicompleter.common import AsyncSaveable, Saveable
 import aicompleter.session as session
 from aicompleter import config, log
@@ -157,6 +158,11 @@ class Session:
         '''Data'''
         self._running_tasks:list[asyncio.Task] = []
         '''Running tasks'''
+        self.on_call: events.Event = events.Event(type=events.Type.Hook)
+        '''
+        Event of Call, this will be triggered when a command is called
+        If the event is stopped, the command will not be called
+        '''
 
         from ..memory import MemoryConfigure, JsonMemory
 
@@ -267,8 +273,7 @@ class Message:
     '''ID of the message'''
     data:EnhancedDict = attr.ib(factory=EnhancedDict, converter=EnhancedDict, alias='extra')
     '''
-    Data / Extra information
-    *Note*: Deprecated.
+    Data information
     '''
     last_message: Optional[Message] = None
     '''Last message'''

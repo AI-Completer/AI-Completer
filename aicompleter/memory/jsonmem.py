@@ -2,7 +2,6 @@
 JSON memory
 '''
 
-import json
 from typing import Iterable, Iterator, Self
 import uuid
 from aicompleter.common import serialize
@@ -36,7 +35,10 @@ class JsonMemory(Memory):
                 raise TypeError(f'Expect MemoryItem, got {type(item)}')
     
     def query(self, query: Query) -> Iterator[MemoryItem]:
-        raise NotImplementedError("JsonMemory does not support query")
+        '''
+        Query memory items
+        '''
+        raise NotImplementedError('Query is not implemented yet')
     
     def delete(self, id: uuid.UUID) -> None:
         '''
@@ -73,3 +75,4 @@ class JsonMemory(Memory):
         for item in data['data']:
             ret.put(MemoryItem.__deserialize__(item))
         return ret
+

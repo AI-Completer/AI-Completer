@@ -1,0 +1,4 @@
+# Use LF
+*.py eol=lf
+*.json eol=lf
+requirements.txt eol=lf

@@ -5,9 +5,10 @@ import asyncio
 from .. import common
 
 class RemoteWebPage(common.AsyncContentManager):
-    def __init__(self, url, proxy:Optional[str] = None):
+    def __init__(self, url, proxy:Optional[str] = None, **options):
         self.url = url
         self.proxy = proxy
+        self.options = options
         self._page_cache = None
         self._session = aiohttp.ClientSession()
 
@@ -20,7 +21,7 @@ class RemoteWebPage(common.AsyncContentManager):
 
     async def _get_page(self):
         if self._page_cache is None:
-            async with self._session.get(self.url, proxy=self.proxy) as response:
+            async with self._session.get(self.url, proxy=self.proxy, **self.options) as response:
                 if response.status // 100 != 2:
                     raise Exception(f"Error: {response.status}")
                 self._page_cache = await response.text()

@@ -1,6 +1,7 @@
 '''
 For Annotation Type Checking
 '''
+import copy
 import functools
 import inspect
 import typing
@@ -143,6 +144,9 @@ for class_path, check_func in {
                         'typing.FrozenSet': _instancecheck_iterable,
                         'typing.KeysView': _instancecheck_iterable,
                         'typing.ValuesView': _instancecheck_iterable,
+
+                        # unstable iterables
+                        'typing.Iterable': _instancecheck_iterable,
                         'typing.AsyncIterable': _instancecheck_iterable,
 
                         # mappings
@@ -253,7 +257,8 @@ def is_instance(obj, type_):
     Check if an object is an instance of a type annotation
     This function will check the subtypes of a qualified generic type annotation
 
-    Examples:
+    Examples
+    ----------
     ::
         >>> is_instance(1, int)
         True
@@ -262,6 +267,15 @@ def is_instance(obj, type_):
         >>> is_instance(1, typing.Union[str, float])
         False
     ::
+    Note
+    -----------
+    This function is unable to check the "unstable" type annotation, such as:
+    >>> typing.Coroutine[None, None, typing.List[int]] # valid before checking the type
+    Sometimes, it enable check some unstable type annotation, such as:
+    >>> typing.Iterable[int] # unstable for range(x), for example
+    >>> typing.AsyncIterable[int]
+
+    It cloud not check the TypeVar either
     '''
     if type_ in _BUILTINS_CLASS_MAP:
         ntype_ = _BUILTINS_CLASS_MAP[type_]
@@ -367,13 +381,30 @@ def verify(func=None, /, check_parameters:bool = True, check_return:bool = False
     '''
     Verify the type of parameters and return value when calling a function
 
-    Examples:
+    Examples
+    ---------
     ::
         >>> @verify
         >>> def func(param1, param2: int, param3: str = '', *args: int, param5: Optional[str] = None, param6: list[int|str] = []) -> tuple[int|str]:
         >>>     return (param1, param2, param3, *args, param5, param6)
         
         >>> print(func(1,2,'3', param6=[1,2,3]))
+    ::
+    ---------
+    Note
+    ---------
+    This function is unable to check the "unstable" type annotation, such as:
+    ::
+        >>> typing.Coroutine[None, None, typing.List[int]] # valid before checking the type
+    ::
+
+    Sometimes, it enable check some unstable type annotation, such as:
+    
+    ::
+        >>> typing.Iterable[int] # unstable for range(x), for example
+        >>> typing.AsyncIterable[int]
+    ::
+    This may sometimes cause an error.
     '''
     if func == None:
         return functools.partial(verify, check_parameters=check_parameters, check_return=check_return)

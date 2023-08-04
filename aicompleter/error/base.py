@@ -2,6 +2,7 @@
 This is the base module of all error in AICompleter
 '''
 from __future__ import annotations
+from typing import Optional
 
 class BaseException(Exception):
     '''Base Exception for all AICompleter error'''
@@ -72,6 +73,15 @@ class Failed(BaseException):
     '''Failed'''
     def __init__(self, reason:str, *args: object, **kwargs: object) -> None:
         super().__init__(reason, *args, **kwargs)
+
+class HTTPStatusError(BaseException):
+    '''
+    HTTP Response Status Error
+    '''
+    def __init__(self, status:int, page_text:Optional[str] = None, *args: object, **kwargs: object) -> None:
+        self.status:int = status
+        self.page_text:Optional[str] = page_text
+        super().__init__(*args, **kwargs)
 
 __all__ = (
     'BaseException',

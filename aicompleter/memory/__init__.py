@@ -27,8 +27,4 @@ from .jsonmem import (
     JsonMemory,
 )
 
-from .history import (
-    MemoryFile,
-)
-
 del config

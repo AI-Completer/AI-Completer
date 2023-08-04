@@ -47,7 +47,7 @@ def getWebText(url:str, *, proxy:Optional[str] = None) -> Coroutine[Any, Any, st
     '''
     return RemoteWebPage(url, proxy=proxy).getText()
 
-def getLimitedLengthSplitText(text:str, split_length:int) -> list[str]:
+def getChunkedText(text:str, split_length:int) -> list[str]:
     '''
     Split the text into limited length
     '''
@@ -98,8 +98,8 @@ def getLimitedLengthSplitText(text:str, split_length:int) -> list[str]:
             result.append(cur)
     return result
 
-async def getLimitedLengthSplitWebText(url:str, split_length:int, * ,proxy:Optional[str] = None) -> list[str]:
+async def getChunkedWebText(url:str, split_length:int, * ,proxy:Optional[str] = None) -> list[str]:
     '''
     Get the text from the web page and split it into limited length
     '''
-    return getLimitedLengthSplitText(await getWebText(url, proxy=proxy), split_length)
+    return getChunkedText(await getWebText(url, proxy=proxy), split_length)

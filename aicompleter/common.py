@@ -46,24 +46,15 @@ class AsyncTemplate(BaseTemplate, Generic[_T]):
     A template class for all the asynchronous template classes in aicompleter
     :param _T: The type of the synchronous object(if exists)
     '''
-    
-    # Hook the subclass and add attr __sync_class__
-    def __init_subclass__(cls) -> None:
-        super().__init_subclass__()
-        args = None
-        for i in cls.__bases__:
-            if i == AsyncTemplate:
-                raise TypeError('AsyncTemplate should be subscripted with a type')
-            if hasattr(i, '__origin__') and i.__origin__ == AsyncTemplate:
-                if args != None:
-                    if args != i.__args__:
-                        raise TypeError('Conflicting type arguments')
-                else:
-                    args = i.__args__
-        if len(args) > 0:
-            cls.__sync_class__ = args[0]
+    def __class_getitem__(cls, item: type[_T]) -> Self:
+        if not isinstance(item, type):
+            raise TypeError("Require type parameter")
+        ret = super().__class_getitem__(item)
+        if not hasattr(ret, '__sync_classes__'):
+            ret.__sync_classes__ = (item,)
         else:
-            cls.__sync_class__ = None
+            ret.__sync_classes__ += (item,)
+        return ret
 
 class Serializable(BaseTemplate):
     '''

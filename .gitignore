@@ -171,8 +171,9 @@ config.toml
 # Working directory
 workspace/
 
-# Memory file
+# History file
 history.json
+history/
 
 # Temporary test scripts
 temp_*.py

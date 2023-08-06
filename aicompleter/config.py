@@ -79,14 +79,22 @@ class Config(EnhancedDict):
         '''
         return Config(data)
     
+    def update_global(self):
+        '''
+        Update global config
+        '''
+        for name, value in self.items():
+            if name == 'global':
+                continue
+            if isinstance(value, dict):
+                value.update(super()['global'])
+    
 def loadConfig(path:str) -> Config:
     '''Load configuration from file'''
     return Config.loadFromFile(path)
 
 # Global configuration bypass different modules
 varibles = Config({
-    'debug': False,
-    'log_level': 'INFO',
     'disable_faiss': False,
 })
 

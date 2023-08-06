@@ -1,10 +1,13 @@
 import asyncio
 import logging
 import traceback
+from typing import Optional
 
 def launch(loop:asyncio.AbstractEventLoop, logger:logging.Logger, max_try:int = 10) -> None:
     '''
-    Launch the loop, will stop when all tasks are done
+    Launch the loop
+    
+    This function will stop the loop when all tasks are done
     '''
     async def check_loop():
         # Check if the loop is empty
@@ -60,3 +63,29 @@ def launch(loop:asyncio.AbstractEventLoop, logger:logging.Logger, max_try:int = 
                         logger.critical(f"Unexception: {e}")
                         if logger.isEnabledFor(logging.DEBUG):
                             traceback.print_exc()
+
+def start(*tasks: asyncio.Future, loop:Optional[asyncio.AbstractEventLoop] = None, logger:Optional[logging.Logger] = None):
+    '''
+    Start the tasks
+
+    This should be called only in the main module
+    '''
+    if loop==None:
+        loop = asyncio.new_event_loop()
+    for task in tasks:
+        loop.create_task(task)
+    launch(loop=loop, logger=logger or logging.getLogger('main'))
+
+def run_handler(entry: asyncio.Future, handler, loop:Optional[asyncio.AbstractEventLoop] = None, logger: Optional[logging.Logger] = None):
+    '''
+    Run the handler
+
+    This should be called only in the main module
+    '''
+    from .. import Handler
+    if not isinstance(handler, Handler):
+        raise TypeError(f"Invalid handler type: {handler!r}")
+    start(entry, loop=loop, logger=logger)
+    loop = loop or asyncio.get_event_loop()
+    loop.create_task(handler.close())
+    launch(loop=loop, logger=logger or logging.getLogger('main'))

@@ -92,7 +92,7 @@ class MemoryItem(JSONSerializable):
         return ret
 
 @attr.dataclass
-class Query:
+class Query(JSONSerializable):
     '''
     Query
     '''

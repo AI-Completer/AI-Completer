@@ -141,8 +141,11 @@ class EnhancedDict(defaultdict):
             else:
                 self[key] = value
     
+    def __str__(self) -> str:
+        return super().__repr__()
+
     def __repr__(self) -> str:
-        return f"<{self.__class__.__name__} {str(self)}>"
+        return f"<{self.__class__.__name__} {super().__repr__()}>"
     
     def __delitem__(self, __key: Any) -> None:
         return super().__delitem__(__key)
@@ -164,7 +167,7 @@ class EnhancedDict(defaultdict):
     __setitem__ = set
 
     def __bool__(self) -> bool:
-        return self.__len__() != 0
+        return super().__len__() != 0
 
     class Session:
         '''

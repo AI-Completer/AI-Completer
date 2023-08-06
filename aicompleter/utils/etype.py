@@ -4,7 +4,7 @@ from typing import Any, Callable, Literal, TypeVar, Self
 import typing
 import inspect
 
-def typecheck(value:Any, type_:type):
+def typecheck(value:Any, type_:type|tuple[type, ...]):
     '''
     Check the type of value. If not, raise TypeError
     '''

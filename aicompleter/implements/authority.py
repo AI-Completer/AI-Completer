@@ -17,15 +17,16 @@ class AuthorInterface(Interface):
         super().__init__(
             user = User(name='authority',description='Authority Interface',in_group='system'),
             namespace='authority',
-            config= config or Config({
-                'level': 15,
-                'authority': {
-                    'cmd': 'ask',
-                    'format': '{{"content": "The {src} want to use {cmd}, the parameter is {param}, do you allow it?(y/n)"}}',
-                }
-            }),
+            config= config,
             id = id,
         )
+        self.config.setdefault({
+            'level': 15,
+            'authority': {
+                'cmd': 'ask',
+                'format': '{{"content": "The {src} want to use {cmd}, the parameter is {param}, do you allow it?(y/n)"}}',
+            }
+        })
 
     async def hook(self, event:events.Event, session: Session, message: Message) -> None:
         '''

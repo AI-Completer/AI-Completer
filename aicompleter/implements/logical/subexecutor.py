@@ -18,15 +18,7 @@ class SelfStateExecutor(ai.ChatInterface):
     '''
     AI Executor of the state machine
     '''
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.commands.add(Command(
-            cmd='agent',
-            callable_groups={'user'},
-            overrideable=False,
-            callback=self.cmd_agent,
-            in_interface=self,
-        ))
+    cmdreg = Commands()
 
     def _gen_agent(self, session: Session):
         avaliable_commands = Commands()
@@ -127,6 +119,12 @@ Do not reply with anything else.
         self._gen_agent(session)
         return ret
 
+    @cmdreg.register(
+        'agent',
+        'Start an agent to execute a task',
+        callable_groups={'user'},
+        overrideable=False,
+    )
     async def cmd_agent(self, session: Session, message: Message):
         '''
         Start an agent to execute a task
@@ -141,7 +139,8 @@ Do not reply with anything else.
         agent:ai.agent.Agent = self.getdata(session)['agent']
         agent.ask(_cr_message(message.content.pure_text))
         
-        return None
+        await agent.wait()
+        return agent.result
 
     def setStorage(self, session: Session, data: dict):
         conversation = deserialize(data)
@@ -150,4 +149,3 @@ Do not reply with anything else.
 
     def getStorage(self, session: Session) -> dict:
         return serialize(self.getdata(session)['agent'].conversation)
-    

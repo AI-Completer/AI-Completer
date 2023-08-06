@@ -4,14 +4,12 @@ Custom logging module
 
 import asyncio
 import copy
-import functools
 import logging
 import os
 import sys
 from collections.abc import Mapping
 from types import TracebackType
 from typing import Any, Iterable, Optional, TypeAlias
-from . import config
 from .utils.etype import hookclass
 
 import colorama
@@ -246,6 +244,14 @@ def configHandlers(handlers:Iterable[logging.Handler]) -> None:
 
 root = Logger('ROOT')
 root.handlers = _common_handlers
+
+setLevel = root.setLevel
+debug = root.debug
+info = root.info
+warning = root.warning
+error = root.error
+critical = root.critical
+fatal = root.fatal
 
 def getLogger(name:str, substruct:list[str] = []) -> Logger:
     '''

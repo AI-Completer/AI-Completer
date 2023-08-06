@@ -3,22 +3,15 @@ from __future__ import annotations
 import asyncio
 import enum
 import json
-import logging
-from os import name
-import pickle
 import time
 import uuid
 from typing import Any, Coroutine, Optional, Self, TypeVar, overload
 
-import aiohttp
 from asyncio import CancelledError
 import attr
 
 import aicompleter
-from aicompleter import memory
 from aicompleter import events
-from aicompleter.common import AsyncSaveable, Saveable
-import aicompleter.session as session
 from aicompleter import config, log
 from aicompleter.config import Config, EnhancedDict
 
@@ -71,6 +64,10 @@ class MultiContent(Content):
 
     @overload
     def __init__(self, contents:list[Content]) -> None:
+        ...
+
+    @overload
+    def __init__(self, json: dict|list) -> None:
         ...
 
     def __init__(self, param) -> None:
@@ -245,8 +242,7 @@ class Session:
             if task.done() or task.cancelled():
                 self._running_tasks.remove(task)
 
-    @property
-    def json_data(self):
+    def get_data(self):
         ret = {
             'id': self.id.hex,
             'config': self.config,
@@ -265,20 +261,18 @@ class Session:
 @attr.s(auto_attribs=True, kw_only=True)
 class Message:
     '''A normal message from the Interface.'''
-    content:MultiContent = attr.ib(factory=MultiContent, converter=MultiContent)
+    cmd:str = attr.ib(default="", kw_only=False)
+    '''Call which command to transfer this Message'''
+    content:MultiContent = attr.ib(factory=MultiContent, converter=MultiContent, kw_only=False)
     '''Content of the message'''
     session:Optional[Session] = attr.ib(default=None,validator=attr.validators.optional(attr.validators.instance_of(Session)))
     '''Session of the message'''
     id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
     '''ID of the message'''
     data:EnhancedDict = attr.ib(factory=EnhancedDict, converter=EnhancedDict, alias='extra')
-    '''
-    Data information
-    '''
+    '''Data information'''
     last_message: Optional[Message] = None
     '''Last message'''
-    cmd:str
-    '''Call which command to transfer this Message'''
 
     src_interface:Optional[Interface] = None
     '''Interface which send this message'''
@@ -311,7 +305,7 @@ class Message:
             self.session.history.append(self)
 
     def __str__(self) -> str:
-        return f"Called by [{self.src_interface.user.name}]: {self.content.text}"
+        return self.content.pure_text
     
     def __repr__(self) -> str:
         return f"Message({self.cmd}, {self.content.text}, {self.session.id}, {self.id})"

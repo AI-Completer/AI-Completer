@@ -4,7 +4,7 @@ Base Objects for Interface of AutoDone-AI
 import copy
 import os
 import uuid
-from abc import abstractmethod
+from abc import ABCMeta, abstractmethod
 from typing import Coroutine, Optional, Self, TypeVar, Union, overload
 import asyncio
 
@@ -271,6 +271,11 @@ class GroupSet(JSONSerializable):
 #      def __init__(self, config:Config, id:uuid.UUID = uuid.uuid4()):
 class Interface(AsyncLifeTimeManager):
     '''Interface of AI Completer'''
+    cmdreg = Commands()
+    '''
+    Command Register
+    Add Command to this class to register a command
+    '''
     def __init__(self,  namespace:str, user:User,id:uuid.UUID = uuid.uuid4(), config: config.Config = config.Config()):
         super().__init__()
         self._user = user
@@ -287,6 +292,17 @@ class Interface(AsyncLifeTimeManager):
 
         self.logger:log.Logger = log.getLogger("interface", ['%s - %s' % (self.namespace.name, str(self._id))])
         '''Logger of Interface'''
+        for cls in (*self.__class__.__bases__, self.__class__):
+            if issubclass(cls, Interface):
+                if hasattr(cls, "cmdreg") and isinstance(cls.cmdreg, Commands):
+                    for cmd in cls.cmdreg:
+                        newcmd = copy.copy(cmd)
+                        newcmd.in_interface = self
+                        # if is a class method, bind the method to the instance
+                        if not hasattr(newcmd.callback, "__self__") and '.' in newcmd.callback.__qualname__:
+                            if self.__class__.__name__ == newcmd.callback.__qualname__.split('.')[0]:
+                                newcmd.callback = newcmd.callback.__get__(self, self.__class__)
+                        self.commands.add(newcmd)
 
     @property
     def data(self) -> EnhancedDict:

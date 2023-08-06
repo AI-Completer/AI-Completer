@@ -22,6 +22,7 @@ from .namespace import Namespace
 class Handler(AsyncLifeTimeManager):
     '''
     Handler for AI-Completer
+    
     The handler will transfer various information between Interfaces, 
     enabling interaction among person, AI and system.
     '''
@@ -393,7 +394,12 @@ class Handler(AsyncLifeTimeManager):
                 lambda key,value: key != 'global'
             )
         for i in self._interfaces:
-            await i.session_init(ret)
+            extra_params = {}
+            if 'data' in i.session_init.__annotations__:
+                extra_params['data'] = i.getdata(ret)
+            if 'config' in i.session_init.__annotations__:
+                extra_params['config'] = i.getconfig(ret)
+            await i.session_init(ret, **extra_params)
         self._running_sessions.append(ret)
         return ret
     

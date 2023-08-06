@@ -5,7 +5,7 @@ import copy
 import functools
 import inspect
 import typing
-from typing import Type
+from typing import Callable, Optional, Type
 
 __all__ = (
     'is_generic',
@@ -16,7 +16,10 @@ __all__ = (
     'is_instance',
     'is_subtype',
     'python_type',
-    'verify'
+    'verify',
+    'verify_parameters',
+    'makeoverload',
+    'makeoverloadmethod',
 )
 
 def _is_generic(cls):
@@ -377,6 +380,26 @@ def python_type(annotation):
     else:
         return annotation
 
+_sig_cache:dict[Callable, inspect.Signature] = {}
+def _get_signature(func):
+    if func not in _sig_cache:
+        _sig_cache[func] = inspect.signature(func)
+    return _sig_cache[func]
+
+def _get_sig_bind(func, *args, **kwargs):
+    sig = _get_signature(func)
+    bind = sig.bind(*args, **kwargs)
+    bind.apply_defaults()
+    return sig, bind
+
+def verify_parameters(func:Callable, params:tuple, kwparams:dict):
+    sig, bind = _get_sig_bind(func, *params, **kwparams)
+    for name, value in bind.arguments.items():
+        if sig.parameters[name].annotation != sig.empty:
+            if not is_instance(value, sig.parameters[name].annotation):
+                return False
+    return True
+
 def verify(func=None, /, check_parameters:bool = True, check_return:bool = False):
     '''
     Verify the type of parameters and return value when calling a function
@@ -412,10 +435,9 @@ def verify(func=None, /, check_parameters:bool = True, check_return:bool = False
         raise TypeError('func must be callable')
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        sig = inspect.signature(func)
+        sig = _get_signature(func)
         if check_parameters:
-            bind = sig.bind(*args, **kwargs)
-            bind.apply_defaults()
+            sig, bind = _get_sig_bind(func, *args, **kwargs)
             for name, value in bind.arguments.items():
                 if sig.parameters[name].annotation != sig.empty:
                     if not is_instance(value, sig.parameters[name].annotation):
@@ -427,3 +449,101 @@ def verify(func=None, /, check_parameters:bool = True, check_return:bool = False
                     raise TypeError(f"Return value is not {sig.return_annotation}")
         return result
     return wrapper
+
+class makeoverload:
+    '''
+    Overload function class
+
+    Unverified
+    '''
+    def __init__(self, func:Optional[Callable] = None) -> None:
+        self.func = func
+        self.overloads = {}
+        functools.update_wrapper(self, func)
+
+    def register_auto(self, func:Callable):
+        sig = _get_signature(func)
+        if sig in self.overloads:
+            if func != self.overloads[sig]:
+                raise ValueError(f"Overload function {func} has been registered")
+            else:
+                import warnings
+                warnings.warn(f"Overload function {func} has been registered", RuntimeWarning)
+                return
+        self.overloads[sig] = func
+
+    def register(self, *args):
+        key = (args,)
+        def decorator(func:Callable):
+            if key in self.overloads:
+                if func != self.overloads[key]:
+                    raise ValueError(f"Overload function {func} has been registered")
+                else:
+                    import warnings
+                    warnings.warn(f"Overload function {func} has been registered", RuntimeWarning)
+                    return
+            self.overloads[key] = func
+            return func
+        return decorator
+    
+    def __call__(self, *args, **kwargs):
+        sig = _get_signature(self.func)
+        bind = sig.bind(*args, **kwargs)
+        bind.apply_defaults()
+        for overload_sig, overload_func in self.overloads.items():
+            if isinstance(overload_sig, tuple):
+                if len(kwargs) != 0:
+                    # unsupported
+                    continue
+                if len(overload_sig[0]) != len(bind.args):
+                    continue
+                for index, argtype in enumerate(overload_sig[0]):
+                    if not isinstance(bind.args[index], argtype):
+                        break
+                else:
+                    return overload_func(*bind.args)
+            else:
+                if verify_parameters(overload_func, bind.args, bind.kwargs):
+                    return overload_func(*bind.args, **bind.kwargs)
+        if self.func != None:
+            return self.func(*args, **kwargs)
+        raise TypeError(f"The matched overload function is not found")
+    
+    def _call_class(self, instance, owner, args:tuple, kwargs:dict):
+        sig = _get_signature(self.func)
+        bind = sig.bind(*args, **kwargs)
+        bind.apply_defaults()
+        for overload_sig, overload_func in self.overloads.items():
+            if isinstance(overload_sig, tuple):
+                if len(kwargs) != 0:
+                    # unsupported
+                    continue
+                if len(overload_sig[0]) != len(bind.args):
+                    continue
+                for index, argtype in enumerate(overload_sig[0]):
+                    if not isinstance(bind.args[index], argtype):
+                        break
+                else:
+                    return overload_func.__get__(instance, owner)(*bind.args)
+            else:
+                if verify_parameters(overload_func, (instance, *bind.args), bind.kwargs):
+                    return overload_func.__get__(instance, owner)(*bind.args, **bind.kwargs)
+        if self.func != None:
+            return self.func.__get__(instance, owner)(*args, **kwargs)
+        raise TypeError(f"The matched overload function is not found")
+    
+class makeoverloadmethod:
+    '''
+    Overload class method class
+
+    Unverified
+    '''
+    def __init__(self, func:Optional[Callable] = None) -> None:
+        self.overload = makeoverload(func)
+        functools.update_wrapper(self, func)
+    
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+        return functools.partial(self.overload._call_class, instance, owner)
+    

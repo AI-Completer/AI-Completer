@@ -21,7 +21,8 @@ os.environ.setdefault('DEBUG', "False")
 if os.environ['DEBUG'] == "True":
     __DEBUG__ = True
 
-logger = log.getLogger("Main")
+# Note: logger is shared, and the level would be global setting
+logger = log.getLogger("main")
 logger.setLevel(log.INFO)
 if __DEBUG__ == True:
     logger.setLevel(log.DEBUG)
@@ -70,8 +71,6 @@ if __DEBUG__ == True:
     logger.setLevel(log.DEBUG)
     logger._cache = {}              # Issue: The logging cache will not be cleared when the logger level is changed
     logger.debug("Debug Mode Enabled")
-    config.varibles['debug'] = True
-    config.varibles['log_level'] = log.DEBUG
 
 # if args.disable_faiss:
 #     config.varibles['disable_faiss'] = True

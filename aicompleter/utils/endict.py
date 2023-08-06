@@ -3,16 +3,25 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
-from typing import Any, Callable, Optional, overload
+from typing import Any, Callable, Optional, Self, overload
+from ..common import JSONSerializable, serialize
 
-
-class defaultdict(dict):
+class defaultdict(dict, JSONSerializable):
     '''
     Dict that can automatically create new keys
     '''
     def __missing__(self, key):
         self[key] = defaultdict()
         return self[key]
+    
+    def __serialize__(self) -> dict:
+        return {
+            key: value for key, value in self.items() if isinstance(key, str) and not key.startswith('_')
+        }
+    
+    @staticmethod
+    def __deserialize__(data:dict) -> Self:
+        return defaultdict(data)
 
 class EnhancedDict(defaultdict):
     '''
@@ -131,12 +140,12 @@ class EnhancedDict(defaultdict):
                 self[key].update(value)
             else:
                 self[key] = value
-        
-    def __str__(self) -> str:
-        return json.dumps(self, indent=4)
     
+    def __str__(self) -> str:
+        return super().__repr__()
+
     def __repr__(self) -> str:
-        return f"<Config {str(self)}>"
+        return f"<{self.__class__.__name__} {super().__repr__()}>"
     
     def __delitem__(self, __key: Any) -> None:
         return super().__delitem__(__key)
@@ -158,9 +167,9 @@ class EnhancedDict(defaultdict):
     __setitem__ = set
 
     def __bool__(self) -> bool:
-        return self.__len__() != 0
+        return super().__len__() != 0
 
-    class __Session:
+    class Session:
         '''
         Open a session to modify the EnhancedDict
         '''
@@ -178,14 +187,14 @@ class EnhancedDict(defaultdict):
         async def __aexit__(self, exc_type, exc_value, traceback) -> None:
             self._dict._lock.release()
 
-    def session(self, locked:bool = True, save:bool = True) -> __Session:
+    def session(self, locked:bool = True, save:bool = True) -> Session:
         '''
         Open a session to modify the EnhancedDict
         param:
             locked: Whether the session is locked, this will occupy the dict, if the save is False
             save: Whether to save the dict after the session
         '''
-        return self.__Session(self, locked, save)
+        return self.Session(self, locked, save)
     
     def each(self, func:Callable[[str, Any], Any], filter:Optional[Callable[[str, Any], bool]] = None) -> None:
         '''
@@ -197,3 +206,14 @@ class EnhancedDict(defaultdict):
         for key, value in self.items():
             if filter is None or filter(key, value):
                 func(key, value)
+
+    def copy(self) -> EnhancedDict:
+        '''
+        Copy the dict
+        '''
+        return copy.deepcopy(self)
+
+    @staticmethod
+    def __deserialize__(data: dict) -> Self:
+        return EnhancedDict(data)
+    

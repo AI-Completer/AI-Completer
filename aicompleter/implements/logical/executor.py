@@ -1,3 +1,7 @@
+'''
+Depreciated
+'''
+
 import json
 import time
 import uuid
@@ -7,23 +11,20 @@ from aicompleter import *
 from aicompleter.ai import ChatInterface, ChatTransformer, Conversation
 from aicompleter.interface import Command, Commands
 
-
 class ExecutorInt(ChatInterface):
     '''
     Executor Interface
     This interface will directly analyze the task and call it directly
     '''
-    namespace = 'executor'
     def __init__(self, *, ai: ChatTransformer,user:Optional[str] = None, id: Optional[uuid.UUID] = None):
-        super().__init__(ai=ai, namespace=self.namespace, user=user, id=id)
+        raise DeprecationWarning('This interface is depreciated')
+        super().__init__(ai=ai, namespace='executor', user=user, id=id)
         self.commands.add(
             Command(
                 cmd='task-analyze',
                 description='Analyze the task, this will split the task into subtasks in natural language',
                 expose=True,
                 in_interface=self,
-                to_return=True,
-                force_await=True,
                 callback=self.cmd_task_anylyze,
                 format=CommandParamStruct({
                     'task': CommandParamElement('task', str, description='The subtask in natural language')
@@ -34,8 +35,6 @@ class ExecutorInt(ChatInterface):
                 description='Execute the task in natural language',
                 expose=True,
                 in_interface=self,
-                to_return=True,
-                force_await=True,
                 callback=self.cmd_execute,
                 format=CommandParamStruct({
                     'tasks': [CommandParamElement('task', str, description='The subtask in natural language')]
@@ -161,13 +160,14 @@ Do not reply with anything else.
             ]
         )
         stop = False
+        data = self.getdata(session)
         while not stop:
             reply = await self.ai.generate_text(conversation=conversation)
             conversation.messages.append(ai.Message(
                 content=reply,
                 role='assistant',
             ))
-            session.extra[f'{self.namespace}.conversation.{session.id}.data'] = conversation
+            data['conversation'] = conversation
             result_list = []
 
             def _set_result_conversation():
@@ -237,7 +237,6 @@ Do not reply with anything else.
                         break
         
         # Save conversation
-        session.extra[f'{self.namespace}.conversation.{session.id}.data'] = conversation
-        session.extra[f'{self.namespace}.conversation.{session.id}.done'] = True
+        data['conversation'] = conversation
 
         return result_list[-1]['result']

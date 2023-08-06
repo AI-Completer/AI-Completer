@@ -13,17 +13,14 @@ class DifficultyTestInt(ChatInterface):
     '''
     The AI Interface to mark the difficulty of the task
     '''
-    namespace = 'diff-test'
-    def __init__(self, *, ai: ChatTransformer,user:Optional[str] = None, id: Optional[uuid.UUID] = None):
-        super().__init__(ai=ai, user=user, id=id)
+    def __init__(self, *, ai: ChatTransformer,user:Optional[str] = None, id: Optional[uuid.UUID] = None, config:Config= Config()):
+        super().__init__(ai=ai, namespace='diff-test', user=user, id=id, config=config)
         self.commands.add(
             Command(
                 cmd='mark-difficulty',
                 description='Mark the difficulty of the task',
                 expose=True,
                 in_interface=self,
-                to_return=True,
-                force_await=True,
                 callback=self.cmd_mark,
             )
         )

@@ -7,8 +7,9 @@ from .base import (
 )
 from .command import (
     Command,
-    CommandSet,
     Commands,
     CommandParamElement,
     CommandParamStruct,
+    Result,
+    CommandAuthority,
 )

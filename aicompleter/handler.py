@@ -3,18 +3,26 @@ Handler between the interfaces
 '''
 import asyncio
 import copy
+import functools
+import importlib
 import uuid
-from typing import Generator, Iterator, Optional, overload
+from typing import Any, Generator, Iterator, Optional, overload
+
+from . import memory, utils
+from .common import AsyncLifeTimeManager
 
 from . import error, events, interface, log, session
 from .config import Config
 from .interface import Command, Interface, User, Group, UserSet, GroupSet
-from .interface.command import CommandSet, Commands
+from .interface.command import Commands
 from .session.base import Session
 
-class Handler:
+from .namespace import Namespace
+
+class Handler(AsyncLifeTimeManager):
     '''
-    Handler for AutoDone-AI
+    Handler for AI-Completer
+    
     The handler will transfer various information between Interfaces, 
     enabling interaction among person, AI and system.
     '''
@@ -27,13 +35,9 @@ class Handler:
         pass
 
     def __init__(self, config:Optional[Config] = Config()) -> None:
-        self._interfaces:set[Interface] = set()
-        self._commands:Commands = Commands()
-        # self._call_queues:list[tuple[session.Session, session.Message]] = []
-        self._closed:asyncio.Event = asyncio.Event()
-        '''Closed'''
-        self.config:Config = config
-        '''Config of Handler'''
+        super().__init__()
+        self._interfaces:list[Interface] = []
+        '''Interfaces of Handler'''
         self.on_exception:events.Exception = events.Exception(Exception)
         '''Event of Exception'''
         self.on_keyboardinterrupt:events.Exception = events.Exception(KeyboardInterrupt)
@@ -42,8 +46,14 @@ class Handler:
         '''User Set of Handler'''
         self._groupset:GroupSet = GroupSet()
         '''Group Set of Handler'''
-        self._running_sessions:set[Session] = set()
+        self._running_sessions:list[Session] = []
         '''Running Sessions of Handler'''
+        
+        self._namespace = Namespace(
+            name='root',
+            description='Root Namespace',
+            config=config,
+        )
 
         async def _default_exception_handler(e:Exception, obj:object):
             self.logger.exception(e)
@@ -52,19 +62,22 @@ class Handler:
         
         self.on_keyboardinterrupt.add_callback(lambda e,obj:self.close())
 
-        self.logger:log.Logger = log.Logger("Handler")
+        self.logger:log.Logger = log.getLogger('handler')
         '''Logger of Handler'''
 
+    def _on_call(self, session:Session, message:session.Message):
+        '''Call the on_call event'''
+        return session.on_call.trigger(session, message)
 
-        formatter = log.Formatter()
-        handler = log.ConsoleHandler()
-        handler.formatter = formatter
-        self.logger.addHandler(handler)
-
-        if config['global']['debug']:
-            self.logger.setLevel(log.DEBUG)
-        else:
-            self.logger.setLevel(log.INFO)
+    @property
+    def commands(self):
+        '''Get all commands'''
+        return self._namespace.commands
+    
+    @property
+    def config(self):
+        '''Get the config'''
+        return self._namespace.config
 
     def __contains__(self, interface:Interface) -> bool:
         return interface in self._interfaces
@@ -75,33 +88,22 @@ class Handler:
     def __len__(self) -> int:
         return len(self._interfaces)
     
-    async def close(self):
+    def close(self):
         '''Close the handler'''
         self.logger.debug("Closing handler")
-        for i in self._interfaces:
-            await i.close()
         for i in self._running_sessions:
             if not i.closed:
-                await i.close()
-        self._closed.set()
+                self._close_tasks.append(asyncio.get_event_loop().create_task(i.close()))
+        for i in self._interfaces:
+            i.close()
+            self._close_tasks.extend(i._close_tasks)
+        super().close()
 
     async def close_session(self, session:Session):
         '''Close the session'''
         await session.close()
         self._running_sessions.remove(session)
         self._update_running_sessions()
-    
-    def reload_commands(self) -> None:
-        '''Reload commands from interfaces'''
-        self.logger.debug("Reloading commands")
-        self._commands.clear()
-        for i in self._interfaces:
-            cmds = i.commands
-            for cmd in cmds:
-                if cmd.expose == False:
-                    continue
-                cmd.extra['from'] = i
-                self._commands.add(cmd)
 
     def reload_users(self) -> None:
         '''Reload users from interfaces'''
@@ -109,7 +111,10 @@ class Handler:
         # User
         self._userset.clear()
         for i in self._interfaces:
-            self._userset.add(i.user)
+            if i.user.name not in self._userset:
+                self._userset.add(i.user)
+            elif i.user != self._userset[i.user.name]:
+                raise error.Conflict('interface user conflict', name=i.user.name, interface=self)
         # Group
         groupnames:set[str] = set()
         for i in self._userset:
@@ -124,25 +129,54 @@ class Handler:
             self._groupset.add(_group)
 
     def reload(self):
-        '''Reload commands and users from interfaces'''
-        self.reload_commands()
+        '''Reload users from interfaces'''
         self.reload_users()
 
     def check_cmd_support(self, cmd:str) -> bool:
         '''Check whether the command is support by this handler'''
-        return cmd in self._commands
+        return cmd in self.commands
     
-    def get_cmd(self, cmd:str, interface:Optional[Interface] = None) -> Command:
+    def get_cmd(self, cmd:str, dst_interface:Optional[Interface] = None, src_interface:Optional[Interface] = None) -> Command | None:
         '''Get command by name'''
-        if interface == None:
-            return self._commands.get(cmd)
+        if dst_interface == None:
+            if src_interface == None:
+                return next(self._namespace.getcmd(cmd), None)
+            else:
+                # Create a new Commands class
+                ret = Commands()
+                ret.add(*self._namespace.get_executable(src_interface.user))
+                return ret.get(cmd, None)
         else:
-            if interface not in self._interfaces:
+            if dst_interface not in self._interfaces:
                 raise error.NotFound(interface, handler=self, content='Interface Not In Handler')
-            return interface.commands.get(cmd)
+            return dst_interface.commands.get(cmd, None)
     
     def get_executable_cmds(self, *args, **wargs) -> Generator[Command, None, None]:
-        return self._commands.get_executable(*args, **wargs)
+        return self._namespace.get_executable(*args, **wargs)
+    
+    def assign_user(self, 
+                    description:Optional[str] = None, 
+                    in_group:Optional[str] = "",
+                    all_groups:Optional[set[str]] = set(),
+                    support:Optional[set[str]] = set()) -> User:
+        '''
+        Assign a new user
+        '''
+        def _random_name():
+            import random
+            import string
+            return ''.join(random.choice(string.ascii_letters) for i in range(10))
+        while True:
+            name = _random_name()
+            if name not in self._userset:
+                break
+        return User(
+            name=name,
+            description=description,
+            in_group=in_group,
+            all_groups=all_groups,
+            support=support,
+        )
 
     @overload
     async def add_interface(self, interface:Interface) -> None:
@@ -155,11 +189,25 @@ class Handler:
     async def add_interface(self, *interfaces:Interface) -> None:
         '''Add interface to the handler'''
         for i in interfaces:
+            utils.typecheck(i, Interface)
+            # Assign user if not assigned
+            if i._user == None:
+                i._user = self.assign_user()
+            if i._user.name == "":
+                i._user = self.assign_user(
+                    description=i._user.description,
+                    in_group=i._user.in_group,
+                    all_groups=i._user.all_groups,
+                    support=i._user.support,
+                )
+            
             self.logger.debug("Adding interface %s - %s", i.id, i.user.name)
             if i in self._interfaces:
                 raise error.Existed(i, handler=self)
-            self._interfaces.add(i)
-            await i.init()
+            self._interfaces.append(i)
+            self._namespace.subnamespaces[i.namespace.name] = i.namespace
+        for i in interfaces:
+            await i.init(self)
         self.reload()
 
     @overload
@@ -175,33 +223,77 @@ class Handler:
         if isinstance(param, Interface):
             if param not in self._interfaces:
                 raise error.NotFound(param, handler=self)
+            await param.final()
             self._interfaces.remove(param)
+            self._namespace.subnamespaces.pop(param.namespace.name)
             self.reload()
         elif isinstance(param, uuid.UUID):
             for i in self._interfaces:
                 if i.id == param:
                     await i.final()
                     self._interfaces.remove(i)
+                    self._namespace.subnamespaces.pop(i.namespace.name)
                     self.reload()
                     return
             raise error.NotFound(param, handler=self)
         else:
             raise TypeError(f"Expected type Interface or uuid.UUID, got {type(param)}")
     
+    @overload
     def get_interface(self, id:uuid.UUID) -> Interface:
-        '''Get interface by id'''
-        for i in self._interfaces:
-            if i.id == id:
-                return i
-        raise error.NotFound(id, handler=self)
+        ...
+
+    @overload
+    def get_interface(self, groupname:str) -> list[Interface]:
+        ...
+
+    @overload
+    def get_interface(self, interface:Interface) -> Interface:
+        ...
+
+    @overload
+    def get_interface(self, cls:type) -> list[Interface]:
+        ...
     
-    def get_interfaces(self, groupname:str) -> set[Interface]:
-        '''Get interfaces by Group name'''
-        ret = set()
+    def get_interface(self, param: uuid.UUID | str):
+        '''
+        Get interfaces which match the condition
+        :param id:uuid.UUID, the id of the interface
+        :param groupname:str, the groupname of the interface
+        '''
+        if isinstance(param, uuid.UUID):
+            for i in self._interfaces:
+                if i.id == param:
+                    return i
+            raise error.NotFound(param, handler=self)
+        elif isinstance(param, str):
+            ret = []
+            for i in self._interfaces:
+                if i.user.in_group == param:
+                    ret.append(i)
+            return ret
+        elif isinstance(param, Interface):
+            if param in self._interfaces:
+                return param
+            raise error.NotFound(param, handler=self)
+        elif issubclass(param, Interface):
+            ret = []
+            for i in self._interfaces:
+                if isinstance(i, param):
+                    ret.append(i)
+            return ret
+        else:
+            raise TypeError(f"Expected type Interface or uuid.UUID, got {type(param)}")
+    
+    def has_interface(self, cls:type) -> bool:
+        # If cls is not a Interface type, raise TypeError
+        if not issubclass(cls, Interface):
+            raise TypeError(f"Expected type Interface, got {type(cls)}")
+        # Check inheritance
         for i in self._interfaces:
-            if i.user.in_group == groupname:
-                ret.add(i)
-        return ret
+            if isinstance(i, cls):
+                return True
+        return False
     
     @property
     def interfaces(self) -> set[Interface]:
@@ -216,7 +308,7 @@ class Handler:
         '''
         command = message.cmd
         # from_ = message.src_interface
-        cmd = self.get_cmd(command, message.dest_interface)
+        cmd = self.get_cmd(command, message.dest_interface, message.src_interface)
         if cmd == None:
             raise error.CommandNotImplement(command, self)
         # if from_:
@@ -246,15 +338,12 @@ class Handler:
                     if any([i in call_groups for i in message.src_interface.user.all_groups]) == False:
                         raise error.PermissionDenied(message.cmd, interface=message.src_interface, handler=self)
             else:
-                call_groups = self.get_cmd(message.cmd).callable_groups
-                if any([i in call_groups for i in message.src_interface.user.all_groups]) == False:
-                    raise error.PermissionDenied(message.cmd, interface=message.src_interface, handler=self)
+                if self.get_cmd(message.cmd) == None:
+                    raise error.CommandNotImplement(message.cmd, self, detail = "Either the command is not implemented in the handler or the interface has no permission to call the command.")
         message.session = session
-        cmd = self.get_cmd(message.cmd, message.dest_interface)
+        cmd = self.get_cmd(message.cmd, message.dest_interface, message.src_interface)
         if cmd == None:
             raise error.CommandNotImplement(message.cmd, self)
-        if cmd.force_await:
-            raise error.PermissionDenied("Command is forced to be awaited.", cmd = cmd.cmd , dest = message.dest_interface, interface=message.src_interface, handler=self)
 
         async def _handle_call():
             try:
@@ -285,28 +374,17 @@ class Handler:
             if i.closed:
                 self._running_sessions.remove(i)
 
-    @overload
-    async def new_session(self, interface:Interface) -> session.Session:
-        pass
-
-    @overload
-    async def new_session(self) -> session.Session:
-        pass
-
     async def new_session(self, 
-                          interface:Optional[Interface] = None,
-                          config:Optional[Config] = None) -> session.Session:
+                          config:Optional[Config] = None,
+                          memoryConfigure:Optional[memory.MemoryConfigure] = None) -> session.Session:
         '''
         Create a new session, will call all interfaces' session_init method
-        param:
-            interface: Interface, optional, the interface to set as src_interface
+        :param interface:Interface, optional, the interface to set as src_interface
+        :param config:Config, optional, the config to set as session.config
+        :param memoryConfigure:MemoryConfigure, optional, the memory configure to set as session.memoryConfigure
         '''
-        ret = session.Session(self)
+        ret = session.Session(self, memoryConfigure)
         self.logger.debug("Creating new session %s", ret.id)
-        if interface:
-            if not isinstance(interface, Interface):
-                raise TypeError(f"Expected type Interface, got {type(interface)}")
-            ret.src_interface = interface
         # Initialize session
         ret.config = config
         if config == None: 
@@ -316,9 +394,91 @@ class Handler:
                 lambda key,value: key != 'global'
             )
         for i in self._interfaces:
-            await i.session_init(ret)
-        self._running_sessions.add(ret)
+            extra_params = {}
+            if 'data' in i.session_init.__annotations__:
+                extra_params['data'] = i.getdata(ret)
+            if 'config' in i.session_init.__annotations__:
+                extra_params['config'] = i.getconfig(ret)
+            await i.session_init(ret, **extra_params)
+        self._running_sessions.append(ret)
         return ret
+    
+    def loadSession(self, data:dict[str, Any]) -> session.Session:
+        '''Load session'''
+        self.logger.debug("Loading session %s", data['id'])
+        ret = session.Session(self)
+        ret.config = Config.__deserialize__(data['config'])
+        ret._id = uuid.UUID(data['id'])
+        for i in data['storage']:
+            for j in self._interfaces:
+                if j.id.hex == i['id']:
+                    j.setStorage(ret, i['data'])
+                    break
+            else:
+                raise error.NotFound("Interface %s not found" % i['id'], handler=self)
+        self._running_sessions.append(ret)
+        return ret
+    
+    def getstate(self):
+        '''Get state of handler'''
+        return {
+            'interfaces': [
+                {
+                    'id': i.id.hex,
+                    'module': i.__module__,
+                    'class': i.__class__.__qualname__,
+                    'config': i.config.__serialize__(),
+                    'user': i.user.__serialize__(),
+                    'commands': [{
+                        'name': cmd.cmd,
+                        'callable_groups': list(cmd.callable_groups),
+                    } for cmd in i.commands]
+                } for i in self._interfaces
+            ]
+        }
+    
+    def setstate(self, state:dict[str, Any]):
+        '''Set state of handler'''
+        # Require preload interfaces, because the interface init method varies
+        self.logger.debug("Set state of handler")
+        _loaded_interfaces = []
+        def get_interface(type_: type[Interface]):
+            for i in self._interfaces:
+                if i not in _loaded_interfaces:
+                    if i.__class__ == type_:
+                        _loaded_interfaces.append(i)
+                        return i
+            return None
+        for i in state['interfaces']:
+            module = importlib.import_module(i['module'])
+            for name in i['class'].split('.'):
+                module = getattr(module, name)
+            cls:type[Interface] = module
+            if not issubclass(cls, Interface):
+                raise TypeError(f"Expected type Interface, got {type(cls)}")
+            # Check if the interface is already loaded
+            _inter = get_interface(cls)
+            if _inter:
+                _inter.namespace.config = Config.__deserialize__(i['config'])
+                _inter._user = User.__deserialize__(i['user'])
+                _inter._id = uuid.UUID(i['id'])
+                assert _inter in self._interfaces, "Interface not in handler"
+            else:
+                try:
+                    _inter = cls(
+                        id = uuid.UUID(i['id']),
+                        config = Config.__deserialize__(i['config']),
+                    )
+                except TypeError as e:
+                    self.logger.error("Exception: %s", e)
+                    self.logger.fatal("Failed to initialize interface %s(%s)", i['id'], cls.__name__)
+                    raise e
+                _inter._user = User.__deserialize__(i['user'])
+                self._interfaces.append(_inter)
+            for cmd in i['commands']:
+                if cmd['name'] not in _inter.commands:
+                    raise error.NotFound(cmd['name'], interface=_inter, handler=self)
+                _inter.commands[cmd['name']].callable_groups = set(cmd['callable_groups'])
 
 __all__ = (
     'Handler',

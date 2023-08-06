@@ -2,19 +2,26 @@
 Command Support For Interface
 '''
 from __future__ import annotations
+
 import asyncio
+import copy
 import functools
 import json
-from typing import (Any, Callable, Coroutine, Generator, Iterable, Iterator, Optional, Self,
-                    TypeVar, overload)
+import os
+from typing import (Any, Callable, Coroutine, Generator, Iterable, Iterator,
+                    Optional, Self, TypeVar, overload)
 
 import attr
-import os
+
 import aicompleter
+from aicompleter.common import JSONSerializable
 import aicompleter.error as error
-from aicompleter import log, session
-from aicompleter import utils
-from aicompleter.memory.base import MemoryItem
+from aicompleter.session.base import MultiContent
+
+from .. import config, log, session, utils
+
+if bool(config.varibles['disable_memory']) == False:
+    from ..memory.base import MemoryItem
 
 Interface = TypeVar('Interface', bound='aicompleter.interface.Interface')
 User = TypeVar('User', bound='aicompleter.interface.User')
@@ -22,7 +29,7 @@ Group = TypeVar('Group', bound='aicompleter.interface.Group')
 Handler = TypeVar('Handler', bound='aicompleter.handler.Handler')
 
 @attr.s(auto_attribs=True,frozen=True)
-class CommandParamElement:
+class CommandParamElement(JSONSerializable):
     '''Command Parameter Element'''
     name:str = ""
     '''Name of the parameter'''
@@ -41,14 +48,37 @@ class CommandParamElement:
     tooltip:str = ""
     '''Tooltip of the parameter'''
 
+    def __serialize__(self):
+        return {
+            "name":self.name,
+            "type":self.type.__name__ if isinstance(self.type,type) else '',
+            "default":self.default,
+            "description":self.description,
+            "optional":self.optional,
+            "tooltip":self.tooltip,
+        }
+    
+    @staticmethod
+    def __deserialize__(data:dict):
+        raise NotImplementedError("CommandParamElement.deserialize is not implemented")
+        return CommandParamElement(
+            name=data['name'],
+            type=eval(data['type']) if data['type'] else str,
+            # TODO: fix the eval problem
+            default=data['default'],
+            description=data['description'],
+            optional=data['optional'],
+            tooltip=data['tooltip'],
+        )
+
     @property
     def json_text(self):
         '''
         Get the json description of the parameter
         '''
-        return f"<{self.type.__name__ if isinstance(self.type,type) else ''} {self.name}{' = %s' % str(self.default) if self.default else ''}>"
+        return f"<{self.type.__name__ if isinstance(self.type,type) else ''} {self.tooltip}{' = %s' % str(self.default) if self.default else ''}>"
 
-class CommandParamStruct:
+class CommandParamStruct(JSONSerializable):
     '''
     Command Parameters Struct
     Used to test struct mainly
@@ -71,22 +101,37 @@ class CommandParamStruct:
         self._struct = struct
         CommandParamStruct._check_struct(struct)
 
+    def __iter__(self) -> Iterator[CommandParamElement | CommandParamStruct | list | dict]:
+        '''Iterate the struct'''
+        return self._struct.__iter__()
+    
+    def values(self) -> Iterable[CommandParamElement | CommandParamStruct | list | dict]:
+        '''Iterate the struct'''
+        return self._struct.values()
+    
+    def items(self) -> Iterable[tuple[str, CommandParamElement | CommandParamStruct | list | dict]]:
+        '''Iterate the struct'''
+        return self._struct.items()
+
     def check(self, data:dict) -> bool:
         '''Check the data to see whether it is in proper format.'''
+        if isinstance(data, str):
+            data = json.loads(data)
+
         def _check(struct:dict|list|CommandParamElement, ndata:dict):
             if isinstance(struct, dict):
                 for key,value in struct.items():
                     if isinstance(value,CommandParamElement):
-                        if value.optional:
-                            pass
+                        if value.optional and key not in ndata:
+                            continue
                     if key not in ndata:
-                        raise TypeError(f"key {key} not in data")
+                        return False
                     if not _check(value, ndata[key]):
                         return False
                 return True
             elif isinstance(struct, list):
                 if not isinstance(ndata, list):
-                    raise TypeError("data must be a list")
+                    return False
                 for item in ndata:
                     if not _check(struct[0], item):
                         return False
@@ -94,13 +139,78 @@ class CommandParamStruct:
             elif isinstance(struct, CommandParamElement):
                 if isinstance(struct.type, type):    
                     if not isinstance(ndata, struct.type):
-                        raise TypeError(f"data must be {struct.type}")
+                        return False
                     return True
                 elif callable(struct.type):
                     if not struct.type(ndata):
-                        raise TypeError(f"data must be {struct.type}")
+                        return False
                     return True
+                else:
+                    raise TypeError("struct.type must be a type or a callable function")
         return _check(self._struct, data)
+    
+    def setdefault(self, data:dict):
+        '''
+        Set the default value if the parameter is optional and with default value
+        '''
+        data = copy.deepcopy(data)
+        if isinstance(data, str):
+            data = json.loads(data)
+
+        def _set(struct:dict|list|CommandParamElement, ndata:dict):
+            if isinstance(struct, dict):
+                for key,value in struct.items():
+                    if isinstance(value,CommandParamElement):
+                        if value.optional and key not in ndata:
+                            ndata[key] = value.default
+                    _set(value, ndata[key])
+            elif isinstance(struct, list):
+                if not isinstance(ndata, list):
+                    raise TypeError("data must be a list")
+                for item in ndata:
+                    _set(struct[0], item)
+            elif isinstance(struct, CommandParamElement):
+                ...
+
+        _set(self._struct, data)
+        return data
+    
+    def __serialize__(self):
+        '''
+        Get the json description of the struct
+        '''
+        def _json(struct:dict|list|CommandParamElement):
+            if isinstance(struct, dict):
+                ret = {}
+                for key,value in struct.items():
+                    ret[key] = _json(value)
+                return ret
+            elif isinstance(struct, list):
+                return [_json(struct[0])]
+            elif isinstance(struct, CommandParamElement):
+                return struct.__serialize__()
+            else:
+                raise TypeError("struct must be a dict, list or CommandParamElement instance")
+        return _json(self._struct)
+    
+    @staticmethod
+    def __deserialize__(data:dict):
+        '''
+        Get the struct from json description
+        '''
+        def _from_json(struct:dict|list|str):
+            if isinstance(struct, dict):
+                if 'name' in struct and isinstance(struct['name'], str):
+                    return CommandParamElement.__deserialize__(struct)
+                ret = {}
+                for key,value in struct.items():
+                    ret[key] = _from_json(value)
+                return ret
+            elif isinstance(struct, list):
+                return [_from_json(struct[0])]
+            else:
+                raise TypeError("struct must be a dict, list or CommandParamElement instance")
+        return CommandParamStruct(_from_json(data))
     
     @property
     def json_text(self):
@@ -122,17 +232,82 @@ class CommandParamStruct:
             else:
                 raise TypeError("struct must be a dict, list or CommandParamElement instance")
         return json.dumps(_json_description(self._struct))
+    
+    @staticmethod
+    def load_brief(data:dict):
+        '''
+        Load the brief from json description
 
-@attr.s(auto_attribs=True,hash=False)
-class Command:
+        This is a brief format loader, it follow in this format:
+            {
+                "name1":{
+                    "name2":"description"
+                },
+                "name2":[
+                    "description"
+                ],
+                "name3":"description"
+            }
+        '''
+        def _load_brief(struct:dict|list|str):
+            if isinstance(struct, dict):
+                ret = {}
+                for key,value in struct.items():
+                    if isinstance(value, dict):
+                        ret[key] = _load_brief(value)
+                    elif isinstance(value, list):
+                        ret[key] = [_load_brief(value[0])]
+                    elif isinstance(value, str):
+                        ret[key] = CommandParamElement(name=key, description=value)
+                    else:
+                        raise TypeError("struct must be a dict, list or str instance")
+                return CommandParamStruct(ret)
+            elif isinstance(struct, list):
+                return CommandParamStruct([_load_brief(struct[0])])
+            else:
+                raise TypeError("struct must be a dict, list or str instance")
+        return _load_brief(data)
+    
+@attr.s(auto_attribs=True)
+class CommandAuthority(JSONSerializable):
+    '''
+    The authority of a command
+    '''
+    can_readfile:bool = attr.ib(default=False)
+    '''Whether the command can read file'''
+    can_writefile:bool = attr.ib(default=False)
+    '''Whether the command can write file'''
+    can_listfile:bool = attr.ib(default=False)
+    '''Whether the command can list file'''
+    can_execute:bool = attr.ib(default=False)
+    '''Whether the command can execute the operation system command'''
+    
+    def get_authority_level(self):
+        '''Get the authority level'''
+        _level_map = {
+            'can_readfile': 10,
+            'can_writefile': 20,
+            'can_listfile': 8,
+            'can_execute': 30,
+        }
+        # square mean
+        return sum([_level_map[i]**2 for i in self.__dict__ if self.__dict__[i] == True])**0.5
+
+
+@attr.s(auto_attribs=True,hash=False,kw_only=True)
+class Command(JSONSerializable):
     '''Command Struct'''
-    cmd:str = ""
+    cmd:str = attr.ib(default="", kw_only=False)
     '''Command'''
+    description:str = attr.ib(default="", kw_only=False)
+    '''
+    Description For Command
+    
+    This is sometimes necessery for AI to know what the command is
+    '''
     alias:set[str] = set()
     '''Alias Names'''
-    description:str = ""
-    '''Description For Command'''
-    format:Optional[CommandParamStruct | CommandParamElement] = None
+    format:Optional[CommandParamStruct] = None
     '''Format For Command, if None, no format required'''
     callable_groups:set[str] = set()
     '''Groups who can call this command'''
@@ -142,35 +317,28 @@ class Command:
     '''Extra information'''
     expose:bool = True
     '''Whether this command can be exposed to handlers'''
+    authority:CommandAuthority = CommandAuthority()
+    '''Authority of the command'''
 
     in_interface:Optional[Interface] = None
     '''Interface where the command is from'''
     callback:Optional[Callable[[session.Session, session.Message], Coroutine[Any, Any, Any]]] = None
     '''
     Call Function To Call The Command
+
     If None, the command will be called by in_interface
     '''
-    to_return:bool = False
+    to_return:bool = True
     '''
     Whether the command will return a value
     '''
-    force_await:bool = False
-    '''
-    Whether the command will force await
-    '''
 
     def __attrs_post_init__(self):
-        self.logger:log.Logger = log.Logger("Command", log.INFO)
-        formatter = log.Formatter([self.cmd])
-        _handler = log.ConsoleHandler()
-        _handler.setFormatter(formatter)
-        self.logger.addHandler(_handler)
-        self.logger.push(self.in_interface.user.name if self.in_interface else 'Unknown')
-        self.logger.push(self.cmd)
-        if bool(os.environ.get("DEBUG",False)):
-            self.logger.setLevel(log.DEBUG)
-        else:
-            self.logger.setLevel(log.INFO)
+        self.logger = log.getLogger("Command", [self.in_interface.user.name if self.in_interface else 'Unknown', self.cmd])
+        if self.format is not None:
+            if isinstance(self.format, (dict, list)):
+                self.format = CommandParamStruct.load_brief(self.format)
+            utils.typecheck(self.format, (CommandParamStruct, CommandParamElement))
     
     def check_support(self, handler:Handler, user:User) -> bool:
         '''Check whether the user is in callable_groups'''
@@ -184,6 +352,7 @@ class Command:
         '''Call the command'''
         if session.closed:
             raise error.SessionClosed(session,content=f"session {session.id} closed: Command.call",message=message,interface=self.in_interface)
+        message.session = session
         if message.src_interface:
             # Enable self call
             if message.src_interface != message.dest_interface:
@@ -193,20 +362,35 @@ class Command:
         message.dest_interface = self.in_interface
         if self.format != None:
             if not self.format.check(message.content.pure_text):
-                raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",message=message,interface=self.in_interface)
+                raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",self.in_interface, src_message = message, format=self.format)
+            message.content = MultiContent(self.format.setdefault(message.content.pure_text))
         
-        # Add Memory
-        session._memory.put(MemoryItem(
-            vertex=session._vertex_model.transform_text(message.content.pure_text),
-            class_=f"cmd-{self.cmd}",
-            data=message.content.pure_text,
-        ))
+        try:
+            # Trigger the call event
+            await session.in_handler._on_call(session, message)
+        except error.Interrupted as e:
+            raise e
+        except Exception as e:
+            raise error.Interrupted(f"Call interrupted by exception: Command.call",message=message,interface=self.in_interface, error=e) from e
         
         if self.callback is not None:
-            task = asyncio.get_event_loop().create_task(self.callback(session, message))
+            extra_params = {}
+            if 'config' in self.callback.__annotations__:
+                extra_params['config'] = self.in_interface.getconfig(session)
+            if 'data' in self.callback.__annotations__:
+                extra_params['data'] = self.in_interface.getdata(session)
+            if 'logger' in self.callback.__annotations__:
+                extra_params['logger'] = self.logger
+            if 'interface' in self.callback.__annotations__:
+                extra_params['interface'] = self.in_interface
+            
+            task = asyncio.get_event_loop().create_task(self.callback(session=session, message=message, **extra_params))
             session._running_tasks.append(task)
             try:
                 ret = await task
+            except asyncio.CancelledError as e:
+                session._running_tasks.remove(task)
+                raise e
             except Exception as e:
                 session._running_tasks.remove(task)
                 raise e
@@ -233,11 +417,11 @@ class Command:
         '''
         if not callable(callback):
             raise TypeError("call_func must be a callable function")
-        self._call_func = callback
+        self.callback = callback
 
-    def __call__(self, session:session.Session, message:session.Message) -> None:
+    def __call__(self, session:session.Session, message:session.Message) -> Coroutine[Any, Any, Any | None]:
         '''Call the command'''
-        self.call(session, message)
+        return self.call(session, message)
 
     def __hash__(self):
         '''Hash the command'''
@@ -247,144 +431,26 @@ class Command:
              (*self.callable_groups, ), 
             self.overrideable, tuple(self.extra.items()), 
             self.expose))
-
-class CommandSet:
-    def __init__(self) -> None:
-        raise DeprecationWarning("CommandSet is deprecated, use Commands instead")
-        self._set:set[Command] = set()
-
-    @overload
-    def add(self, cmd:Command) -> None:
-        ...
-
-    @overload
-    def add(self, *cmds:Command) -> None:
-        ...
-
-    def add(self, *cmds:object) -> None:
-        '''Add a command to the set(not overrideable)'''
-        for cmd in cmds:
-            if not isinstance(cmd, Command):
-                raise TypeError("cmd must be a Command instance")
-            if cmd in self._set:
-                # Existed
-                continue
-            if not cmd.cmd in self:
-                # Not existed
-                self._set.add(cmd)
-                continue
-            
-            existed_cmd = self.get(cmd.cmd)
-            if existed_cmd.overrideable:
-                # Existed and overrideable
-                self.remove(cmd.cmd)
-                self._set.add(cmd)
-                continue
-            # Existed and not overrideable
-            if cmd.overrideable:
-                # Existed and not overrideable and overrideable
-                continue
-            # Existed and not overrideable and not overrideable
-            raise error.Existed(cmd.cmd, cmd_set=self)
-
-    def set(self, cmd:Command) -> None:
-        '''Add a command to the set(overrideable)'''
-        if not isinstance(cmd, Command):
-            raise TypeError("cmd must be a Command instance")
-        for i in self._set:
-            if i.cmd == cmd.cmd:
-                self._set.remove(i)
-                break
-            if cmd.cmd in i.alias:
-                self._set.remove(i)
-                break
-        self._set.add(cmd)
-
-    def remove(self, cmd:str) -> None:
-        '''Remove a command from the set'''
-        if not isinstance(cmd, str):
-            raise TypeError("cmd must be a string instance")
-        for i in self._set:
-            if i.cmd == cmd:
-                self._set.remove(i)
-                return
-            for j in i.alias:
-                if j == cmd:
-                    self._set.remove(i)
-                    return
-        raise error.NotFound(cmd, cmd_set=self)
-
-    def get(self, cmd:str) -> Command:
-        '''Get a command from the set'''
-        for i in self._set:
-            if i.cmd == cmd:
-                return i
-            for j in i.alias:
-                if j == cmd:
-                    return i
-        raise error.NotFound(cmd, cmd_set=self)
-                
-    def has(self, cmd:str) -> bool:
-        '''Check if a command is in the set'''
-        return cmd in [i.cmd for i in self._set] or cmd in [j for i in self._set for j in i.alias]
-                
-    def get_by_group(self, groupname:str) -> list[Command]:
-        '''Get commands callable by a user'''
-        return [i for i in self._set if groupname in i.callable_groups]
     
-    def get_by_user(self, user:User) -> list[Command]:
-        '''Get commands callable by a user'''
-        return [i for i in self._set if user.in_group in i.callable_groups]
+    def __serialize__(self):
+        return {
+            "cmd":self.cmd,
+            "alias":list(self.alias),
+            "description":self.description,
+            "format":self.format.__serialize__() if self.format else None,
+            "callable_groups":list(self.callable_groups),
+            "overrideable":self.overrideable,
+            "extra":self.extra,
+            "expose":self.expose,
+            "authority":self.authority.__serialize__(),
+            "to_return":self.to_return,
+            "callback":self.callback.__qualname__ if self.callback else None,
+            "in_interface":self.in_interface.id.hex if self.in_interface else None,
+        }
     
-    def clear(self) -> None:
-        '''Clear the set'''
-        self._set.clear()
-    
-    @functools.singledispatchmethod
-    def __contains__(self, *args, **kwargs) -> bool:
-        raise TypeError("cmd must be a string instance or a Command instance")
-    
-    @__contains__.register(str)
-    def _(self, cmd:str) -> bool:    
-        return cmd in [i.cmd for i in self._set] or cmd in [j for i in self._set for j in i.alias]
-    
-    @__contains__.register(Command)
-    def _(self, cmd:Command) -> bool:
-        return cmd in self._set
-    
-    def __iter__(self) -> Iterator[Command]:
-        return iter(self._set)
-    
-    def __len__(self) -> int:
-        return len(self._set)
-    
-    def __repr__(self) -> str:
-        return f"CommandSet({self._set})"
-    
-    def __str__(self) -> str:
-        return f"CommandSet({self._set})"
-    
-    def __getitem__(self, cmd:str) -> Command:
-        return self.get(cmd)
-    
-    def __setitem__(self, cmd:str, value:Command) -> None:
-        self.remove(cmd)
-        self.add(value)
-    
-    def register(self, value:Command):
-        '''
-        Decorator for registering a command
-        '''
-        def wrapper(func:Callable[[session.Session, session.Message], None]):
-            value.bind(func)
-            self.add(value)
-            return func
-        return wrapper
-
-    def each(self, func:Callable[[Command], None]) -> None:
-        '''Call a function for each command'''
-        for i in self._set:
-            func(i)
+    @staticmethod
+    def __deserialize__(self, data:dict):
+        raise NotImplementedError("Command.__deserialize__ is not implemented")
 
 class Commands(dict[str,Command]):
     '''
@@ -472,17 +538,48 @@ class Commands(dict[str,Command]):
         for i in self.values():
             func(i)
 
-    def register(self, value:Command):
+    @overload
+    def register(self, command:Command):
+        ...
+
+    @overload
+    def register(self, 
+                 cmd:str, 
+                 description:str="", 
+                 *, 
+                 alias:set[str]=set(), 
+                 format:Optional[CommandParamStruct | dict[str, Any]]=None, 
+                 callable_groups:set[str]=set(), 
+                 overrideable:bool=False, 
+                 extra:dict={}, 
+                 expose:bool=True, 
+                 authority:CommandAuthority=CommandAuthority(), 
+                 to_return:bool=True,
+                 **kwargs):
+        ...
+
+    def register(self, *args, **kwargs):
         '''
         Decorator for registering a command
         '''
+        if len(args) == 1 and len(kwargs) == 0 and isinstance(args[0], Command):
+            value = args[0]
+        else:
+            if len(args) == 1 and isinstance(args[0], str):
+                kwargs['cmd'] = args[0]
+            if len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], str):
+                kwargs['cmd'] = args[0]
+                kwargs['description'] = args[1]
+            if 'cmd' not in kwargs:
+                raise TypeError("cmd must be specified")
+            value = Command(**kwargs)
         @functools.wraps(value)
         def wrapper(func:Callable[[session.Session, session.Message], None]):
             value.bind(func)
             self.add(value)
             return func
         return wrapper
-
+    
     @overload
     def get_executable(self, user:User):
         ...
@@ -499,20 +596,38 @@ class Commands(dict[str,Command]):
         '''
         Get commands executable by a user or a group
         '''
-        if isinstance(arg, User):
+        if isinstance(arg, aicompleter.User):
             for grp in arg.all_groups:
                 yield from self.get_executable(grp)
-        elif isinstance(arg, Group):
+        elif isinstance(arg, aicompleter.Group):
             return self.get_executable(arg.name)
         elif isinstance(arg, str):
             for i in self.values():
                 if arg in i.callable_groups:
                     yield i
-        raise TypeError("arg must be a User or a Group or a string instance")
-
+        else:
+            raise TypeError("arg must be a User or a Group or a string instance")
 
     def __repr__(self) -> str:
         return f"Commands({super().__repr__()})"
 
     def __iter__(self) -> Iterator[Command]:
         return self.values().__iter__()
+
+@attr.s(auto_attribs=True)
+class Result:
+    '''Command Result Struct'''
+    cmd:str = ""
+    '''Command'''
+    success:bool = True
+    '''Whether the command is success'''
+    ret:Any = None
+    '''
+    Return Value
+    If not success, it will be the error
+    '''
+    param:Any = None
+    '''
+    Parameters
+    If recorded
+    '''

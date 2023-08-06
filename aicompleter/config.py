@@ -6,10 +6,10 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
+from re import A
+from typing import Any, Self
 
 from .error import ConfigureMissing
-
 from .utils import EnhancedDict
 
 Pointer = list
@@ -20,6 +20,8 @@ Use list to implement pointer
 
 class Config(EnhancedDict):
     '''Configuration Class'''
+    ALLOWED_VALUE_TYPE = (str, int, float, bool, type(None))
+
     @staticmethod
     def loadFromFile(path:str) -> Config:
         '''
@@ -52,12 +54,57 @@ class Config(EnhancedDict):
         '''Get global config'''
         return self.get('global', Config())
     
+    def __setitem__(self, __key: Any, __value: Any) -> None:
+        # Check type
+        def _check(key: Any, value: Any) -> None:
+            if not isinstance(key, str):
+                raise TypeError(f"Invalid key type: {key!r}")
+            if isinstance(value, dict):
+                for k, v in value.items():
+                    _check(k, v)
+                return
+            if isinstance(value, list):
+                for i in value:
+                    _check(key, i)
+                return
+            if not isinstance(value, self.ALLOWED_VALUE_TYPE):
+                raise TypeError(f"Invalid value type: {value!r}")
+        _check(__key, __value)
+        return super().__setitem__(__key, __value)
+    
+    @staticmethod
+    def __deserialize__(data:dict) -> Self:
+        '''
+        Deserialize a value
+        '''
+        return Config(data)
+    
+    def update_global(self):
+        '''
+        Update global config
+        '''
+        for name, value in self.items():
+            if name == 'global':
+                continue
+            if isinstance(value, dict):
+                value.update(super()['global'])
+    
 def loadConfig(path:str) -> Config:
     '''Load configuration from file'''
     return Config.loadFromFile(path)
 
-__all__ = (
-    'Pointer',
-    'Config',
-    'loadConfig',
-)
+# Global configuration bypass different modules
+varibles = Config({
+    'disable_faiss': False,
+})
+
+__map_environment__ = {
+    'DISABLE_FAISS': ('disable_faiss', bool),
+}
+
+for k, (v, tp) in __map_environment__.items():
+    if k in os.environ:
+        varibles[v] = tp(os.environ[k])
+# Due to the moudle launch limitation, we have to check this here
+# TODO: Wait for a better solution
+

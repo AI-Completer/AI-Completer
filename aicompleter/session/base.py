@@ -3,21 +3,20 @@ from __future__ import annotations
 import asyncio
 import enum
 import json
-import logging
 import time
 import uuid
-from typing import Any, Coroutine, Optional, TypeVar, overload
+from typing import Any, Coroutine, Optional, Self, TypeVar, overload
 
-import aiohttp
+from asyncio import CancelledError
 import attr
 
 import aicompleter
-from aicompleter.memory.utils import MemoryConfigure
-import aicompleter.session as session
-from aicompleter import log
+from aicompleter import events
+from aicompleter import config, log
 from aicompleter.config import Config, EnhancedDict
-from aicompleter.memory import (Memory, MemoryItem, VectexTransformer,
-                                getMemoryItem)
+
+if bool(config.varibles['disable_memory']) == False:
+    from aicompleter.memory import (Memory, MemoryItem, MemoryConfigure)
 
 Handler = TypeVar('Handler', bound='aicompleter.handler.Handler')
 User = TypeVar('User', bound='aicompleter.interface.User')
@@ -67,6 +66,10 @@ class MultiContent(Content):
     def __init__(self, contents:list[Content]) -> None:
         ...
 
+    @overload
+    def __init__(self, json: dict|list) -> None:
+        ...
+
     def __init__(self, param) -> None:
         self.contents:list[Content] = []
         if isinstance(param, str):
@@ -74,7 +77,7 @@ class MultiContent(Content):
         elif isinstance(param, list):
             self.contents.extend(param)
         elif isinstance(param, dict):
-            self.contents.append(Text(json.dumps(param)))
+            self.contents.append(Text(json.dumps(param, ensure_ascii=False)))
         elif param is None:
             pass
         else:
@@ -115,6 +118,9 @@ class MultiContent(Content):
     def json(self) -> dict:
         '''Get json content.'''
         return json.loads(self.pure_text)
+    
+    def __getitem__(self, key):
+        return self.json[key]
 
 @enum.unique
 class MessageStatus(enum.Enum):
@@ -128,11 +134,11 @@ class MessageStatus(enum.Enum):
 
 class Session:
     '''Session'''
-    def __init__(self, handler:Handler, memory:MemoryConfigure = MemoryConfigure()) -> None:
+    def __init__(self, handler:Handler, memory:Optional[MemoryConfigure] = None) -> None:
         self.create_time: float = time.time()
         '''Create time'''
-        self.last_used: float = self.create_time
-        '''Last used time'''
+        # self.last_used: float = self.create_time
+        # '''Last used time'''
         self.history:list[Message] = []
         '''History'''
         self._closed: bool = False
@@ -141,29 +147,34 @@ class Session:
         '''ID'''
         self.in_handler:Handler = handler
         '''In which handler'''
-        self.src_interface:Interface|None = None
-        '''Source interface'''
+        # self.src_interface:Interface|None = None
+        # '''Source interface'''
         self.config:Config = Config()
         '''Session Config'''
         self.data:EnhancedDict = EnhancedDict()
         '''Data'''
         self._running_tasks:list[asyncio.Task] = []
         '''Running tasks'''
+        self.on_call: events.Event = events.Event(type=events.Type.Hook)
+        '''
+        Event of Call, this will be triggered when a command is called
+        If the event is stopped, the command will not be called
+        '''
+
+        from ..memory import MemoryConfigure, JsonMemory
+
+        memory = memory or MemoryConfigure(factory=JsonMemory)
         self._memory:Memory = memory.initial_memory or memory.factory(*memory.factory_args, **memory.factory_kwargs)
         '''Memory'''
-        self._vertex_model:VectexTransformer = VectexTransformer(memory.vertex_model)
-        '''Vertex model'''
+            
         self.logger:log.Logger=log.Logger('session')
         '''Logger'''
-        formatter = log.Formatter()
-        _handler = log.ConsoleHandler()
-        _handler.setFormatter(formatter)
-        self.logger.addHandler(_handler)
-        if handler.config['global.debug']:
-            self.logger.setLevel(logging.DEBUG)
-        else:
-            self.logger.setLevel(logging.INFO)
-        self.logger.push(self.id.hex[:8])
+        self.logger = log.getLogger('Session', [self.id.hex[:8]])
+
+    @property
+    def memory(self) -> Memory:
+        '''Memory'''
+        return self._memory
 
     @property
     def id(self) -> uuid.UUID:
@@ -178,27 +189,23 @@ class Session:
         '''
         return self.data
     
-    @property
-    def locked(self) -> bool:
-        return self.lock.locked()
-    
     def __getitem__(self):
-        return self.extra.__getitem__()
+        return self.data.__getitem__()
     
     def __setitem__(self):
-        return self.extra.__setitem__()
+        return self.data.__setitem__()
     
     def __delitem__(self):
-        return self.extra.__delitem__()
+        return self.data.__delitem__()
     
     def __contains__(self):
-        return self.extra.__contains__()
+        return self.data.__contains__()
     
     def __iter__(self):
-        return self.extra.__iter__()
+        return self.data.__iter__()
     
     def __len__(self):
-        return self.extra.__len__()
+        return self.data.__len__()
 
     @property
     def closed(self) -> bool:
@@ -224,7 +231,7 @@ class Session:
         for task in self._running_tasks:
             task.cancel()
         result = await asyncio.gather(*self._running_tasks, return_exceptions=True)
-        if any([isinstance(r, Exception) for r in result]):
+        if any([isinstance(r, Exception) and not isinstance(r, CancelledError) for r in result]):
             self.logger.exception(f"Error when closing session" + "\n".join([str(r) for r in result if isinstance(r, Exception)]))
         for interface in self.in_handler._interfaces:
             await interface.session_final(self)
@@ -235,21 +242,37 @@ class Session:
             if task.done() or task.cancelled():
                 self._running_tasks.remove(task)
 
+    def get_data(self):
+        ret = {
+            'id': self.id.hex,
+            'config': self.config,
+            'storage': []
+        }
+        for i in self.in_handler._interfaces:
+            data = i.getStorage(self)
+            if data == None:
+                continue
+            ret['storage'].append({
+                'id': i.id.hex,
+                'data': data
+            })
+        return ret
+
 @attr.s(auto_attribs=True, kw_only=True)
 class Message:
     '''A normal message from the Interface.'''
-    content:MultiContent = attr.ib(factory=MultiContent, converter=MultiContent)
+    cmd:str = attr.ib(default="", kw_only=False)
+    '''Call which command to transfer this Message'''
+    content:MultiContent = attr.ib(factory=MultiContent, converter=MultiContent, kw_only=False)
     '''Content of the message'''
-    session:Session = session
+    session:Optional[Session] = attr.ib(default=None,validator=attr.validators.optional(attr.validators.instance_of(Session)))
     '''Session of the message'''
-    id:uuid.UUID = uuid.uuid4()
+    id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
     '''ID of the message'''
     data:EnhancedDict = attr.ib(factory=EnhancedDict, converter=EnhancedDict, alias='extra')
-    '''Data / Extra information'''
-    last_message:Message|None = None
+    '''Data information'''
+    last_message: Optional[Message] = None
     '''Last message'''
-    cmd:str
-    '''Call which command to transfer this Message'''
 
     src_interface:Optional[Interface] = None
     '''Interface which send this message'''
@@ -282,12 +305,12 @@ class Message:
             self.session.history.append(self)
 
     def __str__(self) -> str:
-        return f"Called by [{self.src_interface.user.name}]: {self.content.text}"
+        return self.content.pure_text
     
     def __repr__(self) -> str:
         return f"Message({self.cmd}, {self.content.text}, {self.session.id}, {self.id})"
     
-    def __to_json__(self):
+    def to_json(self):
         return {
             'content': self.content.pure_text,
             'session': self.session.id.hex,
@@ -300,18 +323,30 @@ class Message:
         }
     
     @staticmethod
-    def __from_json__(self, data:dict):
+    def from_json(data:dict):
         # TODO: add session
         return Message(
             content = MultiContent(data['content']),
             session = None,
             id = uuid.UUID(data['id']),
             data = EnhancedDict(data['data']),
-            last_message = uuid.UUID(data['last_message']) if data['last_message'] is not None else None,
+            last_message = None,
             cmd = data['cmd'],
             src_interface = None,
             dest_interface = None,
         )
+    
+    def __getitem__(self, key):
+        return self.content[key]
+    
+    def __setitem__(self, key, value):
+        self.content[key] = value
+
+    def get(self, key, default=...):
+        if default is ...:
+            return self.content[key]
+        else:
+            return self.content.json.get(key, default)
     
 class MessageQueue(asyncio.Queue[Message]):
     '''Message Queue'''

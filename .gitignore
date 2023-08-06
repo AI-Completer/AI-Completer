@@ -168,5 +168,12 @@ config.toml
 # VSCode
 .vscode/
 
+# Working directory
+workspace/
+
+# History file
+history.json
+history/
+
 # Temporary test scripts
-test_*.py
+temp_*.py

@@ -12,17 +12,14 @@ class CmdTranslator(ChatInterface):
     Command Translator
     Translate the natural language to command
     '''
-    namespace='cmd-translator'
-    def __init__(self, *, ai: ChatTransformer, user: Optional[User] = None, id: Optional[uuid.UUID] = None):
-        super().__init__(ai=ai, user=user, id=id)
+    def __init__(self, *, config:Config = Config(), ai: ChatTransformer, user: Optional[User] = None, id: Optional[uuid.UUID] = None):
+        super().__init__(ai=ai,namespace='cmd-translator', user=user, id=id, config=config)
         self.commands.add(
             Command(
                 cmd='translate',
                 description='Translate the natural language to command',
                 expose=True,
                 in_interface=self,
-                to_return=True,
-                force_await=True,
                 callback=self.cmd_translate,
             )
         )

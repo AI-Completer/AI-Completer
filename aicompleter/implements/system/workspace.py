@@ -1,3 +1,10 @@
+'''
+Virtual File System
+This is a virtual file system prepared specially for AI Interface
+Unstable, need to be improved
+'''
+
+from __future__ import annotations
 import enum
 import os
 import re
@@ -6,39 +13,18 @@ from typing import Optional
 
 import attr
 
-from aicompleter.handler import Handler
-from aicompleter.interface.base import Interface
-from aicompleter.session import Message, Session
 from aicompleter.interface import User, Group
 from aicompleter import error
 
-class WorkSpace:
-    '''
-    WorkSpace for Autodone-AI
-    To limit the scope of files
-    '''
-    def __init__(self, path:Optional[str] = None) -> None:
-        self.path = path or os.path.abspath(os.getcwd())
-        if self.path[-1] != os.sep:
-            self.path += os.sep
+sep = '/'
 
-    def __repr__(self) -> str:
-        return f"WorkSpace({self.path})"
-    
-    def __str__(self) -> str:
-        return self.path
-    
-    def check(self, path:str) -> bool:
-        '''Check if the path is in the workspace.'''
-        if path == self.path[:-1]:
-            return True
-        return os.path.abspath(path).startswith(self.path)
-    
-    def get_abspath(self, rela_path:str) -> str:
-        '''Get absolute path from relative path'''
-        if rela_path[0] == os.sep:
-            return os.path.abspath(os.path.join(self.path,rela_path[1:]))
-        return os.path.abspath(os.path.join(self.path,rela_path))
+def normpath(path:str):
+    '''Normalize path'''
+    return os.path.normpath(path).replace('\\', '/')
+
+def issamepath(path1:str, path2:str):
+    '''Check if two path is the same'''
+    return normpath(path1) == normpath(path2)
 
 @enum.unique
 class Type(enum.Enum):
@@ -52,11 +38,11 @@ class SinglePermission:
     '''
     Single Permission for File
     '''
-    readable = attr.ib(default=False, validator=attr.validators.instance_of(bool))
+    readable:bool = attr.ib(default=False, validator=attr.validators.instance_of(bool))
     '''Readable'''
-    writable = attr.ib(default=False, validator=attr.validators.instance_of(bool))
+    writable:bool = attr.ib(default=False, validator=attr.validators.instance_of(bool))
     '''Writable'''
-    executable = attr.ib(default=False, validator=attr.validators.instance_of(bool))
+    executable:bool = attr.ib(default=False, validator=attr.validators.instance_of(bool))
     '''Executable. If folder, means can enter the folder'''
 
 @attr.s(auto_attribs=True, kw_only=True)
@@ -90,61 +76,135 @@ class File:
         other=SinglePermission(readable=True, writable=True, executable=True),
         type=Type.Folder
     )
-    def __init__(self, handler:Handler, path:str) -> None:
-        self.handler = handler
-        self._path = os.path.abspath(path)
+    def __init__(self, path:str, in_filesystem: Optional[FileSystem] = None) -> None:
+        self._in_filesystem = in_filesystem
+        '''FileSystem of file'''
+        self._path = normpath(path)
         '''Path of file'''
         self.owner:Optional[User] = None
         '''Owner of file'''
         self.owner_group:Optional[Group] = None
         '''Owner Group of file'''
-        if not os.path.exists(path):
-            raise error.NotFound('File Not Found', file=path)
-        if not os.path.isfile(path):
-            self.premission = File.default_folder_permission
-            '''Permission of folder'''
+
+        if not os.path.isabs(self._path):
+            raise error.InvalidPath('Require Absoulte Path', path=self._path)
+        
+        if self.existed:
+            if os.path.isfile(self._true_path):
+                self.permission = File.default_permission
+                '''Permission of file'''
+            elif os.path.isdir(self._true_path):
+                self.permission = File.default_folder_permission
+                '''Permission of folder'''
+            else:
+                raise NotImplementedError('Unimplemented File Type')
         else:
-            self.premission = File.default_permission
-            '''Permission of file'''
-        # TODO: device
+            self.permission = File.default_permission
+
+    @property
+    def _true_path(self):
+        '''
+        Get true path (to the operating system)
+        '''
+        if self._in_filesystem is not None:
+            if self._path == sep:
+                return self._in_filesystem.root
+            return os.path.join(str(self._in_filesystem.root).replace('\\','/'), self._path[1:]).replace(sep,os.sep)
+        return self._path
+
+    @property
+    def existed(self):
+        '''
+        If file existed
+        '''
+        return os.path.exists(self._true_path)
 
     @property
     def path(self):
-        '''Path of file'''
+        '''
+        Path of file
+        If the file is in a FileSystem, the path will be relative to the root of FileSystem
+        '''
         return self._path
+    
+    @property
+    def isdir(self):
+        '''
+        If file is a dir
+        '''
+        return self.permission.type == Type.Folder
+    
+    @property
+    def isfile(self):
+        '''
+        If file is a file
+        '''
+        return self.permission.type == Type.File
+    
+    @property
+    def type(self):
+        '''
+        Type of file
+        '''
+        return self.permission.type
+    
+    def _check_file_exists(self):
+        '''
+        Check if file exists
+        '''
+        if not self.existed:
+            raise error.NotFound('File Not Found', file=self.path)
 
     def get_permission(self, user:User) -> SinglePermission:
-        '''Get permission for user'''
+        '''
+        Get permission for user
+        :param user: User
+        :return: Permission
+        '''
+        self._check_file_exists()
         if self.owner == user:
-            return self.premission.owner
+            return self.permission.owner
         if self.owner_group in user.all_groups:
-            return self.premission.group
-        return self.premission.other
+            return self.permission.group
+        return self.permission.other
 
-    def read(self, user:User, force:bool = False) -> str:
+    def read(self, user:Optional[User] = None) -> str:
         '''
         Read file
         :param user: User
-        :param force: Force to read
         '''
+        self._check_file_exists()
+        force = user == None
         if not force and not self.get_permission(user).readable:
             raise error.PermissionDenied('Permission Denied', file=self.path)
-        with open(self.path, 'r') as f:
+        with open(self._true_path, 'r', encoding='utf-8') as f:
             return f.read()
 
-    def write(self, user:User, content:str, force:bool = False) -> None:
+    def write(self, content:str, user:Optional[User] = None) -> None:
         '''
         Write file
-        :param user: User
         :param content: Content to write
-        :param force: Force to write
+        :param user: User
         '''
-        if not force and not self.get_permission(user).writable:
+        force = user == None
+        if not force and self.existed and not self.get_permission(user).writable:
             raise error.PermissionDenied('Permission Denied', file=self.path)
-        with open(self.path, 'w') as f:
+        with open(self._true_path, 'w', encoding='utf-8') as f:
             f.write(content)
 
-    def execute(self, user:User, *args:object, force:bool = False, **kwargs:object):
+    def write_append(self, content:str, user:Optional[User] = None) -> None:
+        '''
+        Write file (append)
+        :param content: Content to write
+        :param user: User
+        '''
+        force = user == None
+        if not force and not self.get_permission(user).writable:
+            raise error.PermissionDenied('Permission Denied', file=self.path)
+        with open(self._true_path, 'a', encoding='utf-8') as f:
+            f.write(content + '\n')
+
+    def execute(self, user:Optional[User] = None, *args:object, **kwargs:object):
         '''
         Execute file
         :param user: User
@@ -152,57 +212,90 @@ class File:
         :param force: Force to execute
         :param kwargs: kwargs for asyncio.subprocess.create_subprocess_exec
         '''
+        self._check_file_exists()
+        force = user == None
         if not force and not self.get_permission(user).executable:
             raise error.PermissionDenied('Permission Denied', file=self.path)
-        if self.premission.type == Type.Folder:
+        if self.permission.type == Type.Folder:
             raise error.PermissionDenied('Folder Not Executable', file=self.path)
         import asyncio.subprocess as subprocess
         return subprocess.create_subprocess_exec(self.path, *args, **kwargs)
     
-    def listdir(self, user:User) -> list[str]:
+    def listdir(self, user: Optional[User] = None) -> list[str]:
         '''
         List dir
-        :param user: User
+        :param user: Optional[User] if not None, will check permission
         '''
-        if self.premission.type == Type.File:
+        self._check_file_exists()
+        if self.permission.type == Type.File:
             raise error.PermissionDenied('File Not Listable', file=self.path)
-        if not self.get_permission(user).executable:
-            raise error.PermissionDenied('Permission Denied', file=self.path)
-        return os.listdir(self.path)
+        if user:
+            if not self.get_permission(user).executable:
+                raise error.PermissionDenied('Permission Denied', file=self.path)
+        return os.listdir(self._true_path)
     
-    def mkdir(self, user:User, name:str, force:bool = False) -> None:
+    def mkdir(self, name:str, user:Optional[User] = None) -> File:
         '''
         Make dir
-        :param user: User
         :param name: Name of dir
-        :param force: Force to make dir
+        :param user: Optional[User] if not None, will check permission
         '''
-        if self.premission.type == Type.File:
+        self._check_file_exists()
+        # Check The name
+        force = user == None
+        if not re.match(r'^[a-zA-Z0-9_\-\.]+$', name):
+            raise error.InvalidPath('Invalid Name', name=name)
+        if self.permission.type == Type.File:
             raise error.PermissionDenied('File Not Listable', file=self.path)
         if not self.get_permission(user).executable:
             raise error.PermissionDenied('Permission Denied', file=self.path)
         if not force and name in self.listdir(user):
             raise error.Existed('Already Exists', file=self.path)
-        os.mkdir(os.path.join(self.path, name))
+        os.mkdir(os.path.join(self._true_path, name))
+        return File(os.path.join(self._true_path, name), self._in_filesystem)
+    
+    def open(self, mode:str, user:Optional[User] = None, *args, **kwargs):
+        '''
+        Open file
+        :param mode: Mode
+        :param user: Optional[User] if not None, will check permission
+        :param args: args for open
+        :param kwargs: kwargs for open
+        '''
+        if not self.existed:
+            if 'w' not in mode and 'a' not in mode and '+' not in mode:
+                raise error.NotFound('File Not Found', file=self.path)
+            pre = self.default_permission.owner
+        else:
+            pre = self.get_permission(user)
+        if 'r' in mode and not pre.readable:
+            raise error.PermissionDenied('Permission Denied', file=self.path)
+        if ('w' in mode or '+' in mode) and not pre.writable:
+            raise error.PermissionDenied('Permission Denied', file=self.path)
+        return open(self._true_path, mode, *args, **kwargs)
 
 class FileSystem:
     '''
     File System for Autodone-AI
     Use to apply rights to files
     '''
-    def __init__(self, handler:Handler, root:os.PathLike = os.getcwd()) -> None:
-        self.handler = handler
-        self._rights = {}
+    def __init__(self, root:os.PathLike = os.getcwd()) -> None:
         self._files:set[File] = set()
         self._root:os.PathLike = os.path.abspath(root)
         if not os.path.exists(root):
             raise error.NotFound('File Not Found', file=root)
         if not os.path.isdir(root):
             raise error.NotFound('Not a Folder', file=root)
+        if not self._root[-1] == os.sep:
+            self._root += os.sep
+            # Add a slash to the end of root
     
     @property
     def root(self):
-        '''Root of FileSystem'''
+        '''
+        Root of FileSystem (to the operating system)
+        :return: Root of FileSystem
+        '''
         return self._root
     
     @root.setter
@@ -210,14 +303,18 @@ class FileSystem:
         '''
         Set root of FileSystem
         This will flush all files permission
+        :param root: Root of FileSystem
         '''
         self._root = os.path.abspath(root)
+        # Clear all cached files
+        self._files.clear()
 
     def _rm_file(self, path:os.PathLike):
         '''
         Remove File from cache
         :param path: Path of file
         '''
+        path = normpath(path)
         for file in self._files:
             if file.path == path:
                 self._files.remove(file)
@@ -225,22 +322,22 @@ class FileSystem:
 
     def _get_by_abspath(self, path:os.PathLike) -> File:
         '''
-        Get File by absolute path
+        Get File by absolute path (to the operating system)
         :param path: Absolute path
         :return: File
         '''
-        if not os.path.exists(path):
-            raise error.NotFound('File Not Found', file=path)
+        path = os.path.normpath(path)
+        # This will not check if the file exists
         for file in self._files:
-            if file.path == path:
+            if issamepath(file._true_path,path):
                 return file
-        file = File(self.handler, path)
+        file = File('/' + str(path[len(self.root):]).replace('\\','/'), self)
         self._files.add(file)
         return file
     
     def _get_by_path(self, path:os.PathLike) -> File:
         '''
-        Get File by path
+        Get File by path (to the FileSystem object)
         :param path: Path
         :return: File
         '''
@@ -248,12 +345,13 @@ class FileSystem:
     
     def _check_list_dir_permission(self, user:User, path:os.PathLike) -> bool:
         '''
-        Check if user can list the dir
+        Check if user can list the dir (Note: the directory can be not existed)
         :param user: User
         :param path: Path(abs)
         '''
-        if path == self._root:
-            return
+        path = normpath(path)
+        if issamepath(path, self._root):
+            return True
         parent = os.path.dirname(path)
         if parent != self._root:
             if not self._check_list_dir_permission(user, parent):
@@ -262,23 +360,24 @@ class FileSystem:
             # Root will be always True
             return True
         return self._get_by_abspath(path).get_permission(user).executable
-        
 
-    def get(self, path:os.PathLike, user:Optional[User] = None) -> File | None:
+    def get(self, path:os.PathLike, user:Optional[User] = None) -> File:
         '''
         Get File
         :param path: Path of file
-        :return: File or None
+        :param user: User , if not None, will check permission
+        :return: File
         '''
-        if path[0] != '/':
+        path = normpath(path)
+        if path[0] != sep:
             raise error.InvalidPath('Invalid Path', path=path)
         path = os.path.join(self._root, path[1:])
         if user is not None:
             # Check if user can list the parent folder
             if not self._check_list_dir_permission(user, os.path.dirname(path)):
-                return None
-        if not os.path.exists(path):
-            return None
+                raise error.PermissionDenied('Permission Denied', file=path)
+        # if not os.path.exists(path):
+        #     raise error.NotFound('File Not Found', file=path)
         return self._get_by_abspath(path)
     
     def remove(self, path:os.PathLike, user:Optional[User] = None):
@@ -287,7 +386,8 @@ class FileSystem:
         :param path: Path of file / folder
         :param user: User , if not None, will check permission
         '''
-        if path[0] != '/':
+        path = normpath(path)
+        if path[0] != sep:
             raise error.InvalidPath('Invalid Path', path=path)
         path = os.path.join(self._root, path[1:])
         if user is not None:
@@ -302,7 +402,7 @@ class FileSystem:
             os.remove(path)
         self._rm_file(path)
 
-    def move(self, from_:os.PathLike, to_:os.PathLike, force:bool = False,user:Optional[User] = None):
+    def move(self, from_:os.PathLike, to_:os.PathLike, force:bool = True, user:Optional[User] = None):
         '''
         Move File
         :param from_: From
@@ -310,9 +410,10 @@ class FileSystem:
         :param force: Force to move (will overwrite)
         :param user: User , if not None, will check permission
         '''
-        if from_[0] != '/':
+        path = normpath(path)
+        if from_[0] != sep:
             raise error.InvalidPath('Invalid Path', path=from_)
-        if to_[0] != '/':
+        if to_[0] != sep:
             raise error.InvalidPath('Invalid Path', path=to_)
         from_ = os.path.join(self._root, from_[1:])
         to_ = os.path.join(self._root, to_[1:])
@@ -337,9 +438,10 @@ class FileSystem:
         :param force: Force to copy (will overwrite)
         :param user: User , if not None, will check permission
         '''
-        if from_[0] != '/':
+        path = normpath(path)
+        if from_[0] != sep:
             raise error.InvalidPath('Invalid Path', path=from_)
-        if to_[0] != '/':
+        if to_[0] != sep:
             raise error.InvalidPath('Invalid Path', path=to_)
         from_ = os.path.join(self._root, from_[1:])
         to_ = os.path.join(self._root, to_[1:])
@@ -355,3 +457,122 @@ class FileSystem:
             raise error.Existed('Already Exists', file=to_)
         shutil.copy(from_, to_)
         self._rm_file(to_)
+
+    def mkdir(self, path:os.PathLike, user:Optional[User] = None):
+        '''
+        Make dir
+        :param path: Path of dir
+        :param user: User , if not None, will check permission
+        '''
+        path = normpath(path)
+        if path[0] != sep:
+            raise error.InvalidPath('Invalid Path', path=path)
+        path = os.path.join(self._root, path[1:])
+        if user is not None:
+            # Check if user can list the parent folder
+            if not self._check_list_dir_permission(user, os.path.dirname(path)):
+                raise error.PermissionDenied('Permission Denied', file=path)
+            # Check write permission
+            if not self._get_by_abspath(os.path.dirname(path)).get_permission(user).writable:
+                raise error.PermissionDenied('Permission Denied', file=path)
+        if os.path.exists(path):
+            raise error.Existed('Already Exists', file=path)
+        os.mkdir(path)
+        self._rm_file(path)
+
+    def new(self, path:str, user:Optional[User] = None):
+        '''
+        New File
+        :param path: Path of file
+        :param user: User , if not None, will check permission
+        '''
+        path = normpath(path)
+        if path[0] != sep:
+            raise error.InvalidPath('Invalid Path', path=path)
+        path = os.path.join(self._root, path[1:])
+        if user is not None:
+            # Check if user can list the parent folder
+            if not self._check_list_dir_permission(user, os.path.dirname(path)):
+                raise error.PermissionDenied('Permission Denied', file=path)
+            # Check write permission
+            if not self._get_by_abspath(os.path.dirname(path)).get_permission(user).writable:
+                raise error.PermissionDenied('Permission Denied', file=path)
+        if os.path.exists(path):
+            raise error.Existed('Already Exists', file=path)
+        with open(path, 'w', encoding='utf-8') as f:
+            pass
+        # Create File Object
+        return self._get_by_abspath(path)
+
+class WorkSpace:
+    '''
+    WorkSpace for AI-Completer
+    To limit the scope of files
+
+    :param filesystem: FileSystem
+    :param init_path: Init Path (Absolute Path to the file system)
+    '''
+    def __init__(self, filesystem: FileSystem, init_path: os.PathLike) -> None:
+        self._fs = filesystem
+        self._file = filesystem.get(init_path)
+        if self._file is None:
+            raise error.NotFound('Folder Not Found', file=init_path)
+        if self._file.permission.type != Type.Folder:
+            raise error.PermissionDenied('Not a Folder', file=init_path)
+
+    def new(self, path:os.PathLike, user:Optional[User] = None) -> File:
+        '''
+        New File
+        :param path: Path of file (enable relative path to outside of workspace)
+        :param user: User , if not None, will check permission
+        '''
+        if path[0] != sep:
+            # Relative path
+            return self._fs.new(os.path.join(self._file.path, path), user)
+        return self._fs.new(path, user)
+    
+    def remove(self, path:os.PathLike, user:Optional[User] = None):
+        '''
+        Remove File / Folder
+        :param path: Path of file / folder (enable relative path to outside of workspace)
+        :param user: User , if not None, will check permission
+        '''
+        if path[0] != sep:
+            # Relative path
+            return self._fs.remove(os.path.join(self._file.path, path), user)
+        return self._fs.remove(path, user)
+    
+    def get(self, path:os.PathLike, user:Optional[User] = None) -> File | None:
+        '''
+        Get File
+        :param path: Path of file (enable relative path to outside of workspace)
+        :param user: User , if not None, will check permission
+        :return: The file of specified path, None if not exists
+        '''
+        if path[0] != sep:
+            # Relative path
+            return self._fs.get(os.path.join(self._file.path, path), user)
+        return self._fs.get(path, user)
+    
+    def mkdir(self, path:os.PathLike, user:Optional[User] = None):
+        '''
+        Make dir
+        :param path: Path of dir (enable relative path to outside of workspace)
+        :param user: User , if not None, will check permission
+        '''
+        if path[0] != sep:
+            # Relative path
+            return self._fs.mkdir(os.path.join(self._file.path, path), user)
+        return self._fs.mkdir(path, user)
+    
+    def check_in(self, path:os.PathLike) -> bool:
+        '''
+        Check if the file is in the workspace (no matter the file is existed or not)
+        :param path: Path of file
+        :return: True if in workspace
+        '''
+        if path[0] != sep:
+            # Relative path
+            return str(normpath(os.path.join(self._file.path, path))).startswith(self._file.path)
+        path = normpath(path)
+        return str(path).startswith(self._file.path)

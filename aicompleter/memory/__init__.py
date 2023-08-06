@@ -1,28 +1,30 @@
 '''
 AI Memory
 '''
-import os
+from .. import config
 
 from .base import (
     MemoryItem,
     Query,
     Memory,
-    MemoryClass,
-)
-
-from .utils import (
-    Model,
-    VectexTransformer,
-    getMemoryItem,
+    MemoryCategory,
     MemoryConfigure,
+    Memoryable,
 )
 
-if bool(os.environ.get('DISABLE_FAISS', False)) == False:
-    from .faissimp import (
-        FaissMemory,
-    )
+# from .utils import (
+#     Model,
+#     VectexTransformer,
+#     getMemoryItem,
+# )
 
-from .history import (
-    HistoryFile,
+# if bool(config.varibles['disable_faiss']) == False:
+# from .faissimp import (
+#     FaissMemory,
+# )
+
+from .jsonmem import (
+    JsonMemory,
 )
-del os
+
+del config

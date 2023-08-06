@@ -1,32 +1,42 @@
 '''
 Base Objects for Interface of AutoDone-AI
 '''
+import copy
 import os
 import uuid
-from abc import abstractmethod
-from typing import Optional, overload
+from abc import ABCMeta, abstractmethod
+from typing import Coroutine, Optional, Self, TypeVar, Union, overload
+import asyncio
 
 import attr
 
-import aicompleter.session as session
-from aicompleter import error, log
-
+from .. import config, error, handler, log, memory, session, utils
+from ..common import AsyncLifeTimeManager, BaseTemplate, JSONSerializable
+from ..config import Config
+from ..namespace import Namespace
+from ..utils import EnhancedDict
+from ..memory import Memory, JsonMemory
 from .command import Command, Commands
 
+Handler = TypeVar('Handler', bound='handler.Handler')
+
 @attr.s(auto_attribs=True, kw_only=True, hash=False)
-class User:
+class User(JSONSerializable):
     '''User'''
     name:str = ""
-    '''Name of the user'''
-    id:uuid.UUID = uuid.uuid4()
+    '''
+    Name of the user
+    If the name is empty, the user will be assigned a name by the handler
+    '''
+    id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
     '''ID of the user'''
-    description:Optional[str] = None
+    description:Optional[str] = attr.ib(default=None)
     '''Description of the user'''
     in_group:str = attr.ib(default="",on_setattr=lambda self, attr, value: self.all_groups.add(value))
     '''Main Group that the user in'''
-    all_groups:set[str] = set()
+    all_groups:set[str] = attr.ib(factory=set)
     '''Groups that the user in'''
-    support:set[str] = set()
+    support:set[str] = attr.ib(factory=set)
     '''Supports of the user'''
 
     @property
@@ -107,7 +117,7 @@ class Group:
         '''Users in the group'''
         return self._users
     
-class UserSet:
+class UserSet(JSONSerializable):
     '''Set of User'''
     def __init__(self) -> None:
         self._set:set[User] = set()
@@ -177,7 +187,7 @@ class UserSet:
         '''Clear the set'''
         self._set.clear()
     
-class GroupSet:
+class GroupSet(JSONSerializable):
     '''Set of Group'''
     def __init__(self) -> None:
         self._set:set[Group] = set()
@@ -255,34 +265,59 @@ class GroupSet:
                     return j
         return None
 
-class Interface:
-    '''Interface of AutoDone-AI'''
-    namespace:str = ""
-    def __init__(self, user:User, namespace:Optional[str] = None,id:uuid.UUID = uuid.uuid4()):
+# Note: Interface is a abstract class, when implemented by the main module,  
+#      the subclass of Interface (implemented not abstract) should only have one constructor with keyword config, id
+#      The constructor should have a format like this:
+#      def __init__(self, config:Config, id:uuid.UUID = uuid.uuid4()):
+class Interface(AsyncLifeTimeManager):
+    '''Interface of AI Completer'''
+    cmdreg = Commands()
+    '''
+    Command Register
+    Add Command to this class to register a command
+    '''
+    def __init__(self,  namespace:str, user:User,id:uuid.UUID = uuid.uuid4(), config: config.Config = config.Config()):
+        super().__init__()
         self._user = user
         '''Character of the interface'''
-        self._closed:bool = False
-        '''Closed'''
+        utils.typecheck(id, uuid.UUID)
         self._id:uuid.UUID = id
         '''ID'''
-        self.extra:dict = {}
-        '''Extra information'''
-        self.commands:Commands = Commands()
-        '''Commands of Interface'''
 
-        if namespace != None:
-            self.namespace = namespace
+        self.namespace:Namespace = Namespace(
+            name=namespace,
+            description="Interface %s" % str(self._id),
+            config=config,
+        )
 
-        self.logger:log.Logger = log.Logger("interface")
+        self.logger:log.Logger = log.getLogger("interface", ['%s - %s' % (self.namespace.name, str(self._id))])
         '''Logger of Interface'''
-        formatter = log.Formatter(['%s - %s' % (self.namespace, str(self._id))])
-        _handler = log.ConsoleHandler()
-        _handler.setFormatter(formatter)
-        self.logger.addHandler(_handler)
-        if bool(os.environ.get('DEBUG', False)):
-            self.logger.setLevel(log.DEBUG)
-        else:
-            self.logger.setLevel(log.INFO)
+        for cls in (*self.__class__.__bases__, self.__class__):
+            if issubclass(cls, Interface):
+                if hasattr(cls, "cmdreg") and isinstance(cls.cmdreg, Commands):
+                    for cmd in cls.cmdreg:
+                        newcmd = copy.copy(cmd)
+                        newcmd.in_interface = self
+                        # if is a class method, bind the method to the instance
+                        if not hasattr(newcmd.callback, "__self__") and '.' in newcmd.callback.__qualname__:
+                            if self.__class__.__name__ == newcmd.callback.__qualname__.split('.')[0]:
+                                newcmd.callback = newcmd.callback.__get__(self, self.__class__)
+                        self.commands.add(newcmd)
+
+    @property
+    def data(self) -> EnhancedDict:
+        '''Data of the interface'''
+        return self.namespace.data
+    
+    @property
+    def commands(self) -> Commands:
+        '''Commands of the interface'''
+        return self.namespace.commands
+    
+    @property
+    def config(self) -> Config:
+        '''Config of the interface'''
+        return self.namespace.config
 
     @property
     def user(self) -> User:
@@ -307,28 +342,44 @@ class Interface:
                 if j == cmd:
                     return i
         return None
-
-    @abstractmethod
-    async def init(self):
-        '''Initial function for Interface'''
+    
+    async def init(self, in_handler:Handler) -> Coroutine[None, None, None]:
+        '''
+        Initial function for Interface
+        '''
         self.logger.debug("Interface %s initializing" % self.id)
 
-    @abstractmethod
-    async def final(self):
+    async def final(self) -> Coroutine[None, None, None]:
         '''Finial function for Interface'''
         self.logger.debug("Interface %s finalizing" % self.id)
 
-    @abstractmethod
     async def session_init(self,session:session.Session):
         '''Initial function for Session'''
         pass
 
-    @abstractmethod
     async def session_final(self,session:session.Session):
         '''Finial function for Session'''
         pass
 
-    @abstractmethod
+    def getconfig(self, session:Optional[session.Session] = None) -> Config:
+        '''
+        Get the config of the interface
+        :param session: Session
+        '''
+        # There is a config conflict when using mutable interface
+        ret = copy.deepcopy(session.config['global'])
+        ret.update(self.namespace.config)
+        if session:
+            ret.update(session.config[self.namespace.name])
+        return ret
+    
+    def getdata(self, session:session.Session) -> utils.EnhancedDict:
+        '''
+        Get the data of the interface
+        :param session: Session
+        '''
+        return session.data[self.id.hex]
+
     async def call(self, session:session.Session, message:session.Message):
         '''
         Call the command
@@ -336,19 +387,51 @@ class Interface:
         *Note*: Handler Class has add the history, no need to add it again
         Call by this method will skip the command check,
         this command can return any type of value
+        :param session: Session
+        :param message: Message
+        '''
+        raise NotImplementedError("Interface.call() is not implemented")
+
+    def getStorage(self, session:session.Session) -> Optional[dict]:
+        '''
+        Get the Storage of the interface (if any)
+
+        :param session: Session
+        :return: Storage, if there is nothing to store, return None
+        '''
+        return None
+    
+    def setStorage(self, session:session.Session, data:dict):
+        '''
+        Set the Storage of the interface (if any)
+
+        :param session: Session
         '''
         pass
     
-    async def close(self):
+    def close(self):
         '''Close the interface'''
-        self._closed = True
-        await self.final()
+        self._close_tasks.append(asyncio.get_event_loop().create_task(self.final()))
+        super().close()
 
     def register_cmd(self, *args, **kwargs):
         '''Register a command'''
+        kwargs.pop("in_interface", None)
         return self.commands.register(Command(
             in_interface=self,
             *args,
             **kwargs
         ))
 
+    def rename_cmd(self, old:str, new:str):
+        '''
+        Rename a command
+        This method is used to handle a conflict of command name
+        :param old: Old name
+        :param new: New name
+        '''
+        for cmd in self.commands:
+            if cmd.cmd == old:
+                cmd.cmd = new
+            if new in cmd.alias:
+                cmd.alias.remove(new)

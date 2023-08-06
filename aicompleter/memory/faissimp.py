@@ -2,21 +2,39 @@ import uuid
 from typing import Callable, Iterable, Iterator, Optional
 
 import faiss
+import torch
+from transformers import BertModel, BertTokenizer, BertTokenizerFast
 import numpy as np
 
-from .base import Memory, MemoryItem, Query
-
+from .base import Memory, MemoryItem, Query, QueryResult, QueryResultItem
 class FaissMemory(Memory):
     '''
     Faiss Memory
     '''
-    def __init__(self, dim: int, index: Optional[faiss.Index] = None) -> None:
+    def __init__(self, model:BertModel = None, tokenizer:BertTokenizer|BertTokenizerFast = None, index: Optional[faiss.Index] = None) -> None:
         '''
         Initialize Faiss Memory
         '''
-        self.dim = dim
-        self.index = index or faiss.IndexFlatL2(dim)
+        self.model = model
+        if model==None: self.model = BertModel.from_pretrained("shibing624/text2vec-base-chinese")
+        self.tokenizer = tokenizer
+        if tokenizer==None: self.tokenizer = BertTokenizerFast.from_pretrained("shibing624/text2vec-base-chinese")
+        self.index = index
+        if index==None: self.index:faiss.IndexFlatL2 = faiss.IndexFlatL2(self.model.embeddings.word_embeddings.embedding_dim)
         self._record:list[MemoryItem] = []
+
+    def _encode(self, texts: list[str]) -> torch.Tensor:
+        '''
+        Encode a text
+        '''
+        return self.tokenizer(texts, add_special_tokens=True, return_tensors='pt', padding=True)['input_ids']
+    
+    def _vertex(self, texts: list[str]) -> np.ndarray:
+        '''
+        Get the vertex of a text
+        '''
+        ret = self.model(self._encode(texts))
+        return np.vstack([ret[0][index][0].detach().numpy().reshape((1,-1)) for index in range(len(texts))])
 
     def put(self, param: MemoryItem | Iterable[MemoryItem]):
         '''
@@ -24,17 +42,15 @@ class FaissMemory(Memory):
         '''
         if isinstance(param, MemoryItem):
             param = [param]
-        self.index.add(np.array([item.vertex for item in param]))
-        for item in param:
-            self._record.append(item)
+        self.index.add(np.array(self._vertex([item.content for item in param])))
+        self._record.extend(param)
 
-    def query(self, query: Query) -> Iterator[MemoryItem]:
+    def query(self, query: Query) -> QueryResult:
         '''
         Query memory
         '''
-        _, I = self.index.search(np.array([query.vertex]), query.limit)
-        for i in I[0]:
-            yield self._record[i]
+        D, I = self.index.search(self._vertex([query.content]), query.limit)
+        return QueryResult(query, [QueryResultItem(self._record[i], float(d)) for d, i in zip(D[0], I[0])])
 
     def get(self, id: uuid.UUID) -> MemoryItem:
         '''
@@ -68,3 +84,17 @@ class FaissMemory(Memory):
         Iterate all memory items
         '''
         yield from self._record
+
+    def write_index(self, file:str): 
+        faiss.write_index(self.index, file)
+
+    @staticmethod
+    def read_index(file:str):
+        '''
+        Read index from file
+        Use this to restore index
+
+        Example:
+        memory = FaissMemory(..., index=FaissMemory.read_index('index.bin'))
+        '''
+        return faiss.read_index(file)

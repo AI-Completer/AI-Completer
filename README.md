@@ -89,7 +89,7 @@ We are adding more support to this program.
 - [x] Add Commands Intergation with AI model.
   - [x] Add Commands Support
 - [ ] Add memory system
-  - [x] Add History (Unable to recover)
+  - [x] Add History
   - [ ] Add Memory Analyse
 - [ ] Add More Extra Interface
 - [ ] Add GUI support

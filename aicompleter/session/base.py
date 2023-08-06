@@ -3,20 +3,15 @@ from __future__ import annotations
 import asyncio
 import enum
 import json
-import logging
-from os import name
-import pickle
 import time
 import uuid
 from typing import Any, Coroutine, Optional, Self, TypeVar, overload
 
-import aiohttp
+from asyncio import CancelledError
 import attr
 
 import aicompleter
-from aicompleter import memory
-from aicompleter.common import AsyncSaveable, Saveable
-import aicompleter.session as session
+from aicompleter import events
 from aicompleter import config, log
 from aicompleter.config import Config, EnhancedDict
 
@@ -69,6 +64,10 @@ class MultiContent(Content):
 
     @overload
     def __init__(self, contents:list[Content]) -> None:
+        ...
+
+    @overload
+    def __init__(self, json: dict|list) -> None:
         ...
 
     def __init__(self, param) -> None:
@@ -156,6 +155,11 @@ class Session:
         '''Data'''
         self._running_tasks:list[asyncio.Task] = []
         '''Running tasks'''
+        self.on_call: events.Event = events.Event(type=events.Type.Hook)
+        '''
+        Event of Call, this will be triggered when a command is called
+        If the event is stopped, the command will not be called
+        '''
 
         from ..memory import MemoryConfigure, JsonMemory
 
@@ -227,7 +231,7 @@ class Session:
         for task in self._running_tasks:
             task.cancel()
         result = await asyncio.gather(*self._running_tasks, return_exceptions=True)
-        if any([isinstance(r, Exception) for r in result]):
+        if any([isinstance(r, Exception) and not isinstance(r, CancelledError) for r in result]):
             self.logger.exception(f"Error when closing session" + "\n".join([str(r) for r in result if isinstance(r, Exception)]))
         for interface in self.in_handler._interfaces:
             await interface.session_final(self)
@@ -238,24 +242,37 @@ class Session:
             if task.done() or task.cancelled():
                 self._running_tasks.remove(task)
 
+    def get_data(self):
+        ret = {
+            'id': self.id.hex,
+            'config': self.config,
+            'storage': []
+        }
+        for i in self.in_handler._interfaces:
+            data = i.getStorage(self)
+            if data == None:
+                continue
+            ret['storage'].append({
+                'id': i.id.hex,
+                'data': data
+            })
+        return ret
+
 @attr.s(auto_attribs=True, kw_only=True)
 class Message:
     '''A normal message from the Interface.'''
-    content:MultiContent = attr.ib(factory=MultiContent, converter=MultiContent)
+    cmd:str = attr.ib(default="", kw_only=False)
+    '''Call which command to transfer this Message'''
+    content:MultiContent = attr.ib(factory=MultiContent, converter=MultiContent, kw_only=False)
     '''Content of the message'''
     session:Optional[Session] = attr.ib(default=None,validator=attr.validators.optional(attr.validators.instance_of(Session)))
     '''Session of the message'''
     id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
     '''ID of the message'''
     data:EnhancedDict = attr.ib(factory=EnhancedDict, converter=EnhancedDict, alias='extra')
-    '''
-    Data / Extra information
-    *Note*: Deprecated.
-    '''
+    '''Data information'''
     last_message: Optional[Message] = None
     '''Last message'''
-    cmd:str
-    '''Call which command to transfer this Message'''
 
     src_interface:Optional[Interface] = None
     '''Interface which send this message'''
@@ -288,7 +305,7 @@ class Message:
             self.session.history.append(self)
 
     def __str__(self) -> str:
-        return f"Called by [{self.src_interface.user.name}]: {self.content.text}"
+        return self.content.pure_text
     
     def __repr__(self) -> str:
         return f"Message({self.cmd}, {self.content.text}, {self.session.id}, {self.id})"

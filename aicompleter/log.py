@@ -10,7 +10,7 @@ import sys
 from collections.abc import Mapping
 from types import TracebackType
 from typing import Any, Iterable, Optional, TypeAlias
-from . import config
+from .utils.etype import hookclass
 
 import colorama
 
@@ -99,7 +99,7 @@ class Formatter(logging.Formatter):
         self._fmt = self._style._fmt
         self.datefmt = datefmt
 
-StreamHandler = logging.StreamHandler
+StreamHandler: TypeAlias = logging.StreamHandler
 
 class Logger(logging.Logger):
     '''
@@ -121,11 +121,7 @@ class Logger(logging.Logger):
         '''
         ret = self._stack.pop()
         return ret
-    
-    async def _log_async(self, level: int, msg: object, args: _ArgsType = (), exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1) -> None:
-        async with _on_reading:
-            return super()._log(level, msg, args, exc_info, extra, stack_info, stacklevel)
-    
+
     def makeRecord(self, name, level, fn, lno, msg, args, exc_info,
                    func=None, extra=None, sinfo=None):
         """
@@ -246,13 +242,33 @@ def configHandlers(handlers:Iterable[logging.Handler]) -> None:
     global _common_handlers
     _common_handlers = handlers
 
+root = Logger('ROOT')
+root.handlers = _common_handlers
+
+setLevel = root.setLevel
+debug = root.debug
+info = root.info
+warning = root.warning
+error = root.error
+critical = root.critical
+fatal = root.fatal
+
 def getLogger(name:str, substruct:list[str] = []) -> Logger:
     '''
     Get a logger
     '''
-    _log = Logger(name, substruct=substruct)
-    _log.setLevel(config.varibles['log_level'])
-    _log.handlers = _common_handlers
+    # _log = Logger(name, substruct=substruct)
+    # if level != None:
+    #     _log.setLevel(level)
+    # else:
+    #     _log.setLevel(config.varibles['log_level'])
+    # _log.handlers = _common_handlers
+
+    # Below is a hack to make the logger share a same class and level
+    _log = hookclass(root, {
+        'name': name,
+        '_stack': copy.copy(substruct),
+    })
     return _log
 
 del _ArgsType

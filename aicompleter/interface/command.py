@@ -48,7 +48,7 @@ class CommandParamElement(JSONSerializable):
     tooltip:str = ""
     '''Tooltip of the parameter'''
 
-    def serialize(self):
+    def __serialize__(self):
         return {
             "name":self.name,
             "type":self.type.__name__ if isinstance(self.type,type) else '',
@@ -59,7 +59,7 @@ class CommandParamElement(JSONSerializable):
         }
     
     @staticmethod
-    def deserialize(data:dict):
+    def __deserialize__(data:dict):
         raise NotImplementedError("CommandParamElement.deserialize is not implemented")
         return CommandParamElement(
             name=data['name'],
@@ -175,7 +175,7 @@ class CommandParamStruct(JSONSerializable):
         _set(self._struct, data)
         return data
     
-    def serialize(self):
+    def __serialize__(self):
         '''
         Get the json description of the struct
         '''
@@ -188,20 +188,20 @@ class CommandParamStruct(JSONSerializable):
             elif isinstance(struct, list):
                 return [_json(struct[0])]
             elif isinstance(struct, CommandParamElement):
-                return struct.serialize()
+                return struct.__serialize__()
             else:
                 raise TypeError("struct must be a dict, list or CommandParamElement instance")
         return _json(self._struct)
     
     @staticmethod
-    def deserialize(data:dict):
+    def __deserialize__(data:dict):
         '''
         Get the struct from json description
         '''
         def _from_json(struct:dict|list|str):
             if isinstance(struct, dict):
                 if 'name' in struct and isinstance(struct['name'], str):
-                    return CommandParamElement.deserialize(struct)
+                    return CommandParamElement.__deserialize__(struct)
                 ret = {}
                 for key,value in struct.items():
                     ret[key] = _from_json(value)
@@ -233,6 +233,41 @@ class CommandParamStruct(JSONSerializable):
                 raise TypeError("struct must be a dict, list or CommandParamElement instance")
         return json.dumps(_json_description(self._struct))
     
+    @staticmethod
+    def load_brief(data:dict):
+        '''
+        Load the brief from json description
+
+        This is a brief format loader, it follow in this format:
+            {
+                "name1":{
+                    "name2":"description"
+                },
+                "name2":[
+                    "description"
+                ],
+                "name3":"description"
+            }
+        '''
+        def _load_brief(struct:dict|list|str):
+            if isinstance(struct, dict):
+                ret = {}
+                for key,value in struct.items():
+                    if isinstance(value, dict):
+                        ret[key] = _load_brief(value)
+                    elif isinstance(value, list):
+                        ret[key] = [_load_brief(value[0])]
+                    elif isinstance(value, str):
+                        ret[key] = CommandParamElement(name=key, description=value)
+                    else:
+                        raise TypeError("struct must be a dict, list or str instance")
+                return CommandParamStruct(ret)
+            elif isinstance(struct, list):
+                return CommandParamStruct([_load_brief(struct[0])])
+            else:
+                raise TypeError("struct must be a dict, list or str instance")
+        return _load_brief(data)
+    
 @attr.s(auto_attribs=True)
 class CommandAuthority(JSONSerializable):
     '''
@@ -246,15 +281,6 @@ class CommandAuthority(JSONSerializable):
     '''Whether the command can list file'''
     can_execute:bool = attr.ib(default=False)
     '''Whether the command can execute the operation system command'''
-
-    @staticmethod
-    def deserialize(data:dict) -> Self:
-        return CommandAuthority(
-            can_readfile=data.get('can_readfile',False),
-            can_writefile=data.get('can_writefile',False),
-            can_listfile=data.get('can_listfile',False),
-            can_execute=data.get('can_execute',False),
-        )
     
     def get_authority_level(self):
         '''Get the authority level'''
@@ -268,15 +294,19 @@ class CommandAuthority(JSONSerializable):
         return sum([_level_map[i]**2 for i in self.__dict__ if self.__dict__[i] == True])**0.5
 
 
-@attr.s(auto_attribs=True,hash=False)
+@attr.s(auto_attribs=True,hash=False,kw_only=True)
 class Command(JSONSerializable):
     '''Command Struct'''
-    cmd:str = ""
+    cmd:str = attr.ib(default="", kw_only=False)
     '''Command'''
+    description:str = attr.ib(default="", kw_only=False)
+    '''
+    Description For Command
+    
+    This is sometimes necessery for AI to know what the command is
+    '''
     alias:set[str] = set()
     '''Alias Names'''
-    description:str = ""
-    '''Description For Command'''
     format:Optional[CommandParamStruct] = None
     '''Format For Command, if None, no format required'''
     callable_groups:set[str] = set()
@@ -295,6 +325,7 @@ class Command(JSONSerializable):
     callback:Optional[Callable[[session.Session, session.Message], Coroutine[Any, Any, Any]]] = None
     '''
     Call Function To Call The Command
+
     If None, the command will be called by in_interface
     '''
     to_return:bool = True
@@ -303,13 +334,11 @@ class Command(JSONSerializable):
     '''
 
     def __attrs_post_init__(self):
-        self.logger = log.getLogger("Command")
-        self.logger.push(self.in_interface.user.name if self.in_interface else 'Unknown')
-        self.logger.push(self.cmd)
-        if bool(os.environ.get("DEBUG",False)):
-            self.logger.setLevel(log.DEBUG)
-        else:
-            self.logger.setLevel(log.INFO)
+        self.logger = log.getLogger("Command", [self.in_interface.user.name if self.in_interface else 'Unknown', self.cmd])
+        if self.format is not None:
+            if isinstance(self.format, (dict, list)):
+                self.format = CommandParamStruct.load_brief(self.format)
+            utils.typecheck(self.format, (CommandParamStruct, CommandParamElement))
     
     def check_support(self, handler:Handler, user:User) -> bool:
         '''Check whether the user is in callable_groups'''
@@ -343,21 +372,19 @@ class Command(JSONSerializable):
             raise e
         except Exception as e:
             raise error.Interrupted(f"Call interrupted by exception: Command.call",message=message,interface=self.in_interface, error=e) from e
-
-        if bool(config.varibles['disable_memory']) == False:
-            # Add Memory
-            session._memory.put(MemoryItem(
-                content=message.content.text,
-                category=f"command",
-                data={
-                    'cmd':self.cmd,
-                    'from':message.src_interface.id.hex if message.src_interface else None,
-                    'to': message.dest_interface.id.hex if message.dest_interface else None,
-                },
-            ))
         
         if self.callback is not None:
-            task = asyncio.get_event_loop().create_task(self.callback(session, message))
+            extra_params = {}
+            if 'config' in self.callback.__annotations__:
+                extra_params['config'] = self.in_interface.getconfig(session)
+            if 'data' in self.callback.__annotations__:
+                extra_params['data'] = self.in_interface.getdata(session)
+            if 'logger' in self.callback.__annotations__:
+                extra_params['logger'] = self.logger
+            if 'interface' in self.callback.__annotations__:
+                extra_params['interface'] = self.in_interface
+            
+            task = asyncio.get_event_loop().create_task(self.callback(session=session, message=message, **extra_params))
             session._running_tasks.append(task)
             try:
                 ret = await task
@@ -390,7 +417,7 @@ class Command(JSONSerializable):
         '''
         if not callable(callback):
             raise TypeError("call_func must be a callable function")
-        self._call_func = callback
+        self.callback = callback
 
     def __call__(self, session:session.Session, message:session.Message) -> Coroutine[Any, Any, Any | None]:
         '''Call the command'''
@@ -410,12 +437,12 @@ class Command(JSONSerializable):
             "cmd":self.cmd,
             "alias":list(self.alias),
             "description":self.description,
-            "format":self.format.serialize() if self.format else None,
+            "format":self.format.__serialize__() if self.format else None,
             "callable_groups":list(self.callable_groups),
             "overrideable":self.overrideable,
             "extra":self.extra,
             "expose":self.expose,
-            "authority":self.authority.serialize(),
+            "authority":self.authority.__serialize__(),
             "to_return":self.to_return,
             "callback":self.callback.__qualname__ if self.callback else None,
             "in_interface":self.in_interface.id.hex if self.in_interface else None,
@@ -511,17 +538,48 @@ class Commands(dict[str,Command]):
         for i in self.values():
             func(i)
 
-    def register(self, value:Command):
+    @overload
+    def register(self, command:Command):
+        ...
+
+    @overload
+    def register(self, 
+                 cmd:str, 
+                 description:str="", 
+                 *, 
+                 alias:set[str]=set(), 
+                 format:Optional[CommandParamStruct | dict[str, Any]]=None, 
+                 callable_groups:set[str]=set(), 
+                 overrideable:bool=False, 
+                 extra:dict={}, 
+                 expose:bool=True, 
+                 authority:CommandAuthority=CommandAuthority(), 
+                 to_return:bool=True,
+                 **kwargs):
+        ...
+
+    def register(self, *args, **kwargs):
         '''
         Decorator for registering a command
         '''
+        if len(args) == 1 and len(kwargs) == 0 and isinstance(args[0], Command):
+            value = args[0]
+        else:
+            if len(args) == 1 and isinstance(args[0], str):
+                kwargs['cmd'] = args[0]
+            if len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], str):
+                kwargs['cmd'] = args[0]
+                kwargs['description'] = args[1]
+            if 'cmd' not in kwargs:
+                raise TypeError("cmd must be specified")
+            value = Command(**kwargs)
         @functools.wraps(value)
         def wrapper(func:Callable[[session.Session, session.Message], None]):
             value.bind(func)
             self.add(value)
             return func
         return wrapper
-
+    
     @overload
     def get_executable(self, user:User):
         ...

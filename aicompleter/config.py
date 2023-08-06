@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import os
 from re import A
-from typing import Any
+from typing import Any, Self
 
 from .error import ConfigureMissing
 from .utils import EnhancedDict
@@ -72,20 +72,33 @@ class Config(EnhancedDict):
         _check(__key, __value)
         return super().__setitem__(__key, __value)
     
+    @staticmethod
+    def __deserialize__(data:dict) -> Self:
+        '''
+        Deserialize a value
+        '''
+        return Config(data)
+    
+    def update_global(self):
+        '''
+        Update global config
+        '''
+        for name, value in self.items():
+            if name == 'global':
+                continue
+            if isinstance(value, dict):
+                value.update(super()['global'])
+    
 def loadConfig(path:str) -> Config:
     '''Load configuration from file'''
     return Config.loadFromFile(path)
 
 # Global configuration bypass different modules
 varibles = Config({
-    'debug': False,
-    'log_level': 'INFO',
-    'disable_memory': False,
     'disable_faiss': False,
 })
 
 __map_environment__ = {
-    'DISABLE_MEMORY': ('disable_memory', bool),
     'DISABLE_FAISS': ('disable_faiss', bool),
 }
 

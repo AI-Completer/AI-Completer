@@ -45,7 +45,7 @@ class WebAnalyse(Interface):
         from ...utils import text
         from .summarizer import SummaryInterface
 
-        lines = await text.getLimitedLengthSplitWebText(url, split_length=split_length, proxy=proxy)
+        lines = await text.getChunkedWebText(url, split_length=split_length, proxy=proxy)
         summary_interface:SummaryInterface = session.in_handler.get_interface(SummaryInterface)[0]
         if len(lines) == 1 and len(summary_interface.ai.getToken(lines[0])) < 1024:
             return lines[0]

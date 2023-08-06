@@ -12,24 +12,15 @@ import uuid
 from aicompleter import *
 from aicompleter import Session
 from aicompleter.ai.ai import ChatTransformer
+from aicompleter.common import deserialize, serialize
 
 class SelfStateExecutor(ai.ChatInterface):
     '''
     AI Executor of the state machine
     '''
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.commands.add(Command(
-            cmd='agent',
-            callable_groups={'user'},
-            overrideable=False,
-            callback=self.cmd_agent,
-            in_interface=self,
-        ))
-        
-    async def session_init(self, session: Session):
-        ret = await super().session_init(session)
+    cmdreg = Commands()
 
+    def _gen_agent(self, session: Session):
         avaliable_commands = Commands()
         avaliable_commands.add(*session.in_handler.get_executable_cmds(self._user))
         
@@ -121,9 +112,19 @@ Do not reply with anything else.
                 role='assistant',
             )
         ])
-
+        return agent
+        
+    async def session_init(self, session: Session):
+        ret = await super().session_init(session)
+        self._gen_agent(session)
         return ret
 
+    @cmdreg.register(
+        'agent',
+        'Start an agent to execute a task',
+        callable_groups={'user'},
+        overrideable=False,
+    )
     async def cmd_agent(self, session: Session, message: Message):
         '''
         Start an agent to execute a task
@@ -138,4 +139,13 @@ Do not reply with anything else.
         agent:ai.agent.Agent = self.getdata(session)['agent']
         agent.ask(_cr_message(message.content.pure_text))
         
-        return None
+        await agent.wait()
+        return agent.result
+
+    def setStorage(self, session: Session, data: dict):
+        conversation = deserialize(data)
+        agent = self._gen_agent(session)
+        agent.conversation = conversation
+
+    def getStorage(self, session: Session) -> dict:
+        return serialize(self.getdata(session)['agent'].conversation)

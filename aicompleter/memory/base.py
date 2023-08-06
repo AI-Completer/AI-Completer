@@ -43,7 +43,7 @@ class MemoryCategory:
     def __hash__(self) -> int:
         return hash(self.category)
 
-@attr.s(auto_attribs=True)
+@attr.dataclass
 class MemoryItem(JSONSerializable):
     '''
     Memory Item
@@ -64,7 +64,7 @@ class MemoryItem(JSONSerializable):
     'The timestamp of the item'
 
     @staticmethod
-    def deserialize(src: dict) -> Self:
+    def __deserialize__(src: dict) -> Self:
         '''
         Get a MemoryItem from a dict
         '''
@@ -76,7 +76,7 @@ class MemoryItem(JSONSerializable):
             ret.data = deserialize(src['data'], globals())
         return ret
     
-    def serialize(self) -> dict:
+    def __serialize__(self) -> dict:
         '''
         Get a dict from a MemoryItem
         '''
@@ -91,19 +91,19 @@ class MemoryItem(JSONSerializable):
         ret['data'] = serialize(self.data)
         return ret
 
-@attr.s
-class Query:
+@attr.dataclass
+class Query(JSONSerializable):
     '''
     Query
     '''
     content:str = attr.ib(validator=attr.validators.instance_of(str))
     'The content of the query'
+    limit: int = attr.ib(default=10, validator=attr.validators.instance_of(int))
+    'The limit of the query'
     class_: Optional[str] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(str)))
     'The class of the query, usually used for classification for different types of items'
-    limit: int = attr.ib(default=10, validator=attr.validators.instance_of(int), converter=int)
-    'The limit of the query'
 
-class Memory(Saveable, JSONSerializable):
+class Memory(Saveable):
     '''
     Memory(Abstraction Layer)
     '''
@@ -145,7 +145,7 @@ class Memory(Saveable, JSONSerializable):
         pass
 
     @abstractmethod
-    def query(self, query:Query) -> Iterator[MemoryItem]:
+    def query(self, query:Query) -> QueryResult:
         '''
         Query memory items by vertex and class
         '''
@@ -164,7 +164,6 @@ class Memory(Saveable, JSONSerializable):
         for item in self.all():
             func(item)
 
-    @abstractmethod
     def all(self) -> Iterator[MemoryItem]:
         '''
         Get all memory items
@@ -174,22 +173,17 @@ class Memory(Saveable, JSONSerializable):
     def save(self, path:str) -> None:
         '''
         Save the memory to a file
-        You can modify this function to support other file format
         '''
-        with open(path, 'w') as f:
-            json.dump(self.serialize(), f, ensure_ascii=False, indent=4)
+        raise NotImplementedError(f"Class {self.__class__.__name__} does not support save method")
     
     @staticmethod
     def load(path:str) -> Self:
         '''
         Load the memory from a file
-        You can modify this function to support other file format
         '''
-        with open(path, 'r') as f:
-            data = json.load(f)
-            return Memory.deserialize(data)
+        raise NotImplementedError("This method is not implemented")
 
-@attr.s(auto_attribs=True)
+@attr.dataclass
 class MemoryConfigure:
     '''
     Configure of the memory
@@ -217,3 +211,51 @@ class MemoryConfigure:
     def check_initial_memory(self, attribute: str, value: Optional[Memory]) -> None:
         if value != None and self.factory != value.__class__ and self.factory != None:
             raise ValueError(f"Initial memory must be {self.factory.__name__}.")
+
+@attr.dataclass
+class QueryResultItem(JSONSerializable):
+    '''
+    Query Result Item
+    '''
+    value: MemoryItem = attr.ib(validator=attr.validators.instance_of(MemoryItem))
+    'The result of the query'
+    distance: float = attr.ib(validator=attr.validators.instance_of(float))
+    'The distance of the result to the query'
+
+@attr.dataclass(frozen=True)
+class QueryResult(JSONSerializable):
+    '''
+    Query Result
+    '''
+    query: Query = attr.ib(validator=attr.validators.instance_of(Query))
+    'The query'
+    items: list[QueryResultItem] = attr.ib(validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(QueryResultItem)))
+    'The result of the query'
+    
+    @property
+    def count(self) -> int:
+        '''
+        Count of the result
+        '''
+        return len(self.items)
+
+    def __attrs_post_init__(self) -> None:
+        if len(self.items) != self.count:
+            raise ValueError(f"Count of the result is not equal to the length of the result")
+        if self.count > self.query.limit:
+            raise ValueError(f"Count of the result is larger than the limit of the query")
+
+    def __iter__(self) -> Iterator[QueryResultItem]:
+        return iter(self.items)
+
+    def __getitem__(self, index: int) -> QueryResultItem:
+        return self.items[index]
+
+    def __len__(self) -> int:
+        return self.count
+
+    def __repr__(self) -> str:
+        return f"QueryResult(query={self.query}, result={self.items})"
+
+    def __str__(self) -> str:
+        return f"QueryResult(query={self.query}, result={self.items})"

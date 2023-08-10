@@ -11,8 +11,9 @@ import attr
 from ..common import JSONSerializable, deserialize, serialize
 from ..config import Config
 from ..memory import JsonMemory, Memory, Memoryable, MemoryItem
+from . import token
 
-@attr.s(auto_attribs=True)
+@attr.dataclass
 class AI(JSONSerializable):
     '''
     Abstract class for AI
@@ -70,19 +71,27 @@ class Transformer(AI):
         raise NotImplementedError(
             f"generate_many() is not implemented in {self.__class__.__name__}")
     
-    def getToken(self, text: str) -> list[str]:
+    def getToken(self, text: str) -> list[int]:
         '''
         Get token of text
         '''
-        from .token import Encoder
-        if self.encoding:
-            return Encoder(encoding=self.encoding).encode(text)
-        elif self.model:
-            return Encoder(model = self.model).encode(text)
-        else:
-            raise Exception('No encoding or model specified')
+        return self.encoder.encode(text)
+    
+    @property
+    def encoder(self) -> token.Encoder:
+        '''
+        Get encoder
+        '''
+        if '_encoder' not in self.__dict__:
+            if self.encoding:
+                self._encoder = token.Encoder(encoding=self.encoding)
+            elif self.name:
+                self._encoder = token.Encoder(model=self.name)
+            else:
+                raise ValueError("No encoder specified")
+        return self._encoder
 
-@attr.s(auto_attribs=True)
+@attr.dataclass
 class Message(JSONSerializable):
     '''
     Message of conversation
@@ -117,7 +126,7 @@ class Message(JSONSerializable):
             'data': self.data,
         }, timestamp=self.time, user=self.user, content=self.content, category='message')
     
-@attr.s(auto_attribs=True)
+@attr.dataclass
 class FuncParam(JSONSerializable):
     '''
     Parameter of function
@@ -142,7 +151,7 @@ class FuncParam(JSONSerializable):
             raise ValueError(
                 f"name must be a valid identifier, not {value}")
 
-@attr.s(auto_attribs=True)
+@attr.dataclass
 class Function(JSONSerializable):
     '''
     Function that called by AI,
@@ -164,7 +173,7 @@ class Function(JSONSerializable):
             raise ValueError(
                 f"name must be a valid identifier, not {value}")
 
-@attr.s(auto_attribs=True)
+@attr.dataclass
 class Funccall(JSONSerializable):
     '''
     Function call of AI

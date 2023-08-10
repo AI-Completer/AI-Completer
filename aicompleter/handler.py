@@ -260,6 +260,8 @@ class Handler(AsyncLifeTimeManager):
         Get interfaces which match the condition
         :param id:uuid.UUID, the id of the interface
         :param groupname:str, the groupname of the interface
+        :param interface:Interface, the interface
+        :param cls:type, the type of the interface
         '''
         if isinstance(param, uuid.UUID):
             for i in self._interfaces:
@@ -294,6 +296,22 @@ class Handler(AsyncLifeTimeManager):
             if isinstance(i, cls):
                 return True
         return False
+    
+    def require_interface(self, cls:type[Interface], user:Optional[User] = None) -> Interface:
+        if not issubclass(cls, Interface):
+            raise TypeError(f"Expected type Interface, got {type(cls)}")
+        for cmd in self._namespace.get_executable(user):
+            cmd:Command
+            if cmd.in_interface:
+                if isinstance(cmd.in_interface, cls):
+                    return cmd.in_interface
+        # If no command found, try to find interface
+        for interface in self._interfaces:
+            if isinstance(interface, cls):
+                if interface.commands.empty():
+                    # This is right, because no command is executable and therefor no permission is required
+                    return interface
+        raise error.NotFound(f"Require Interface {cls}, but not found or permission required" + (f" with user {user.name}" if user else ""))
     
     @property
     def interfaces(self) -> set[Interface]:
@@ -363,11 +381,6 @@ class Handler(AsyncLifeTimeManager):
             self._update_running_sessions()
 
         asyncio.get_event_loop().create_task(_handle_call())
-
-    asend = call
-    '''Alias of call'''
-    send = call_soon
-    '''Alias of call_soon'''
 
     def _update_running_sessions(self):
         for i in self._running_sessions:
@@ -464,18 +477,20 @@ class Handler(AsyncLifeTimeManager):
                 _inter._id = uuid.UUID(i['id'])
                 assert _inter in self._interfaces, "Interface not in handler"
             else:
+                kwparams = utils.appliable_parameters(cls.__init__,{
+                    'config': Config.__deserialize__(i['config']),
+                    'user': User.__deserialize__(i['user']),
+                    'id': uuid.UUID(i['id']),
+                })
                 try:
-                    _inter = cls(
-                        id = uuid.UUID(i['id']),
-                        config = Config.__deserialize__(i['config']),
-                    )
+                    _inter = cls(**kwparams)
                 except TypeError as e:
                     self.logger.error("Exception: %s", e)
                     self.logger.fatal("Failed to initialize interface %s(%s)", i['id'], cls.__name__)
                     raise e
                 _inter._user = User.__deserialize__(i['user'])
                 self._interfaces.append(_inter)
-            for cmd in i['commands']:
+            for cmd in i.get('commands', []):
                 if cmd['name'] not in _inter.commands:
                     raise error.NotFound(cmd['name'], interface=_inter, handler=self)
                 _inter.commands[cmd['name']].callable_groups = set(cmd['callable_groups'])

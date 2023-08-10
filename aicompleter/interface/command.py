@@ -4,6 +4,7 @@ Command Support For Interface
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import copy
 import functools
 import json
@@ -307,7 +308,7 @@ class Command(JSONSerializable):
     '''
     alias:set[str] = set()
     '''Alias Names'''
-    format:Optional[CommandParamStruct] = None
+    format:Optional[CommandParamStruct] = attr.ib(default=None)
     '''Format For Command, if None, no format required'''
     callable_groups:set[str] = set()
     '''Groups who can call this command'''
@@ -335,11 +336,21 @@ class Command(JSONSerializable):
 
     def __attrs_post_init__(self):
         self.logger = log.getLogger("Command", [self.in_interface.user.name if self.in_interface else 'Unknown', self.cmd])
-        if self.format is not None:
-            if isinstance(self.format, (dict, list)):
-                self.format = CommandParamStruct.load_brief(self.format)
-            utils.typecheck(self.format, (CommandParamStruct, CommandParamElement))
-    
+        # if self.format is not None:
+        #     if isinstance(self.format, (dict, list)):
+        #         self.format = CommandParamStruct.load_brief(self.format)
+        #     utils.typecheck(self.format, (CommandParamStruct, CommandParamElement))
+
+    def _(value: Optional[CommandParamStruct | dict[str, Any]]):
+        if value is None:
+            return None
+        if isinstance(value, (dict, list)):
+            return CommandParamStruct.load_brief(value)
+        utils.typecheck(value, (CommandParamStruct, CommandParamElement))
+        return value
+    format.converter = _
+    del _
+
     def check_support(self, handler:Handler, user:User) -> bool:
         '''Check whether the user is in callable_groups'''
         for group in handler._groupset:
@@ -363,49 +374,50 @@ class Command(JSONSerializable):
         if self.format != None:
             if not self.format.check(message.content.pure_text):
                 raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",self.in_interface, src_message = message, format=self.format)
-            message.content = MultiContent(self.format.setdefault(message.content.pure_text))
+            message.content = MultiContent(self.format.setdefault(message.content.json))
         
         try:
             # Trigger the call event
             await session.in_handler._on_call(session, message)
         except error.Interrupted as e:
+            self.logger.info("Call interrupted by event")
             raise e
         except Exception as e:
+            self.logger.error("Call interrupted by exception of event", exc_info=True)
             raise error.Interrupted(f"Call interrupted by exception: Command.call",message=message,interface=self.in_interface, error=e) from e
         
         if self.callback is not None:
-            extra_params = {}
+            extra_params = utils.appliable_parameters(self.callback, {
+                'session': session,
+                'message': message,
+                'logger': self.logger,
+                'interface': self.in_interface,
+            })
+            
             if 'config' in self.callback.__annotations__:
                 extra_params['config'] = self.in_interface.getconfig(session)
             if 'data' in self.callback.__annotations__:
                 extra_params['data'] = self.in_interface.getdata(session)
-            if 'logger' in self.callback.__annotations__:
-                extra_params['logger'] = self.logger
-            if 'interface' in self.callback.__annotations__:
-                extra_params['interface'] = self.in_interface
+
+            # if the parameter is in json format, load it
+            with contextlib.suppress(json.JSONDecodeError):
+                # use message content because it has been loaded by format
+                data = message.content.json
+                if isinstance(data, dict):
+                    for k,v in data.items():
+                        if k not in self.callback.__annotations__:
+                            continue
+                        extra_params.setdefault(k, v) # do not override (!important)
             
-            task = asyncio.get_event_loop().create_task(self.callback(session=session, message=message, **extra_params))
-            session._running_tasks.append(task)
-            try:
+            async with session._running_tasks.session(self.callback(**extra_params)) as task:
                 ret = await task
-            except asyncio.CancelledError as e:
-                session._running_tasks.remove(task)
-                raise e
-            except Exception as e:
-                session._running_tasks.remove(task)
-                raise e
-            session._running_tasks.remove(task)
         else:   
             if self.in_interface is None:
                 raise error.ParamRequired(f"[Command <{self.cmd}>]in_interface required: Command.call")
-            task = asyncio.get_event_loop().create_task(self.in_interface.call(session, message))
-            session._running_tasks.append(task)
-            try:
+            
+            async with session._running_tasks.session(self.in_interface.call(session, message)) as task:
                 ret = await task
-            except Exception as e:
-                session._running_tasks.remove(task)
-                raise e
-            session._running_tasks.remove(task)
+        
         if ret is not None:
             self.logger.debug("Command return value: %s" % str(ret))
         return ret
@@ -613,6 +625,12 @@ class Commands(dict[str,Command]):
 
     def __iter__(self) -> Iterator[Command]:
         return self.values().__iter__()
+    
+    def empty(self) -> bool:
+        '''
+        Whether the set is empty
+        '''
+        return len(self) == 0
 
 @attr.s(auto_attribs=True)
 class Result:

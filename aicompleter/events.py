@@ -23,16 +23,14 @@ class Type(Enum):
 @attr.s(auto_attribs=True, kw_only=True)
 class Event:
     '''Base class for all events'''
-    id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
-    '''ID'''
-    type:Type = attr.ib(default=Type.Exception, validator=attr.validators.instance_of(Type))
+    type:Type = attr.ib(default=Type.Exception, validator=attr.validators.instance_of(Type), kw_only=False)
     '''Type of the event'''
     callbacks:list[Callable[[Event,*object],Coroutine[bool, None, None]]] = attr.ib(factory=list, validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(Callable), iterable_validator=attr.validators.instance_of(list)))
     '''
     Callback functions
     When a callback function returns True, the event will be stopped
     '''
-    extra:dict = attr.ib(factory=dict, validator=attr.validators.deep_mapping(key_validator=attr.validators.instance_of(str), value_validator=attr.validators.instance_of(object)))
+    data:dict = attr.ib(factory=dict, validator=attr.validators.deep_mapping(key_validator=attr.validators.instance_of(str), value_validator=attr.validators.instance_of(object)))
     '''Extra information'''
 
     def __attrs_post_init__(self):
@@ -43,15 +41,19 @@ class Event:
         self.last_active_time = time.time()
         for cb in self.callbacks:
             if (await cb(self, *args, **kwargs)):
-                return True
-        return False
+                return cb
+        return None
 
-    async def trigger(self, *args, **kwargs):
+    def trigger(self, *args, **kwargs):
         '''
         Trigger the event
+        
         When triggered, the callbacks will be called orderly unless one of them returns True
+
+        Returns:
+            The callback function that returns True, or None if no callback returns True
         '''
-        return await self(*args, **kwargs)
+        return self(*args, **kwargs)
 
     def add_callback(self, cb:Callable[[Event,*object],Coroutine[bool, None, None]]) -> None:
         '''Add callback function'''

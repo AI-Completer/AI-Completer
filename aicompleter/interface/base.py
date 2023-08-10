@@ -3,6 +3,7 @@ Base Objects for Interface of AutoDone-AI
 '''
 import copy
 import os
+from typing_extensions import deprecated
 import uuid
 from abc import ABCMeta, abstractmethod
 from typing import Coroutine, Optional, Self, TypeVar, Union, overload
@@ -20,18 +21,19 @@ from .command import Command, Commands
 
 Handler = TypeVar('Handler', bound='handler.Handler')
 
-@attr.s(auto_attribs=True, kw_only=True, hash=False)
+@attr.dataclass(kw_only=True, hash=False)
 class User(JSONSerializable):
     '''User'''
-    name:str = ""
+    name:str = attr.ib(default="", kw_only=False)
     '''
     Name of the user
     If the name is empty, the user will be assigned a name by the handler
     '''
+    description:Optional[str] = attr.ib(default=None, kw_only=False)
+    '''Description of the user'''
+    
     id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
     '''ID of the user'''
-    description:Optional[str] = attr.ib(default=None)
-    '''Description of the user'''
     in_group:str = attr.ib(default="",on_setattr=lambda self, attr, value: self.all_groups.add(value))
     '''Main Group that the user in'''
     all_groups:set[str] = attr.ib(factory=set)
@@ -265,32 +267,50 @@ class GroupSet(JSONSerializable):
                     return j
         return None
 
-# Note: Interface is a abstract class, when implemented by the main module,  
-#      the subclass of Interface (implemented not abstract) should only have one constructor with keyword config, id
-#      The constructor should have a format like this:
-#      def __init__(self, config:Config, id:uuid.UUID = uuid.uuid4()):
 class Interface(AsyncLifeTimeManager):
     '''Interface of AI Completer'''
     cmdreg = Commands()
     '''
     Command Register
+    
     Add Command to this class to register a command
     '''
-    def __init__(self,  namespace:str, user:User,id:uuid.UUID = uuid.uuid4(), config: config.Config = config.Config()):
+    configFactory:type[Config] = Config
+    '''
+    Configure Factory, this factory will be used to create a configure for the interface
+    '''
+    dataFactory:type[utils.EnhancedDict] = utils.EnhancedDict
+    '''
+    Data Factory, this factory will be used to create a data class for the interface
+    '''
+
+    def __init__(self, 
+                 namespace:str, 
+                 user:User,
+                 id:uuid.UUID = uuid.uuid4(), 
+                 config: config.Config = config.Config(), 
+                 configFactory:Optional[type[Config]] = None,
+                 dataFactory:Optional[type[utils.EnhancedDict]] = None):
+        
         super().__init__()
         self._user = user
         '''Character of the interface'''
         utils.typecheck(id, uuid.UUID)
         self._id:uuid.UUID = id
         '''ID'''
+        if configFactory:
+            self.configFactory:type[Config] = configFactory
+        if dataFactory:
+            self.dataFactory:type[utils.EnhancedDict] = dataFactory
 
         self.namespace:Namespace = Namespace(
             name=namespace,
             description="Interface %s" % str(self._id),
             config=config,
+            data=self.dataFactory(),
         )
 
-        self.logger:log.Logger = log.getLogger("interface", ['%s - %s' % (self.namespace.name, str(self._id))])
+        self.logger:log.Logger = log.getLogger("interface", [self.namespace.name])
         '''Logger of Interface'''
         for cls in (*self.__class__.__bases__, self.__class__):
             if issubclass(cls, Interface):
@@ -353,21 +373,53 @@ class Interface(AsyncLifeTimeManager):
         '''Finial function for Interface'''
         self.logger.debug("Interface %s finalizing" % self.id)
 
-    async def session_init(self,session:session.Session):
-        '''Initial function for Session'''
+    async def session_init(self, session:Optional[session.Session] = None):
+        '''
+        Initial function for Session
+        
+        This method can be inherited with arguments
+        - session:Session (optional), the session to init
+
+        ::
+            >>> async def session_init(self, session:Session):
+            ...     await super().session_init()
+            ...     # Do something
+        '''
         pass
 
-    async def session_final(self,session:session.Session):
-        '''Finial function for Session'''
+    async def session_final(self, session:Optional[session.Session] = None):
+        '''
+        Finial function for Session
+        
+        This method can be inherited with arguments
+        - session:Session (optional), the session to final
+
+        ::
+            >>> async def session_final(self, session:Session):
+            ...     await super().session_final()
+            ...     # Do something
+        '''
         pass
 
-    def getconfig(self, session:Optional[session.Session] = None) -> Config:
+    @overload
+    def getconfig(self, session:session.Session) -> Config:
+        pass
+
+    @overload
+    def getconfig(self, session:None, configFactory:type[Config]) -> Config:
+        pass
+
+    def getconfig(self, session:Optional[session.Session] = None, configFactory: type[Config] = None) -> Config:
         '''
         Get the config of the interface
         :param session: Session
+        :param configFactory: Config Factory, if specified, will create a new config by the factory
+
+        :return: Session Config, if session is None, return interface config
         '''
         # There is a config conflict when using mutable interface
-        ret = copy.deepcopy(session.config['global'])
+        ret = (configFactory or self.configFactory)()
+        ret.update(session.config['global'])
         ret.update(self.namespace.config)
         if session:
             ret.update(session.config[self.namespace.name])
@@ -380,13 +432,11 @@ class Interface(AsyncLifeTimeManager):
         '''
         return session.data[self.id.hex]
 
+    @deprecated("Interface global call is deprecated, use stable command instead")
     async def call(self, session:session.Session, message:session.Message):
         '''
         Call the command
 
-        *Note*: Handler Class has add the history, no need to add it again
-        Call by this method will skip the command check,
-        this command can return any type of value
         :param session: Session
         :param message: Message
         '''

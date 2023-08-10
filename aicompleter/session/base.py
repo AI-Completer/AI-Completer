@@ -5,18 +5,16 @@ import enum
 import json
 import time
 import uuid
+from asyncio import CancelledError
 from typing import Any, Coroutine, Optional, Self, TypeVar, overload
 
-from asyncio import CancelledError
 import attr
 
 import aicompleter
-from aicompleter import events
-from aicompleter import config, log
-from aicompleter.config import Config, EnhancedDict
 
-if bool(config.varibles['disable_memory']) == False:
-    from aicompleter.memory import (Memory, MemoryItem, MemoryConfigure)
+from .. import config, events, log, utils
+from ..config import Config, EnhancedDict
+from ..memory import Memory, MemoryConfigure, MemoryItem
 
 Handler = TypeVar('Handler', bound='aicompleter.handler.Handler')
 User = TypeVar('User', bound='aicompleter.interface.User')
@@ -70,7 +68,7 @@ class MultiContent(Content):
     def __init__(self, json: dict|list) -> None:
         ...
 
-    def __init__(self, param) -> None:
+    def __init__(self, param = None) -> None:
         self.contents:list[Content] = []
         if isinstance(param, str):
             self.contents.append(Text(param))
@@ -153,7 +151,7 @@ class Session:
         '''Session Config'''
         self.data:EnhancedDict = EnhancedDict()
         '''Data'''
-        self._running_tasks:list[asyncio.Task] = []
+        self._running_tasks:utils.TaskList = utils.TaskList()
         '''Running tasks'''
         self.on_call: events.Event = events.Event(type=events.Type.Hook)
         '''
@@ -161,7 +159,7 @@ class Session:
         If the event is stopped, the command will not be called
         '''
 
-        from ..memory import MemoryConfigure, JsonMemory
+        from ..memory import JsonMemory, MemoryConfigure
 
         memory = memory or MemoryConfigure(factory=JsonMemory)
         self._memory:Memory = memory.initial_memory or memory.factory(*memory.factory_args, **memory.factory_kwargs)
@@ -211,17 +209,91 @@ class Session:
     def closed(self) -> bool:
         return self._closed
     
+    @overload
     def asend(self, message:Message):
-        '''Send a message.(async)'''
-        if self._closed:
-            raise RuntimeError("Session closed")
-        return self.in_handler.asend(self,message)
+        ...
+
+    @overload
+    def asend(self, cmd:str, 
+            content:MultiContent = MultiContent(),
+            *,
+            data:EnhancedDict = EnhancedDict(), 
+            last_message: Optional[Message] = None,
+            src_interface:Optional[Interface] = None,
+            dest_interface:Optional[Interface] = None,
+        ):
+        ...
     
+    def asend(self, cmd_or_msg:str|Message, 
+            content:Optional[MultiContent] = None,
+            *args, **kwargs
+        ):
+        '''Send a message.(async)'''
+        if isinstance(cmd_or_msg, Message):
+            if content is not None or len(args) or len(kwargs):
+                raise ValueError("Cannot specify content or args or kwargs when sending a Message")
+            if self._closed:
+                raise RuntimeError("Session closed")
+            return self.in_handler.send(self, cmd_or_msg)
+        elif isinstance(cmd_or_msg, str):
+            params = {
+                'cmd': cmd_or_msg,
+                'content': content or MultiContent(),
+                'data': kwargs.pop('data', EnhancedDict()),
+                'last_message': kwargs.pop('last_message', None),
+                'src_interface': kwargs.pop('src_interface', None),
+                'dest_interface': kwargs.pop('dest_interface', None),
+            }
+            if len(args) or len(kwargs):
+                raise ValueError("Cannot specify args or kwargs when sending a cmd")
+            if self._closed:
+                raise RuntimeError("Session closed")
+            return self.in_handler.call(self, Message(**params))
+        else:
+            raise TypeError(f"Unsupported type {type(cmd_or_msg)}")
+    
+    @overload
     def send(self, message:Message):
+        ...
+
+    @overload
+    def send(self, cmd:str, 
+            content:MultiContent = MultiContent(),
+            *,
+            data:EnhancedDict = EnhancedDict(), 
+            last_message: Optional[Message] = None,
+            src_interface:Optional[Interface] = None,
+            dest_interface:Optional[Interface] = None,
+        ):
+        ...
+    
+    def send(self, cmd_or_msg:str|Message, 
+            content:Optional[MultiContent] = None,
+            *args, **kwargs
+        ):
         '''Send a message.'''
-        if self._closed:
-            raise RuntimeError("Session closed")
-        return self.in_handler.send(self,message)
+        if isinstance(cmd_or_msg, Message):
+            if content is not None or len(args) or len(kwargs):
+                raise ValueError("Cannot specify content or args or kwargs when sending a Message")
+            if self._closed:
+                raise RuntimeError("Session closed")
+            return self.in_handler.send(self, cmd_or_msg)
+        elif isinstance(cmd_or_msg, str):
+            params = {
+                'cmd': cmd_or_msg,
+                'content': content or MultiContent(),
+                'data': kwargs.pop('data', EnhancedDict()),
+                'last_message': kwargs.pop('last_message', None),
+                'src_interface': kwargs.pop('src_interface', None),
+                'dest_interface': kwargs.pop('dest_interface', None),
+            }
+            if len(args) or len(kwargs):
+                raise ValueError("Cannot specify args or kwargs when sending a cmd")
+            if self._closed:
+                raise RuntimeError("Session closed")
+            return self.in_handler.call_soon(self, Message(**params))
+        else:
+            raise TypeError(f"Unsupported type {type(cmd_or_msg)}")
 
     async def close(self):
         '''Close the session.'''
@@ -269,7 +341,7 @@ class Message:
     '''Session of the message'''
     id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
     '''ID of the message'''
-    data:EnhancedDict = attr.ib(factory=EnhancedDict, converter=EnhancedDict, alias='extra')
+    data:EnhancedDict = attr.ib(factory=EnhancedDict, converter=EnhancedDict)
     '''Data information'''
     last_message: Optional[Message] = None
     '''Last message'''

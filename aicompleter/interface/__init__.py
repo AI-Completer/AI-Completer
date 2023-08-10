@@ -13,3 +13,4 @@ from .command import (
     Result,
     CommandAuthority,
 )
+CommandParam = CommandParamElement

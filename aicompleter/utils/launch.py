@@ -88,4 +88,6 @@ def run_handler(entry: asyncio.Future, handler, loop:Optional[asyncio.AbstractEv
     start(entry, loop=loop, logger=logger)
     loop = loop or asyncio.get_event_loop()
     loop.create_task(handler.close())
-    launch(loop=loop, logger=logger or logging.getLogger('main'))
+    if logger == None:
+        logger = logging.getLogger('main')
+    launch(loop=loop, logger=logger)

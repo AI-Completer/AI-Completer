@@ -1,8 +1,14 @@
+from __future__ import annotations
 
+import asyncio
 import functools
-from typing import Any, Callable, Literal, TypeVar, Self
-import typing
 import inspect
+import typing
+from typing import (Any, Callable, Coroutine, Iterable, Literal, Mapping, Optional, Self, TypeAlias,
+                    TypeVar, overload)
+
+from .. import common
+from .typeval import verify
 
 def typecheck(value:Any, type_:type|tuple[type, ...]):
     '''
@@ -248,3 +254,321 @@ def hookclass(obj:_T, hooked_vars:dict[str, Any])-> _T:
                 return delattr(obj, __name)
 
     return HookClass()
+
+del _T
+
+@overload
+def link_property(link:str):...
+
+@overload
+def link_property(linkdict:dict, key:str):...
+
+@overload
+def link_property(linkdict:str, key:str):...
+
+def link_property(link: str|dict, key:Optional[str]=None, *, enable_set=True, enable_del=True, doc=None):
+    '''
+    Link a property to the link
+
+    Examples
+    ---------
+    ::
+        >>> dic = {'k': "value"}
+        >>> class A:
+        ...     def __init__(self):
+        ...         self.b = 1
+        ...         self.c = {'key':'value'}
+        ...     a = link_property('b')
+        ...     d = link_property('c', 'key')
+        ...     k = link_property(dic, 'k')
+        >>> a = A()
+        >>> a.a
+        1
+        >>> a.a = 2
+        >>> a.b
+        2
+        >>> a.d
+        'value'
+    '''
+    if isinstance(link,str) and key == None:
+        # link is a class name
+        def _get(self):
+            return getattr(self, link)
+        def _set(self, value):
+            return setattr(self, link)
+        def _del(self):
+            return delattr(self, link)
+    
+    if isinstance(link, dict):
+        if key == None:
+            raise TypeError('key must be str')
+        # link is a dict
+        def _get(self):
+            return link[key]
+        def _set(self, value):
+            link[key] = value
+        def _del(self):
+            del link[key]
+    
+    if isinstance(link, str) and isinstance(key, str):
+        # link is a dict
+        def _get(self):
+            return getattr(self, link)[key]
+        def _set(self, value):
+            getattr(self, link)[key] = value
+        def _del(self):
+            del getattr(self, link)[key]
+        ret = property(_get)
+        
+    if '_get' not in locals():
+        raise TypeError('link must be str or dict')
+
+    _get.__doc__ = doc
+    ret = property(_get)
+    if enable_set:
+        ret.fset = _set
+    if enable_del:
+        ret.fdel = _del
+    return ret
+
+def appliable_parameters(func:Callable, parameters:dict[str, Any]) -> dict[str, Any]:
+    '''
+    Get the appliable parameters of func
+    '''
+    ret = {}
+    from .typeval import get_signature
+    sig = get_signature(func)
+    for name, value in parameters.items():
+        if name in sig.parameters:
+            ret[name] = value
+    return ret
+
+# Model = TypeVar('Model')
+def make_model(model_base:type, 
+               doc:Optional[str] = None):
+    '''
+    This function will make a dict-like class be a model class
+
+    If the handlers are set, this can also make other class be a model class
+    '''
+
+    class ModelProperty:
+        '''
+        Configuration Model Property
+        '''
+        @staticmethod
+        def default_getter(instance:Model, owner:type, property: ModelProperty) -> Any:
+            ret = instance.__wrapped__[property.key]
+            if isinstance(ret, model_base) and property.model_factory:
+                return property.model_factory(ret)
+            return ret
+        
+        @staticmethod
+        def default_setter(instance:Model, property: ModelProperty, value:Any) -> None:
+            instance.__wrapped__[property.key] = value
+
+        @staticmethod
+        def default_deleter(instance:Model, property: ModelProperty) -> None:
+            del instance.__wrapped__[property.key]
+
+        def __init__(self, 
+                     key:str, 
+                     model_factory:Optional[type[Model]]=None,
+                     getter:Optional[Callable[[Model, type, ModelProperty], Any]] = None,
+                     setter:Optional[Callable[[Model, ModelProperty, Any], None]] = None,
+                     deleter:Optional[Callable[[Model, ModelProperty], None]] = None):
+            self.key = key
+            self.model_factory = model_factory
+            self.getter = getter or self.default_getter
+            self.setter = setter or self.default_setter
+            self.deleter = deleter or self.default_deleter
+        
+        def __get__(self, instance:Model, owner:type) -> Any:
+            return self.getter(instance, owner, self)
+            
+        def __set__(self, instance:Model, value:Any) -> None:
+            return self.setter(instance, self, value)
+
+        def __delete__(self, instance:Model) -> None:
+            return self.deleter(instance, self)
+
+    class ModelMeta(type):
+        Factory:TypeAlias = model_base
+        def __new__(cls, name:str, bases:tuple[type,...], attrs:dict, / ,
+                    init:bool = False, global_:Optional[dict[str, Any]] = None, local_:Optional[Mapping[str, Any]] = None):
+            '''
+            Create a model class
+
+            Parameters
+            -----------
+            init: bool, Optional, default: True, whether to generate __init__ by annotations
+            global_: dict[str, Any], Optional, default: None, global variables, if None, will try to obtain stack frame and get global variables
+            local_: Mapping[str, Any], Optional, default: None, local variables, if None, will use attrs
+            '''
+            import inspect
+            if '__annotations__' not in attrs:
+                return super().__new__(cls, name, bases, attrs)
+            annotations:dict = attrs['__annotations__']
+            defaults = {}
+
+            global_ = global_ or inspect.stack()[1][0].f_globals
+            local_ = local_ or attrs
+
+            for k, v in annotations.items():
+                if k in attrs:
+                    defaults[k] = attrs[k]
+                # Ensure when the subclass is get, it will return a ConfigModel
+                # Try to eval the type annotation
+                if isinstance(v, str):
+                    v = eval(v, global_, local_)
+                attrs[k] = ModelProperty(k, v if isinstance(v, type) and issubclass(v, model_base) else None)
+            attrs['__defaults__'] = defaults
+            attrs['__models__'] = annotations
+            attrs['__model_attrs__'] = attrs
+            attrs['__wrapped__'] = None
+            # Hook config method
+            # bases = (base for base in bases if base is not cls.ConfigFactory)
+            for name, method in inspect.getmembers(cls.Factory):
+                if not callable(method):
+                    continue
+                if name in ('__new__', '__getattribute__', '__setattr__', '__delattr__', '__eq__', '__ne__'):
+                    continue
+                def _wrap(name, method):
+                    def _replace(self:Model, *args, **kwargs):
+                        return getattr(self.__wrapped__, name)(*args, **kwargs)
+                    return _replace
+                if name not in attrs:
+                    attrs[name] = _wrap(name, method)
+            
+            if init:
+                # Generate __init__
+                def __init__(self, *args, **kwargs) -> None:
+                    # There is a rewrite problem
+                    # When use Model(**kwargs), the model_base will be created and this funcion is no need to run
+                    import inspect
+                    params = []
+                    for k, v in annotations.items():
+                        if k == 'return':
+                            continue
+                        params.append(inspect.Parameter(k, inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=v, default=defaults.get(k, inspect._empty)))
+                    sig = inspect.Signature(params, return_annotation=None)
+                    bind = sig.bind(*args, **kwargs)
+                    bind.apply_defaults()
+                    for k, v in bind.arguments.items():
+                        setattr(self, k, v)
+                # wrap __init__
+                __init__.__annotations__ = annotations
+                __init__.__annotations__['return'] = None
+                __init__.__qualname__ = f'{name}.__init__'
+                __init__.__name__ = '__init__'
+                attrs['__init__'] = __init__
+            
+            if doc != None:
+                attrs['__doc__'] = doc
+            ret = super().__new__(cls, name, bases, attrs)
+            return ret
+        
+    class Model(model_base, metaclass=ModelMeta):
+        def __new__(cls, *args, **kwargs) -> Self:
+            self = super().__new__(cls)
+            if len(args) == 1 and len(kwargs) == 0 and isinstance(args[0], model_base):
+                config = args[0]
+            else:
+                config = model_base(*args, **kwargs)
+            self.__wrapped__ = config
+            for k,v in self.__defaults__.items():
+                setattr(self, k, v)
+                # use setattr to avoid __setattr__ hook
+            return self
+        
+        def __getattribute__(self, name:str) -> Any:
+            if name in ('__wrapped__', '__defaults__', '__models__', '__model_attrs__'):
+                return super().__getattribute__(name)
+            if name in self.__models__:
+                return super().__getattribute__(name)
+            if name in self.__model_attrs__:
+                return super().__getattribute__(name)
+            return getattr(self.__wrapped__, name)
+        
+        def __setattr__(self, name:str, value:Any) -> None:
+            if name == '__wrapped__':
+                super().__setattr__(name, value)
+                return
+            if name in self.__models__:
+                super().__setattr__(name, value)
+                return
+            if name in self.__model_attrs__:
+                super().__setattr__(name, value)
+                return
+            setattr(self.__wrapped__, name, value)
+
+        def __delattr__(self, __name: str) -> None:
+            if __name == '__wrapped__':
+                raise TypeError("can't delete __wrapped__")
+            if __name in self.__models__:
+                super().__delattr__(__name)
+                return
+            if __name in self.__model_attrs__:
+                super().__delattr__(__name)
+                return
+            delattr(self.__wrapped__, __name)
+
+        def __eq__(self, right: Self) -> bool:
+            if not isinstance(right, type(self)):
+                return False
+            return self.__wrapped__ == right.__wrapped__
+        
+        def __ne__(self, right: Self) -> bool:
+            if not isinstance(right, type(self)):
+                return True
+            return self.__wrapped__ != right.__wrapped__
+    
+    return Model
+
+class TaskList(common.AsyncContentManager, list[asyncio.Task]):
+    '''
+    Asyncio Task list
+    '''
+    @overload
+    def __init__(self) -> None:...
+    @overload
+    def __init__(self, _iterable:Iterable[asyncio.Task]) -> None:...
+
+    def __init__(self, _iterable:Optional[Iterable[asyncio.Task]]=None) -> None:
+        super().__init__()
+        if _iterable:
+            self.extend(_iterable)
+    
+    class TaskSession:
+        '''
+        Task Session
+        '''
+        def __init__(self, task: asyncio.Task) -> None:
+            self.task = task
+            self._in_list: Optional[TaskList] = None
+
+        @classmethod
+        def _setup_list(cls, task: asyncio.Task, task_list: TaskList) -> Self:
+            ret = cls(task)
+            ret._in_list = task_list
+            return ret
+
+        async def __aenter__(self) -> asyncio.Task:
+            if self._in_list:
+                self._in_list.append(self.task)
+            return self.task
+        
+        async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+            if not self.task.done():
+                await self.task
+            if self._in_list:
+                self._in_list.remove(self.task)
+
+    def session(self, task: asyncio.Task | Coroutine[None, None, Any]) -> TaskSession:
+        '''
+        Get a session
+        '''
+        if isinstance(task, Coroutine):
+            task = asyncio.create_task(task)
+        return self.TaskSession._setup_list(task, self)
+    

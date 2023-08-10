@@ -6,6 +6,7 @@ import functools
 import inspect
 import typing
 from typing import Callable, Optional, Type
+import weakref
 
 __all__ = (
     'is_generic',
@@ -20,6 +21,7 @@ __all__ = (
     'verify_parameters',
     'makeoverload',
     'makeoverloadmethod',
+    'get_signature',
 )
 
 def _is_generic(cls):
@@ -131,6 +133,9 @@ def _instancecheck_tuple(tup, type_args):
 
     return all(is_instance(val, type_) for val, type_ in zip(tup, type_args))
 
+def _instancecheck_literal(value, type_args):
+    return value in type_args.__args__
+
 _ORIGIN_TYPE_CHECKERS = {}
 for class_path, check_func in {
                         # iterables
@@ -164,6 +169,7 @@ for class_path, check_func in {
 
                         # other
                         'typing.Tuple': _instancecheck_tuple,
+                        'typing.Literal': _instancecheck_literal,
                     }.items():
     try:
         cls = eval(class_path)
@@ -381,13 +387,17 @@ def python_type(annotation):
         return annotation
 
 _sig_cache:dict[Callable, inspect.Signature] = {}
-def _get_signature(func):
+def get_signature(func):
+    '''
+    Get the signature of a function, this function will cache the signature
+    '''
+    wfunc = weakref.ref(func)
     if func not in _sig_cache:
-        _sig_cache[func] = inspect.signature(func)
-    return _sig_cache[func]
+        _sig_cache[wfunc] = inspect.signature(func)
+    return _sig_cache[wfunc]
 
 def _get_sig_bind(func, *args, **kwargs):
-    sig = _get_signature(func)
+    sig = get_signature(func)
     bind = sig.bind(*args, **kwargs)
     bind.apply_defaults()
     return sig, bind
@@ -435,7 +445,7 @@ def verify(func=None, /, check_parameters:bool = True, check_return:bool = False
         raise TypeError('func must be callable')
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        sig = _get_signature(func)
+        sig = get_signature(func)
         if check_parameters:
             sig, bind = _get_sig_bind(func, *args, **kwargs)
             for name, value in bind.arguments.items():
@@ -462,7 +472,7 @@ class makeoverload:
         functools.update_wrapper(self, func)
 
     def register_auto(self, func:Callable):
-        sig = _get_signature(func)
+        sig = get_signature(func)
         if sig in self.overloads:
             if func != self.overloads[sig]:
                 raise ValueError(f"Overload function {func} has been registered")
@@ -487,7 +497,7 @@ class makeoverload:
         return decorator
     
     def __call__(self, *args, **kwargs):
-        sig = _get_signature(self.func)
+        sig = get_signature(self.func)
         bind = sig.bind(*args, **kwargs)
         bind.apply_defaults()
         for overload_sig, overload_func in self.overloads.items():
@@ -510,7 +520,7 @@ class makeoverload:
         raise TypeError(f"The matched overload function is not found")
     
     def _call_class(self, instance, owner, args:tuple, kwargs:dict):
-        sig = _get_signature(self.func)
+        sig = get_signature(self.func)
         bind = sig.bind(*args, **kwargs)
         bind.apply_defaults()
         for overload_sig, overload_func in self.overloads.items():

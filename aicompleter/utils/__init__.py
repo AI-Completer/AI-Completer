@@ -4,6 +4,7 @@ Utils for aicompleter
 from .endict import (
     defaultdict,
     EnhancedDict,
+    DataModel,
 )
 from .aio import (
     ainput,
@@ -16,6 +17,9 @@ from .etype import (
     StructType,
     typecheck,
     hookclass,
+    appliable_parameters,
+    make_model,
+    TaskList,
 )
 from .launch import (
     launch,
@@ -32,4 +36,5 @@ from .typeval import (
     is_subtype,
     python_type,
     verify,
+    get_signature,
 )

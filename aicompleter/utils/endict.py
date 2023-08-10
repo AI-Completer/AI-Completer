@@ -5,23 +5,15 @@ import copy
 import json
 from typing import Any, Callable, Optional, Self, overload
 from ..common import JSONSerializable, serialize
+from .etype import make_model
 
-class defaultdict(dict, JSONSerializable):
+class defaultdict(dict):
     '''
     Dict that can automatically create new keys
     '''
     def __missing__(self, key):
         self[key] = defaultdict()
         return self[key]
-    
-    def __serialize__(self) -> dict:
-        return {
-            key: value for key, value in self.items() if isinstance(key, str) and not key.startswith('_')
-        }
-    
-    @staticmethod
-    def __deserialize__(data:dict) -> Self:
-        return defaultdict(data)
 
 class EnhancedDict(defaultdict):
     '''
@@ -71,6 +63,8 @@ class EnhancedDict(defaultdict):
     def get(self, path:str, default:Any = None) -> Any:
         '''
         Get a value
+
+        If the path is not found, return default or raise KeyError
         '''
         spilts = path.split('.', 1)
         if len(spilts) == 1:
@@ -213,7 +207,7 @@ class EnhancedDict(defaultdict):
         '''
         return copy.deepcopy(self)
 
-    @staticmethod
-    def __deserialize__(data: dict) -> Self:
-        return EnhancedDict(data)
-    
+DataModel = make_model(EnhancedDict)
+'''
+Data Model
+'''

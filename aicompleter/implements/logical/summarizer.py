@@ -5,6 +5,8 @@ from aicompleter.ai.implements.openai.api import Chater
 from ... import *
 
 class SummaryInterface(ai.ChatInterface):
+    cmdreg:Commands = Commands()
+
     def __init__(self, ai:ai.AI, config:Config = Config(), id: uuid.UUID = uuid.uuid4()):
         super().__init__(
             ai=ai,
@@ -18,7 +20,6 @@ class SummaryInterface(ai.ChatInterface):
             id=id,
         )
         
-
     async def summarize(self, text: str, user:Optional[str] = None, language:str = 'en-us') -> str:
         '''
         Summarize a short text
@@ -48,6 +49,7 @@ Here is the text:
         else:
             return ret
 
+    @cmdreg.register('summary', 'Summarize a text', format={'text': 'The text to summarize'})
     async def cmd_summary(self, session: Session, message: Message):
         '''
         Summarize a text

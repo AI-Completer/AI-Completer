@@ -176,8 +176,8 @@ class Memory(Saveable):
         '''
         raise NotImplementedError(f"Class {self.__class__.__name__} does not support save method")
     
-    @staticmethod
-    def load(path:str) -> Self:
+    @classmethod
+    def load(cls, path:str) -> Self:
         '''
         Load the memory from a file
         '''

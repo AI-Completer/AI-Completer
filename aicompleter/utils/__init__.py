@@ -38,3 +38,14 @@ from .typeval import (
     verify,
     get_signature,
 )
+from .text import (
+    RemoteWebPage,
+    getChunkedText,
+    getChunkedToken,
+    getChunkedWebText,
+    getWebText,
+    download,
+    extract_text,
+    extract_html,
+    clear_html,
+)

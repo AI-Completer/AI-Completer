@@ -13,6 +13,7 @@ if sys.version_info < (3, 11):
     raise RuntimeError('This program requires python 3.11 or higher.')
 
 from aicompleter.log import Logger, getLogger
+from aicompleter import utils
 logger = getLogger('startup')
 
 def require_input(prompt:Optional[str] = None, default:Optional[str] = ...) -> str:
@@ -31,17 +32,6 @@ def require_input(prompt:Optional[str] = None, default:Optional[str] = ...) -> s
             else:
                 print('Value required.')
     return ret
-
-def try_parse_bool(value:str) -> bool:
-    '''
-    Try to parse a string to bool
-    '''
-    if value.lower() in ('true', 'yes', '1' , 'y', 't'):
-        return True
-    elif value.lower() in ('false', 'no', '0', 'n', 'f'):
-        return False
-    else:
-        raise ValueError(f'Invalid bool value {value}')
 
 try:
 
@@ -77,7 +67,7 @@ try:
         # Require debug
         while True:
             try:
-                config['global']['debug'] = try_parse_bool(require_input('Debug (default to False): ', 'False'))
+                config['global']['debug'] = str(utils.is_enable(require_input('Debug (default to False): ', False)))
                 break
             except ValueError as e:
                 print(e.args[0])

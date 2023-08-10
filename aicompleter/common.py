@@ -9,6 +9,26 @@ import asyncio
 import threading
 from typing import Any, Callable, Coroutine, Generic, Optional, Self, TypeVar, overload
 import pickle
+import contextlib
+
+class SingletonMeta(type):
+    '''
+    The mata class for singleton
+    '''
+    def __init__(cls, name, bases, attrs):
+        super().__init__(name, bases, attrs)
+        cls._instance = None
+
+    def __call__(cls, *param, **kwparam):
+        if cls._instance is None:
+            cls._instance = super().__call__(*param, **kwparam)
+        return cls._instance
+    
+class Singleton(metaclass=SingletonMeta):
+    '''
+    This class is used to create singleton class
+    '''
+    __slots__ = ()
 
 class JsonTypeMeta(type):
     def __instancecheck__(self, __instance: Any) -> bool:
@@ -56,7 +76,16 @@ class AsyncTemplate(BaseTemplate, Generic[_T]):
             ret.__sync_classes__ += (item,)
         return ret
 
-class Serializable(BaseTemplate):
+class SerializableMeta(ABCMeta):
+    '''
+    The mata class for serializable
+    '''
+    def __subclasscheck__(cls: ABCMeta, subclass: type) -> bool:
+        return hasattr(subclass, '__serialize__') and hasattr(subclass, '__deserialize__')
+    def __instancecheck__(cls: ABCMeta, instance: Any) -> bool:
+        return issubclass(type(instance), cls)
+
+class Serializable(BaseTemplate, metaclass=SerializableMeta):
     '''
     This class is used to serialize object to string
 
@@ -78,32 +107,7 @@ class Serializable(BaseTemplate):
         '''
         return pickle.loads(src)
 
-class JSONSerializableMeta(ABCMeta):
-    '''
-    The mata class for JSONSerializable
-    '''
-    def __new__(cls, name, bases, attrs):
-        # Rewrite __deserialize__ method
-        def _deserialize(data:dict[str, Any]):
-            import importlib
-            module_ = importlib.import_module(attrs['__module__'])
-            # Split the submodule
-            for i in attrs['__qualname__'].split('.'):
-                if i == '<locals>':
-                    raise TypeError('Cannot deserialize a local class')
-                module_ = getattr(module_, i)
-            cls_ = module_
-            ret = cls_.__new__(cls_)
-
-            ret.__dict__.update({
-                key: deserialize(value) for key, value in data.items()
-            })
-            return ret
-        if '__deserialize__' not in attrs or getattr(attrs['__deserialize__'], '__isabstractmethod__', False):
-            attrs['__deserialize__'] = staticmethod(_deserialize)
-        return ABCMeta.__new__(cls, name, bases, attrs)
-
-class JSONSerializable(Serializable, metaclass=JSONSerializableMeta):
+class JSONSerializable(Serializable):
     '''
     This class is used to serialize object to json
     '''
@@ -115,12 +119,16 @@ class JSONSerializable(Serializable, metaclass=JSONSerializableMeta):
             key: serialize(value) for key, value in self.__dict__.items()
         }
 
-    @abstractmethod
-    def __deserialize__(data:list) -> Self:
+    @classmethod
+    def __deserialize__(cls, data:dict) -> Self:
         '''
         Get a object from a json, this method will be implemented by metaclass
         '''
-        raise NotImplementedError('deserialize is not implemented')
+        ret = cls.__new__(cls)
+        ret.__dict__ = {
+            key: deserialize(value) for key, value in data.items()
+        }
+        return ret
 
 class Saveable(BaseTemplate):
     '''
@@ -363,12 +371,28 @@ def serialize(data:Any, pickle_all:bool = False) -> JsonType:
             'data': data.__serialize__(),
         }
     elif isinstance(data, (list, set, tuple)):
-        subtype = 'list' if isinstance(data, list) else 'set' if isinstance(data, set) else 'tuple'
+        subtype = data.__class__.__qualname__
+        if subtype not in ('list', 'set', 'tuple'):
+            return {
+                'type': 'yield-subclass',
+                'module': data.__class__.__module__,
+                'class': data.__class__.__qualname__,
+                'data': [serialize(item) for item in data],
+            }
         return {
             'type': subtype,
             'data': [serialize(item) for item in data],
         }
     elif isinstance(data, dict):
+        if type(data) is not dict:
+            return {
+                'type': 'dict-subclass',
+                'module': data.__class__.__module__,
+                'class': data.__class__.__qualname__,
+                'data': {
+                    key: serialize(value) for key, value in data.items()
+                },
+            }
         return {
             'type': 'dict',
             'data': {
@@ -439,8 +463,20 @@ def deserialize(data: JsonType, global_:Optional[dict[str, Any]] = None, unpickl
     elif subtype in ('list', 'set', 'tuple'):
         import builtins
         return getattr(builtins, subtype)([deserialize(item) for item in data['data']])
+    elif subtype == 'yield-subclass':
+        cls = _get_class(data['module'], data['class'])
+        if not issubclass(cls, (list, set, tuple)):
+            raise TypeError(f'Cannot deserialize {data}({subtype}), this class is not inherited from {subtype}')
+        return cls([deserialize(item) for item in data['data']])
     elif subtype == 'dict':
         return {key: deserialize(value) for key, value in data['data'].items()}
+    elif subtype == 'dict-subclass':
+        cls = _get_class(data['module'], data['class'])
+        if not issubclass(cls, dict):
+            raise TypeError(f'Cannot deserialize {data}({subtype}), this class is not inherited from dict')
+        ret = cls()
+        ret.update({key: deserialize(value) for key, value in data['data'].items()})
+        return ret
     elif subtype == 'bytes':
         # hex转bytes
         return bytes.fromhex(data['data'])

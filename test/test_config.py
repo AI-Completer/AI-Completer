@@ -3,6 +3,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import aicompleter as ac
 import pytest
 
+@pytest.mark.run(order=0x10)
+@pytest.mark.dependency()
 def test_Config():
     config = ac.Config()
     config = ac.Config({
@@ -12,18 +14,43 @@ def test_Config():
             'f': ['g', 'h']
         }
     })
+    # Normal dict
     assert isinstance(config['a'], str)
-    assert isinstance(config['c'], ac.Config)
     assert isinstance(config['c']['d'], str)
     assert isinstance(config['c']['f'], list)
+
+    # Wrapped dict
+    assert isinstance(config['c'], ac.Config)
     
+    # JSON structure
+    assert isinstance(config['c.d'], str)
+
+    # Test value
+    assert config['a'] == 'b'
+    assert config['c.d'] == 'e'
+
+    config['a'] = 'm'
+    assert config['a'] == 'm'
+
+    config['c.d'] = 'n'
+    assert config['c.d'] == 'n'
+
+    config['c.f'] = {'a': 'b'}
+    assert isinstance(config['c.f'], ac.Config)
+    assert config['c.f.a'] == 'b'
+    
+    # Disable disallowed type
+    with pytest.raises(TypeError):
+        config['a'] = lambda: None
+
     with pytest.raises(ac.error.ConfigureMissing):
         config.require('d')
 
     with pytest.raises(TypeError):
         config = ac.Config(1)
 
-
+@pytest.mark.run(order=0x11)
+@pytest.mark.dependency(depends=['test_Config'])
 def test_ConfigModel():
     class TestModel(ac.ConfigModel):
         a: str

@@ -41,7 +41,7 @@ def run_handler(handler:Handler, config:Optional[Config] = None,*, loop:Optional
                 elif command == "!command":
                     print("Commands:")
                     for cmd in handler.get_executable_cmds():
-                        print(cmd.cmd, cmd.description, cmd.format, sep='\t\t')
+                        print(cmd.cmd, cmd.description, cmd.format.json_text, sep='\t\t')
                 elif command == "!execute":
                     code = input("Python: >>> ")
                     try:
@@ -55,9 +55,11 @@ def run_handler(handler:Handler, config:Optional[Config] = None,*, loop:Optional
                             except Exception as e:
                                 logger.exception("Error when execute code: %s", str(e))
                         logger.info("Result: %r", ret)
+                else:
+                    print("Unknown command, type !help for help")
             else:
                 # interface command
-                cmd = command.split(maxsplit=2)
+                cmd = command.split(maxsplit=1)
                 if len(cmd) > 1:
                     cmd, arg = cmd[0], cmd[1]
                 else:

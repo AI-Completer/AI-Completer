@@ -20,7 +20,7 @@ class CustomInterface(ac.Interface):
 
             user=ac.User(                       # User of the interface
                                                 # Most of time, it just plays a role of permission control
-                                                # And information display
+                                                # And information display. As a result, the user can be optional in most cases
 
                 name = 'custom-user',           # User name
                 description= 'Custom user',
@@ -40,7 +40,8 @@ class CustomInterface(ac.Interface):
                     format={'param1':'value1'})
     # This command requires a parameter named 'param1' with value description 'value1'
     # There is a format check on this command, if not satisfied, the command will not be executed and a exception will be raised
-    async def cmd_customcmd2(self, session: ac.Session, message: ac.Message, data: ac.EnhancedDict, config: ac.Config):
+    # The command can be non-async, the result will be collected and returned as a coroutine
+    def cmd_customcmd2(self, message: ac.Message, data: ac.EnhancedDict, config: ac.Config):
         # command can have two optional parameters
         # data: session data on this interface, can be get by 'self.getdata(session)'
         # config: session config on this interface (including this), can be get by 'self.getconfig(session)'
@@ -69,10 +70,10 @@ class CustomInterface(ac.Interface):
         await super().session_final(session)
 
 @CustomInterface.cmdreg.register('custom3', '...')
-async def cmd_customcmd3(session: ac.Session, message: ac.Message):
+async def cmd_customcmd3(message: ac.Message, interface: CustomInterface):
     # You can also register a command outside the interface
-    ac.log.info("Here, the custom command is called, name: customcmd3")
-    ac.log.info("The message is: %s" % message.content)
+    interface.logger.info("Here, the custom command is called, name: customcmd3")
+    interface.logger.info("The message is: %s" % message.content)
     return None
 
 custom_int = CustomInterface()
@@ -85,4 +86,5 @@ async def main():
     await session.asend(ac.Message('customcmd2', {'param1':'Hello world!'}))
     await session.asend(ac.Message('custom3', 'Hello world!'))
 
+# A simple way to start the coroutine with runtime check
 ac.utils.start(main())

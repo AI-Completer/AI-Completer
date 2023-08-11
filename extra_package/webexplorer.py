@@ -1,6 +1,6 @@
 import asyncio
 import sys, os
-from typing import Literal, Optional, Union
+from typing import Coroutine, Literal, Optional, Union
 import uuid
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
@@ -36,7 +36,22 @@ def getFullHtml(url:str, driver:str|RemoteWebDriver = 'Chrome') -> str:
         driver = driverFactory[driver]()
     driver.get(url)
     driver.implicitly_wait(10)
-    return driver.find_element(By.CSS_SELECTOR, 'html').get_attribute('outerHTML')
+    ret = driver.find_element(By.CSS_SELECTOR, 'html').get_attribute('outerHTML')
+    driver.quit()
+    return ret
+
+async def agetFullHtml(url:str, driver:str|RemoteWebDriver = 'Chrome') -> Coroutine[None, None, str]:
+    '''
+    Get the full html of a web page
+    '''
+    if isinstance(driver, str):
+        driver = await ac.utils.thread_run(driverFactory[driver])()
+    await ac.utils.thread_run(driver.get)(url)
+    await ac.utils.thread_run(driver.implicitly_wait)(10)
+    ret = await ac.utils.thread_run(driver.find_element)(By.CSS_SELECTOR, 'html')
+    ret = await ac.utils.thread_run(ret.get_attribute)('outerHTML')
+    await ac.utils.thread_run(driver.quit)()
+    return ret
 
 class WebExplorerDataModel(ac.DataModel):
     '''

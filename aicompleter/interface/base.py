@@ -3,7 +3,6 @@ Base Objects for Interface of AutoDone-AI
 '''
 import copy
 import os
-from typing_extensions import deprecated
 import uuid
 from abc import ABCMeta, abstractmethod
 from typing import Coroutine, Optional, Self, TypeVar, Union, overload
@@ -426,13 +425,14 @@ class Interface(AsyncLifeTimeManager):
         '''
         return session.data[self.id.hex]
 
-    @deprecated("Interface global call is deprecated, use stable command instead")
     async def call(self, session:session.Session, message:session.Message):
         '''
         Call the command
 
         :param session: Session
         :param message: Message
+
+        When no callback is found, use this method to call the command
         '''
         raise NotImplementedError("Interface.call() is not implemented")
 

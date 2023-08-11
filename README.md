@@ -32,56 +32,56 @@ python3 -m aicompleter helper --enable-agent --include pythoncode
 
 You can add custom interface to this program to add more function.
 
-## Usage
+## Quick Start
+
+The code below will start a talk with gpt, the detailed model varies with your configure, default is gpt-3.5-turbo.
 
 ```python
 from aicompleter import *
 from aicompleter.implements import *
 import asyncio
 
-cfg = config.loadConfig('config.json')
-# load config
-cfg['openaichat'].setdefault(cfg['global'])
-# load global config to overwrite openaichat config
-chater = ai.openai.Chater(cfg['openaichat'])
+cfg = Config({
+    # 'openaichat' is the namespace, you can change to your own namespace
+    'openaichat':{
+        'openai':{
+            'api-key': 'sk-...',                 # Put you OpenAI API key here
+            'model': 'gpt-3.5-turbo',            # AI model, default is gpt-3.5-turbo
+        }
+    }
+})
 # ChatAI, use openai model gpt-3.5-turbo-0301
-consoleinterface:ConsoleInterface = ConsoleInterface()
-# Console Interface
-chatinterface:ai.ChatInterface = ai.ChatInterface(ai=chater, namespace='openaichat')
+chater = ai.openai.Chater(cfg['openaichat'])
 # Chat Interface, based on chater -> OpenAI API
-hand:Handler = Handler(cfg)
+chatinterface:ai.ChatInterface = ai.ChatInterface(ai=chater, namespace='openaichat')
 # Handler, interacting between interfaces
+handl:Handler = Handler(cfg)
 
 async def main():
-    await hand.add_interface(consoleinterface, chatinterface)
-    # Add Interfaces to the handler, you can also use aicompleter.layer module to manage rights
-    session:Session = await hand.new_session()
+    # Add Interfaces
+    await hand.add_interface(chatinterface)
     # Start a new session
-    ret = None
+    session:Session = await hand.new_session()
+    print("Please start a conversation")
     while True:
-        text = await session.asend(Message(
-            cmd='ask',
-            session=session,
-            dest_interface=consoleinterface,
-            content=ret if ret else "Start Your Conversation",
-        )) # Send a ask command to the console interface, the console will print the message and require user to input
-        ret = await session.asend(Message(
-            cmd='ask',
-            session=session,
-            dest_interface=chatinterface,
-            content=text,
-        )) # Send a ask command to the chat interface, the ai is asked by the content (text, the question of user)
+        # Get input from console
+        word = input(">>> ")
+        if word == 'exit':
+            break
+        # Send a ask command to the chat interface, the ai is asked by the content (text, the question of user)
+        print(await session.asend('ask', word))
 
-        # continue to execute
-
-asyncio.run(main())
 # Start the loop
-
+asyncio.run(main())
 ```
+
+## Examples
+
+See [examples](/examples/)
 
 ## Document
 
-Reference: [Document](doc/language.md)
+Reference: [Document](/doc/language.md)
 
 ## To-do List
 
@@ -92,4 +92,3 @@ We are adding more support to this program.
   - [x] Add History
   - [ ] Add Memory Analyse
 - [ ] Add More Extra Interface
-- [ ] Add GUI support

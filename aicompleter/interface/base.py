@@ -286,11 +286,9 @@ class Interface(AsyncLifeTimeManager):
 
     def __init__(self, 
                  namespace:str, 
-                 user:User,
+                 user:Optional[User] = None,
                  id:uuid.UUID = uuid.uuid4(), 
-                 config: config.Config = config.Config(), 
-                 configFactory:Optional[type[Config]] = None,
-                 dataFactory:Optional[type[utils.EnhancedDict]] = None):
+                 config: config.Config = config.Config()):
         
         super().__init__()
         self._user = user
@@ -298,10 +296,6 @@ class Interface(AsyncLifeTimeManager):
         utils.typecheck(id, uuid.UUID)
         self._id:uuid.UUID = id
         '''ID'''
-        if configFactory:
-            self.configFactory:type[Config] = configFactory
-        if dataFactory:
-            self.dataFactory:type[utils.EnhancedDict] = dataFactory
 
         self.namespace:Namespace = Namespace(
             name=namespace,
@@ -320,7 +314,7 @@ class Interface(AsyncLifeTimeManager):
                         newcmd.in_interface = self
                         # if is a class method, bind the method to the instance
                         if not hasattr(newcmd.callback, "__self__") and '.' in newcmd.callback.__qualname__:
-                            if self.__class__.__name__ == newcmd.callback.__qualname__.split('.')[0]:
+                            if self.__class__.__name__ == newcmd.callback.__qualname__.rsplit('.', maxsplit=2)[-2]:
                                 newcmd.callback = newcmd.callback.__get__(self, self.__class__)
                         self.commands.add(newcmd)
 
@@ -463,15 +457,6 @@ class Interface(AsyncLifeTimeManager):
         '''Close the interface'''
         self._close_tasks.append(asyncio.get_event_loop().create_task(self.final()))
         super().close()
-
-    def register_cmd(self, *args, **kwargs):
-        '''Register a command'''
-        kwargs.pop("in_interface", None)
-        return self.commands.register(Command(
-            in_interface=self,
-            *args,
-            **kwargs
-        ))
 
     def rename_cmd(self, old:str, new:str):
         '''

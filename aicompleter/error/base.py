@@ -34,6 +34,11 @@ class BaseException(Exception):
         '''Session'''
         return self.kwargs.get('session', None)
 
+class InnerException(BaseException):
+    '''
+    This exception is raised because programming error, not runtime error.
+    '''
+
 class ParamRequired(BaseException):
     '''Param Required'''
     def __init__(self, param:str, *args: object, **kwargs: object) -> None:

@@ -49,35 +49,33 @@ class CommandParamElement(JSONSerializable):
     tooltip:str = ""
     '''Tooltip of the parameter'''
 
-    def __serialize__(self):
-        return {
-            "name":self.name,
-            "type":self.type.__name__ if isinstance(self.type,type) else '',
-            "default":self.default,
-            "description":self.description,
-            "optional":self.optional,
-            "tooltip":self.tooltip,
-        }
-    
-    @staticmethod
-    def __deserialize__(data:dict):
-        raise NotImplementedError("CommandParamElement.deserialize is not implemented")
-        return CommandParamElement(
-            name=data['name'],
-            type=eval(data['type']) if data['type'] else str,
-            # TODO: fix the eval problem
-            default=data['default'],
-            description=data['description'],
-            optional=data['optional'],
-            tooltip=data['tooltip'],
-        )
-
     @property
     def json_text(self):
         '''
         Get the json description of the parameter
         '''
-        return f"<{self.type.__name__ if isinstance(self.type,type) else ''} {self.tooltip}{' = %s' % str(self.default) if self.default else ''}>"
+        if self.tooltip:
+            if self.default != None:
+                return "<{type} {tooltip} = {default}>".format(
+                    type=self.type.__name__ if isinstance(self.type,type) else 'auto',
+                    tooltip=self.tooltip,
+                    default=self.default,
+                )
+            else:
+                return "<{type} {tooltip}>".format(
+                    type=self.type.__name__ if isinstance(self.type,type) else 'auto',
+                    tooltip=self.tooltip,
+                )
+        else:
+            if self.default != None:
+                return "<{type} = {default}>".format(
+                    type=self.type.__name__ if isinstance(self.type,type) else 'auto',
+                    default=self.default,
+                )
+            else:
+                return "<{type}>".format(
+                    type=self.type.__name__ if isinstance(self.type,type) else 'auto',
+                )
 
 class CommandParamStruct(JSONSerializable):
     '''
@@ -295,7 +293,7 @@ class CommandAuthority(JSONSerializable):
         return sum([_level_map[i]**2 for i in self.__dict__ if self.__dict__[i] == True])**0.5
 
 
-@attr.s(auto_attribs=True,hash=False,kw_only=True)
+@attr.dataclass(hash=False)
 class Command(JSONSerializable):
     '''Command Struct'''
     cmd:str = attr.ib(default="", kw_only=False)
@@ -306,40 +304,45 @@ class Command(JSONSerializable):
     
     This is sometimes necessery for AI to know what the command is
     '''
-    alias:set[str] = set()
+    alias:set[str] = attr.ib(default=set(), kw_only=True)
     '''Alias Names'''
-    format:Optional[CommandParamStruct] = attr.ib(default=None)
+    format:Optional[CommandParamStruct] = attr.ib(default=None, kw_only=True)
     '''Format For Command, if None, no format required'''
-    callable_groups:set[str] = set()
+    callable_groups:set[str] = attr.ib(default=set(), kw_only=True)
     '''Groups who can call this command'''
-    overrideable:bool = False
+    overrideable:bool = attr.ib(default=True, kw_only=True)
     '''Whether this command can be overrided by other command'''
-    extra:dict = {}
+    data:dict = attr.ib(default={}, kw_only=True)
     '''Extra information'''
-    expose:bool = True
+    expose:bool = attr.ib(default=True, kw_only=True)
     '''Whether this command can be exposed to handlers'''
-    authority:CommandAuthority = CommandAuthority()
+    authority:CommandAuthority = attr.ib(default=CommandAuthority(), kw_only=True)
     '''Authority of the command'''
 
-    in_interface:Optional[Interface] = None
+    in_interface:Optional[Interface] = attr.ib(default=None, kw_only=True)
     '''Interface where the command is from'''
-    callback:Optional[Callable[[session.Session, session.Message], Coroutine[Any, Any, Any]]] = None
+    callback:Optional[Callable[..., Coroutine[Any, Any, Any]]] = attr.ib(default=None, kw_only=True)
     '''
     Call Function To Call The Command
 
     If None, the command will be called by in_interface
     '''
-    to_return:bool = True
+    to_return:bool = attr.ib(default=True, kw_only=True)
     '''
     Whether the command will return a value
     '''
 
+    name = utils.link_property('cmd')
+    '''
+    Name of the command
+    '''
+    
     def __attrs_post_init__(self):
         self.logger = log.getLogger("Command", [self.in_interface.user.name if self.in_interface else 'Unknown', self.cmd])
-        # if self.format is not None:
-        #     if isinstance(self.format, (dict, list)):
-        #         self.format = CommandParamStruct.load_brief(self.format)
-        #     utils.typecheck(self.format, (CommandParamStruct, CommandParamElement))
+        self.check = self.format.check if self.format else lambda x:True
+        '''
+        Check whether the parametres are valid
+        '''
 
     def _(value: Optional[CommandParamStruct | dict[str, Any]]):
         if value is None:
@@ -349,6 +352,14 @@ class Command(JSONSerializable):
         utils.typecheck(value, (CommandParamStruct, CommandParamElement))
         return value
     format.converter = _
+    del _
+
+    @in_interface.validator
+    def _(inst, attr_, value):
+        from ..interface import Interface
+        if value == None:
+            return
+        attr.validators.instance_of(Interface)(inst, attr_, value)
     del _
 
     def check_support(self, handler:Handler, user:User) -> bool:
@@ -387,17 +398,18 @@ class Command(JSONSerializable):
             raise error.Interrupted(f"Call interrupted by exception: Command.call",message=message,interface=self.in_interface, error=e) from e
         
         if self.callback is not None:
-            extra_params = utils.appliable_parameters(self.callback, {
+            params = utils.appliable_parameters(self.callback, {
                 'session': session,
                 'message': message,
                 'logger': self.logger,
                 'interface': self.in_interface,
             })
+            sig = utils.get_signature(self.callback)
             
-            if 'config' in self.callback.__annotations__:
-                extra_params['config'] = self.in_interface.getconfig(session)
-            if 'data' in self.callback.__annotations__:
-                extra_params['data'] = self.in_interface.getdata(session)
+            if 'config' in sig.parameters:
+                params['config'] = self.in_interface.getconfig(session)
+            if 'data' in sig.parameters:
+                params['data'] = self.in_interface.getdata(session)
 
             # if the parameter is in json format, load it
             with contextlib.suppress(json.JSONDecodeError):
@@ -405,28 +417,48 @@ class Command(JSONSerializable):
                 data = message.content.json
                 if isinstance(data, dict):
                     for k,v in data.items():
-                        if k not in self.callback.__annotations__:
+                        if k not in sig.parameters:
                             continue
-                        extra_params.setdefault(k, v) # do not override (!important)
+                        params.setdefault(k, v) # do not override (!important)
+
+            if len(sig.parameters) != len(params):
+                # It seems that something unwanted happened
+                raise error.InnerException(
+                    "The parameters list seem to have extra parameters as unexcepted. The function is called by Command.call." \
+                    "The function is at {modulepath}:{qualname}, the interface is at {int_modulepath}:{int_qualname}. The excepted parameters " \
+                    "are {paramslist}".format(
+                        modulepath=self.callback.__code__.co_filename,
+                        qualname=self.callback.__code__.co_qualname,
+                        int_modulepath=self.in_interface.__module__ if self.in_interface else None,
+                        int_qualname=self.in_interface.__class__.__qualname__ if self.in_interface else None,
+                        paramslist='[%s]' % ','.join(params)
+                    ))
             
-            async with session._running_tasks.session(self.callback(**extra_params)) as task:
-                ret = await task
+            ret = self.callback(**params)
+            if asyncio.iscoroutine(ret):
+                async with session._running_tasks.session(ret) as task:
+                    ret = await task
         else:   
             if self.in_interface is None:
                 raise error.ParamRequired(f"[Command <{self.cmd}>]in_interface required: Command.call")
             
-            async with session._running_tasks.session(self.in_interface.call(session, message)) as task:
-                ret = await task
+            ret = self.in_interface.call(session, message)
+            if asyncio.iscoroutine(ret):
+                async with session._running_tasks.session(ret) as task:
+                    ret = await task
         
         if ret is not None:
             self.logger.debug("Command return value: %s" % str(ret))
         return ret
         
-    def bind(self, callback:Callable[[session.Session, session.Message], None]) -> None:
+    def bind(self, callback:Optional[Callable[[session.Session, session.Message], None]] = None) -> None:
         '''
         Bind a call function to the command
         If not bind, the command will be called by in_interface
         '''
+        if callback is None:
+            self.callback = None
+            return
         if not callable(callback):
             raise TypeError("call_func must be a callable function")
         self.callback = callback
@@ -464,6 +496,7 @@ class Command(JSONSerializable):
     def __deserialize__(self, data:dict):
         raise NotImplementedError("Command.__deserialize__ is not implemented")
 
+_T = TypeVar("_T")
 class Commands(dict[str,Command]):
     '''
     Commands Dict
@@ -551,7 +584,7 @@ class Commands(dict[str,Command]):
             func(i)
 
     @overload
-    def register(self, command:Command):
+    def register(self, command:Command) -> Callable[[Callable[..., _T]], Callable[..., _T]]:
         ...
 
     @overload
@@ -567,7 +600,7 @@ class Commands(dict[str,Command]):
                  expose:bool=True, 
                  authority:CommandAuthority=CommandAuthority(), 
                  to_return:bool=True,
-                 **kwargs):
+                 **kwargs) -> Callable[[Callable[..., _T]], Callable[..., _T]]:
         ...
 
     def register(self, *args, **kwargs):
@@ -632,7 +665,8 @@ class Commands(dict[str,Command]):
         '''
         return len(self) == 0
 
-@attr.s(auto_attribs=True)
+# It seem that there is no need to build a structure for the result
+@attr.dataclass
 class Result:
     '''Command Result Struct'''
     cmd:str = ""

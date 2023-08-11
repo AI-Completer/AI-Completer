@@ -75,7 +75,7 @@ class Struct:
         self.struct = struct
         self._check_struct(struct)
 
-    def check(self, data:Any) -> bool:
+    def check(self, data:Any, allow_extra:bool = True) -> bool:
         '''
         Check data(No allow extra keys)
         '''
@@ -88,7 +88,7 @@ class Struct:
                         return False
                     if not _check(struct[key], data[key]):
                         return False
-                if set(struct.keys()) < set(data.keys()):
+                if not allow_extra and set(struct.keys()) < set(data.keys()):
                     # Extra keys
                     return False
                 return True
@@ -326,9 +326,9 @@ def link_property(link: str|dict, key:Optional[str]=None, *, enable_set=True, en
     _get.__doc__ = doc
     ret = property(_get)
     if enable_set:
-        ret.fset = _set
+        ret = ret.setter(_set)
     if enable_del:
-        ret.fdel = _del
+        ret = ret.deleter(_del)
     return ret
 
 def appliable_parameters(func:Callable, parameters:dict[str, Any]) -> dict[str, Any]:
@@ -571,4 +571,15 @@ class TaskList(common.AsyncContentManager, list[asyncio.Task]):
         if isinstance(task, Coroutine):
             task = asyncio.create_task(task)
         return self.TaskSession._setup_list(task, self)
-    
+
+def stack_varibles(stack_level:int = 1) -> tuple[dict[str, Any], dict[str, Any]]:
+    '''
+    Get the varibles of the stack
+    :param stack_level: the stack level, default is 1, will get the varibles of the caller
+    :return: the global varibles and local varibles
+    '''
+    import inspect
+    frame = inspect.currentframe()
+    for _ in range(stack_level):
+        frame = frame.f_back
+    return frame.f_globals, frame.f_locals

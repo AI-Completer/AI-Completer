@@ -7,9 +7,6 @@ from .difficulty_test import (
 from .enexecutor import (
     StateExecutor,
 )
-from .executor import (
-    ExecutorInt,
-)
 from .subexecutor import (
     SelfStateExecutor,
 )

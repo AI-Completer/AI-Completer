@@ -1,7 +1,7 @@
 '''
 Virtual File System
+
 This is a virtual file system prepared specially for AI Interface
-Unstable, need to be improved
 '''
 
 from __future__ import annotations

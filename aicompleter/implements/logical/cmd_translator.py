@@ -101,7 +101,7 @@ Do not reply with anything else.
             last_message=message,
         )
         if data['async']:
-            session.in_handler.send(
+            session.send(
                 session, 
                 new_message
             )

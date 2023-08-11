@@ -53,8 +53,8 @@ class AuthorInterface(Interface):
         
         ret = await session.asend(
             Message(
-                src_interface=self,
                 cmd=author_cmd,
+                src_interface=self,
                 content = author_format.format(
                     src=message.src_interface.user.name,
                     cmd=cmd.cmd,

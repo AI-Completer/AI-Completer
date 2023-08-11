@@ -64,7 +64,7 @@ class Agent(common.AsyncLifeTimeManager):
         '''
         if not self.closed:
             raise error.AI_OnRun('The agent is not stopped yet')
-        if isinstance(self._result, Exception):
+        if isinstance(self._result, BaseException):
             raise self._result
         return self._result
 

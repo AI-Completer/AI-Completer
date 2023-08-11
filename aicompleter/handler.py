@@ -8,7 +8,7 @@ import importlib
 import uuid
 from typing import Any, Generator, Iterator, Optional, overload
 
-from . import memory, utils
+from . import utils
 from .common import AsyncLifeTimeManager
 
 from . import error, events, interface, log, session
@@ -314,7 +314,7 @@ class Handler(AsyncLifeTimeManager):
         raise error.NotFound(f"Require Interface {cls}, but not found or permission required" + (f" with user {user.name}" if user else ""))
     
     @property
-    def interfaces(self) -> set[Interface]:
+    def interfaces(self) -> list[Interface]:
         '''Get all interfaces'''
         return self._interfaces
     
@@ -388,15 +388,14 @@ class Handler(AsyncLifeTimeManager):
                 self._running_sessions.remove(i)
 
     async def new_session(self, 
-                          config:Optional[Config] = None,
-                          memoryConfigure:Optional[memory.MemoryConfigure] = None) -> session.Session:
+                          config:Optional[Config] = None) -> session.Session:
         '''
         Create a new session, will call all interfaces' session_init method
         :param interface:Interface, optional, the interface to set as src_interface
         :param config:Config, optional, the config to set as session.config
         :param memoryConfigure:MemoryConfigure, optional, the memory configure to set as session.memoryConfigure
         '''
-        ret = session.Session(self, memoryConfigure)
+        ret = session.Session(self)
         self.logger.debug("Creating new session %s", ret.id)
         # Initialize session
         ret.config = config

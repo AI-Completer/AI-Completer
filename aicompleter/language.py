@@ -10,7 +10,7 @@ DICT = {
         'greeting':'你好',
         'greeting_reply':'你好, 有什么可以帮助你的吗?',
         'start_task':'请开始你的任务',
-        'sentence_splitter':'。！？，,.!?',
+        'sentence_splitter':'。！？.!?',
     },
     'en-us':{
         'greeting':'Hello',
@@ -19,4 +19,4 @@ DICT = {
         'sentence_splitter':'.!?'
     },
 }
-ALL_SPILTTER = set('.,!?。！？，')
+ALL_SPILTTER = set('.!?。！？')

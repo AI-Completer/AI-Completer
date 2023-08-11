@@ -78,6 +78,8 @@ class MultiContent(Content):
             self.contents.append(Text(json.dumps(param, ensure_ascii=False)))
         elif param is None:
             pass
+        elif isinstance(param, type(self)):
+            self.contents.extend(param.contents)
         else:
             raise TypeError(f"Unsupported type {type(param)}")
 
@@ -132,7 +134,7 @@ class MessageStatus(enum.Enum):
 
 class Session:
     '''Session'''
-    def __init__(self, handler:Handler, memory:Optional[MemoryConfigure] = None) -> None:
+    def __init__(self, handler:Handler) -> None:
         self.create_time: float = time.time()
         '''Create time'''
         # self.last_used: float = self.create_time
@@ -158,12 +160,6 @@ class Session:
         Event of Call, this will be triggered when a command is called
         If the event is stopped, the command will not be called
         '''
-
-        from ..memory import JsonMemory, MemoryConfigure
-
-        memory = memory or MemoryConfigure(factory=JsonMemory)
-        self._memory:Memory = memory.initial_memory or memory.factory(*memory.factory_args, **memory.factory_kwargs)
-        '''Memory'''
             
         self.logger:log.Logger=log.Logger('session')
         '''Logger'''
@@ -234,7 +230,7 @@ class Session:
                 raise ValueError("Cannot specify content or args or kwargs when sending a Message")
             if self._closed:
                 raise RuntimeError("Session closed")
-            return self.in_handler.send(self, cmd_or_msg)
+            return self.in_handler.call(self, cmd_or_msg)
         elif isinstance(cmd_or_msg, str):
             params = {
                 'cmd': cmd_or_msg,
@@ -277,7 +273,7 @@ class Session:
                 raise ValueError("Cannot specify content or args or kwargs when sending a Message")
             if self._closed:
                 raise RuntimeError("Session closed")
-            return self.in_handler.send(self, cmd_or_msg)
+            return self.in_handler.call_soon(self, cmd_or_msg)
         elif isinstance(cmd_or_msg, str):
             params = {
                 'cmd': cmd_or_msg,
@@ -330,13 +326,20 @@ class Session:
             })
         return ret
 
-@attr.s(auto_attribs=True, kw_only=True)
-class Message:
-    '''A normal message from the Interface.'''
+# Limited by the attrs module, the performance of attr on kw_only is not overridable by the attribute.
+@attr.dataclass
+class BaseMessage:
+    '''
+    Base Message class.
+    '''
     cmd:str = attr.ib(default="", kw_only=False)
     '''Call which command to transfer this Message'''
     content:MultiContent = attr.ib(factory=MultiContent, converter=MultiContent, kw_only=False)
     '''Content of the message'''
+
+@attr.dataclass(kw_only=True)
+class Message(BaseMessage):
+    '''A normal message from the Interface.'''
     session:Optional[Session] = attr.ib(default=None,validator=attr.validators.optional(attr.validators.instance_of(Session)))
     '''Session of the message'''
     id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))

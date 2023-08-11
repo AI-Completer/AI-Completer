@@ -265,7 +265,7 @@ def getLogger(name:str, substruct:list[str] = []) -> Logger:
     # _log.handlers = _common_handlers
 
     # Below is a hack to make the logger share a same class and level
-    _log = hookclass(root, {
+    _log:Logger = hookclass(root, {
         'name': name,
         '_stack': copy.copy(substruct),
     })

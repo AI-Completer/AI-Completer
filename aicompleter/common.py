@@ -414,6 +414,13 @@ def serialize(data:Any, pickle_all:bool = False) -> JsonType:
             'type': 'bytes',
             'data': data.hex(),
         }
+    elif isinstance(data, type):
+        # Get the module and class name
+        return {
+            'type': 'type',
+            'module': data.__module__,
+            'class': data.__qualname__,
+        }
     elif SerializeHandler.support(data):
         # Search the match type
         cls, ddata = SerializeHandler.serializeData(data)
@@ -480,6 +487,9 @@ def deserialize(data: JsonType, global_:Optional[dict[str, Any]] = None, unpickl
     elif subtype == 'bytes':
         # hex转bytes
         return bytes.fromhex(data['data'])
+    elif subtype == 'type':
+        cls = _get_class(data['module'], data['class'])
+        return cls
     elif subtype == 'handler':
         cls = _get_class(data['module'], data['class'])
         if not SerializeHandler.support(cls):

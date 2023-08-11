@@ -2,7 +2,7 @@ aiohttp
 colorama
 tiktoken
 shutils
-attr
+attrs
 paramiko
 EdgeGPT
 pandas

@@ -3,10 +3,11 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from asyncio import iscoroutine
 import attr
 
 from enum import Enum, unique
-from typing import Callable, Coroutine
+from typing import Callable, Coroutine, NoReturn
 
 @unique
 class Type(Enum):
@@ -25,7 +26,7 @@ class Event:
     '''Base class for all events'''
     type:Type = attr.ib(default=Type.Exception, validator=attr.validators.instance_of(Type), kw_only=False)
     '''Type of the event'''
-    callbacks:list[Callable[[Event,*object],Coroutine[bool, None, None]]] = attr.ib(factory=list, validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(Callable), iterable_validator=attr.validators.instance_of(list)))
+    callbacks:list[Callable[[Event,*object],Coroutine[bool, None, None] | bool]] = attr.ib(factory=list, validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(Callable), iterable_validator=attr.validators.instance_of(list)))
     '''
     Callback functions
     When a callback function returns True, the event will be stopped
@@ -40,7 +41,10 @@ class Event:
     async def __call__(self, *args, **kwargs):
         self.last_active_time = time.time()
         for cb in self.callbacks:
-            if (await cb(self, *args, **kwargs)):
+            ret = cb(self, *args, **kwargs)
+            if iscoroutine(ret):
+                ret = await ret
+            if ret:
                 return cb
         return None
 
@@ -72,7 +76,7 @@ class Exception(Event):
         self.exception = exception
         '''Exception'''
 
-    def reraise(self):
+    def reraise(self) -> NoReturn:
         '''Reraise the exception'''
         raise self.exception
     

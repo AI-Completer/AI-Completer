@@ -4,9 +4,10 @@ tiktoken
 shutils
 attrs
 paramiko
+trafilatura
 EdgeGPT
 pandas
-sentence_transformers
-torch
-jieba
-keybert
+# Below are the ones that are optional and they are too big to be installed by default
+# sentence_transformers
+# torch
+# keybert

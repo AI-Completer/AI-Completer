@@ -7,8 +7,6 @@ import uuid
 from aicompleter.test import quick as q
 import pytest
 
-@pytest.mark.run(order=0x50)
-@pytest.mark.dependency(depends=["test/test_command.py::test_BaseCommand"], scope='session')
 def test_BaseInterface():
     # If import successfully, the creation of interface is passed
     from aicompleter.test import quick as q
@@ -28,8 +26,6 @@ def test_BaseInterface():
     assert nul.run('test2', key = 1, key2 = '2') == (1, '2')
     # For now, the run method do not support structal call
 
-@pytest.mark.run(order=0x51)
-@pytest.mark.dependency(depends=['test_BaseInterface'])
 def test_InterfaceInherit():
     class ConfigModel(ac.ConfigModel):
         a: str
@@ -76,8 +72,6 @@ def test_InterfaceInherit():
 
     assert len(test.commands) == 2
 
-@pytest.mark.run(order=0x52)
-@pytest.mark.dependency(depends=["test/test_config.py::test_Config", "test/test_handler.py::test_BaseInterface"], scope='session')
 def test_BaseHandler():
     handler = ac.Handler()
     handler = ac.Handler(config=ac.Config({
@@ -93,8 +87,6 @@ def test_BaseHandler():
         # Do more thing on hard test
     asyncio.run(_intest())
 
-@pytest.mark.run(order=0x53)
-@pytest.mark.dependency(depends=['test_BaseHandler'])
 def test_InterfaceCommand():
     class TestInterface(ac.Interface):
         cmdreg:ac.Commands = ac.Commands()

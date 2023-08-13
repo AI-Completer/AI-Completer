@@ -386,15 +386,14 @@ def python_type(annotation):
     else:
         return annotation
 
-_sig_cache:dict[Callable, inspect.Signature] = {}
+_sig_cache:weakref.WeakKeyDictionary[Callable, inspect.Signature] = {}
 def get_signature(func):
     '''
     Get the signature of a function, this function will cache the signature
     '''
-    wfunc = weakref.ref(func)
     if func not in _sig_cache:
-        _sig_cache[wfunc] = inspect.signature(func)
-    return _sig_cache[wfunc]
+        _sig_cache[func] = inspect.signature(func)
+    return _sig_cache[func]
 
 def _get_sig_bind(func, *args, **kwargs):
     sig = get_signature(func)

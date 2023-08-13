@@ -3,8 +3,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import aicompleter as ac
 import pytest
 
-@pytest.mark.run(order=0x10)
-@pytest.mark.dependency()
 def test_Config():
     config = ac.Config()
     config = ac.Config({
@@ -49,8 +47,6 @@ def test_Config():
     with pytest.raises(TypeError):
         config = ac.Config(1)
 
-@pytest.mark.run(order=0x11)
-@pytest.mark.dependency(depends=['test_Config'])
 def test_ConfigModel():
     class TestModel(ac.ConfigModel):
         a: str

@@ -22,7 +22,6 @@ class BaseException(Exception):
     def __init_subclass__(cls) -> None:
         if cls.__doc__ == BaseException.__doc__:
             cls.__doc__ = None
-        return super().__init_subclass__()
     
     @property
     def interface(self):

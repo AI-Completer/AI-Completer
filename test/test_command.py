@@ -3,8 +3,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 import aicompleter as ac
 
-@pytest.mark.run(order=0x20)
-@pytest.mark.dependency()
 def test_Format():
     struct = ac.CommandParamStruct({
         'key': ac.CommandParam('key', type=int),
@@ -16,8 +14,6 @@ def test_Format():
     assert not struct.check({'key': 1, 'key2': 2})
     assert struct.check({'key': 1, 'key2': '2'})
 
-@pytest.mark.run(order=0x21)
-@pytest.mark.dependency(depends=['test_Format'])
 def test_BaseCommand():
     ac.Command('cmd')
     cmd = ac.Command('cmd', 'desc')

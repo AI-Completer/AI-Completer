@@ -3,7 +3,12 @@ import os
 import uuid
 from typing import Callable, Iterable, Iterator, Optional, Self
 
+from .. import utils
+
+# This operation is get the faiss module and do not unload it
+faiss = utils.require_module('faiss')
 import faiss
+
 import numpy as np
 import torch
 from transformers import BertModel, BertTokenizer, BertTokenizerFast

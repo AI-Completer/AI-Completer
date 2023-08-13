@@ -5,6 +5,7 @@ import asyncio
 import copy
 import functools
 import importlib
+import json
 import uuid
 from typing import Any, Generator, Iterator, Optional, overload
 
@@ -19,6 +20,7 @@ from .interface.command import Commands
 from .session.base import Session
 
 from .namespace import Namespace
+from .utils.special import getcallercommand
 
 class Handler(AsyncLifeTimeManager, Saveable):
     '''
@@ -73,7 +75,7 @@ class Handler(AsyncLifeTimeManager, Saveable):
     @property
     def commands(self):
         '''Get all commands'''
-        return self._namespace.commands
+        return self._namespace.get_executable()
     
     @property
     def config(self):
@@ -341,7 +343,7 @@ class Handler(AsyncLifeTimeManager, Saveable):
         '''Get all interfaces'''
         return self._interfaces
     
-    async def call(self, session:session.Session, message:session.Message):
+    def call(self, session:session.Session, message:session.Message):
         '''
         Call a command
         
@@ -403,7 +405,7 @@ class Handler(AsyncLifeTimeManager, Saveable):
 
         async def _handle_call():
             try:
-                await self.call(session, message)
+                await cmd.call(session, message)
             except KeyboardInterrupt:
                 await self.on_keyboardinterrupt.trigger()
             except asyncio.CancelledError:
@@ -437,7 +439,7 @@ class Handler(AsyncLifeTimeManager, Saveable):
         self.logger.debug("Creating new session %s", ret.id)
         # Initialize session
         ret.config = config
-        if config == None: 
+        if config == None:
             ret.config = copy.deepcopy(self.config)
             ret.config.each(
                 lambda key,value: value.update(ret.config['global']),

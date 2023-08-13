@@ -2,20 +2,19 @@
 Base Objects for Interface of AutoDone-AI
 '''
 import copy
+import json
 import os
 import uuid
-from abc import ABCMeta, abstractmethod
 from typing import Coroutine, Optional, Self, TypeVar, Union, overload
 import asyncio
 
 import attr
 
-from .. import config, error, handler, log, memory, session, utils
-from ..common import AsyncLifeTimeManager, BaseTemplate, JSONSerializable
+from .. import config, error, handler, log, session, utils
+from ..common import AsyncLifeTimeManager, JSONSerializable
 from ..config import Config
-from ..namespace import Namespace
+from ..namespace import Namespace, BaseNamespace
 from ..utils import EnhancedDict
-from ..memory import Memory, JsonMemory
 from .command import Command, Commands
 
 Handler = TypeVar('Handler', bound='handler.Handler')

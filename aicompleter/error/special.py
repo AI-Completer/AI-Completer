@@ -60,7 +60,7 @@ class FormatError(BaseAICompleterError):
         self.message:Message  = message
         super().__init__(interface = interface, *args, **kwargs)
 
-class StopHandler(BaseAICompleterError):
+class StopHandler(BaseException):
     '''
     Stop Handler
     This exception will stop the handler if raised
@@ -81,8 +81,7 @@ class SessionClosed(BaseAICompleterError):
         super().__init__(*args, **kwargs)
 
 __all__ = (
-    'BaseAICompleterError',
     *(
-        i.__name__ for i in globals().values() if isinstance(i, type) and issubclass(i, BaseAICompleterError)
-    )
+        i.__name__ for i in globals().values() if isinstance(i, type) and issubclass(i, BaseException)
+    ),
 )

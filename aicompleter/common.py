@@ -141,9 +141,9 @@ class Saveable(BaseTemplate):
         '''
         raise NotImplementedError('save is not implemented')
 
-    @staticmethod
+    @classmethod
     @abstractmethod
-    def load(path: str) -> Self:
+    def load(cls, path: str) -> Self:
         '''
         Load from file
         '''
@@ -160,9 +160,9 @@ class AsyncSaveable(AsyncTemplate[Saveable]):
         '''
         raise NotImplementedError('save is not implemented')
 
-    @staticmethod
+    @classmethod
     @abstractmethod
-    async def load(path: str) -> Self:
+    async def load(cls, path: str) -> Self:
         '''
         Load from file
         '''
@@ -173,7 +173,7 @@ class ContentManager(BaseTemplate):
     This class is a template for content manager
     '''
     __slots__ = ()
-    def __enter__(self) -> Any:
+    def __enter__(self):
         '''
         Enter the context
         '''
@@ -181,7 +181,7 @@ class ContentManager(BaseTemplate):
             self.acquire()
         raise NotImplementedError('enter is not implemented')
     
-    def __exit__(self, exc_type, exc_value, traceback) -> None:
+    def __exit__(self, exc_type, exc_value, traceback):
         '''
         Exit the context
         '''
@@ -194,7 +194,7 @@ class AsyncContentManager(AsyncTemplate[ContentManager]):
     This class is a template for asynchronous content manager
     '''
     __slots__ = ()
-    async def __aenter__(self) -> Any:
+    async def __aenter__(self):
         '''
         Enter the context
         '''
@@ -202,7 +202,7 @@ class AsyncContentManager(AsyncTemplate[ContentManager]):
             await self.acquire()
         raise NotImplementedError('enter is not implemented')
     
-    async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+    async def __aexit__(self, exc_type, exc_value, traceback):
         '''
         Exit the context
         '''

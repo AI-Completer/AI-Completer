@@ -69,7 +69,7 @@ class MultiContent(Content):
     def __init__(self, json: dict|list) -> None:
         ...
 
-    def __init__(self, param = None) -> None:
+    def __init__(self, param:str|list[Content]|dict|list|Self|type(None) = None) -> None:
         self.contents:list[Content] = []
         if isinstance(param, str):
             self.contents.append(Text(param))
@@ -167,7 +167,7 @@ class Session:
         Event of Call, this will be triggered when a command is called
         If the event is stopped, the command will not be called
         '''
-            
+        
         self.logger:log.Logger=log.Logger('session')
         '''Logger'''
         self.logger = log.getLogger('Session', [self.id.hex[:8]])
@@ -421,14 +421,14 @@ class Session:
         return session
 
 # Limited by the attrs module, the performance of attr on kw_only is not overridable by the attribute.
-@attr.dataclass
+@attr.dataclass(kw_only=False)
 class BaseMessage:
     '''
     Base Message class.
     '''
-    cmd:str = attr.ib(default="", kw_only=False)
+    cmd:str = attr.ib(default="")
     '''Call which command to transfer this Message'''
-    content:MultiContent = attr.ib(factory=MultiContent, converter=MultiContent, kw_only=False)
+    content:MultiContent = attr.ib(factory=MultiContent, converter=MultiContent)
     '''Content of the message'''
 
 @attr.dataclass(kw_only=True)

@@ -292,7 +292,7 @@ class CommandAuthority(JSONSerializable):
         return sum([_level_map[i]**2 for i in self.__dict__ if self.__dict__[i] == True])**0.5
 
 
-@attrs.define
+@attrs.define(slots=False)
 class Command(JSONSerializable):
     '''Command Struct'''
     cmd:str = field(default="", kw_only=False)
@@ -349,7 +349,7 @@ class Command(JSONSerializable):
     
     def __attrs_post_init__(self):
         self.logger = log.getLogger("Command", [self.in_interface.user.name if self.in_interface else 'Unknown', self.cmd])
-        self.check = self.format.check if self.format else lambda x:True
+        self.check = self.format.check if self.format and isinstance(self.format, CommandParamStruct) else lambda x:True
         self.__format_setattr(self, 'format', self.format)
 
     @in_interface.validator

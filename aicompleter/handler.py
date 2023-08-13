@@ -9,7 +9,8 @@ import uuid
 from typing import Any, Generator, Iterator, Optional, overload
 
 from . import utils
-from .common import AsyncLifeTimeManager
+from .utils.storage import StorageManager
+from .common import AsyncLifeTimeManager, Saveable
 
 from . import error, events, interface, log, session
 from .config import Config
@@ -19,7 +20,7 @@ from .session.base import Session
 
 from .namespace import Namespace
 
-class Handler(AsyncLifeTimeManager):
+class Handler(AsyncLifeTimeManager, Saveable):
     '''
     Handler for AI-Completer
     
@@ -432,7 +433,11 @@ class Handler(AsyncLifeTimeManager):
         return ret
     
     def getstate(self):
-        '''Get state of handler'''
+        '''
+        Get state of handler
+
+        This method may be removed in the future
+        '''
         return {
             'interfaces': [
                 {
@@ -450,7 +455,11 @@ class Handler(AsyncLifeTimeManager):
         }
     
     def setstate(self, state:dict[str, Any]):
-        '''Set state of handler'''
+        '''
+        Set state of handler
+        
+        This method may be removed in the future
+        '''
         # Require preload interfaces, because the interface init method varies
         self.logger.debug("Set state of handler")
         _loaded_interfaces = []
@@ -493,6 +502,38 @@ class Handler(AsyncLifeTimeManager):
                 if cmd['name'] not in _inter.commands:
                     raise error.NotFound(cmd['name'], interface=_inter, handler=self)
                 _inter.commands[cmd['name']].callable_groups = set(cmd['callable_groups'])
+
+    def save(self, path:str | StorageManager):
+        '''Save handler to path'''
+        if isinstance(path, str):
+            path = StorageManager(path)
+        intmeta = self.getstate()
+        with open(path.alloc_file('intmeta'), 'w') as f:
+            json.dump(intmeta, f)
+        with open(path.alloc_file('config'), 'w') as f:
+            json.dump(self.config, f)
+        sessions = path.alloc_storage('sessions')
+        for i in self._running_sessions:
+            session_storage = sessions.alloc_storage(i.id.hex)
+            i.save(session_storage, True)
+        self.logger.info("Handler saved to %s", path.path)
+
+    @classmethod
+    def load(cls, path:str | StorageManager):
+        '''Load handler from path'''
+        if isinstance(path, str):
+            path = StorageManager(path)
+        with open(path.alloc_file('intmeta'), 'r') as f:
+            intmeta = json.load(f)
+        with open(path.alloc_file('config'), 'r') as f:
+            config = Config(json.load(f))
+        ret = cls(config)
+        ret.setstate(intmeta)
+        sessions = StorageManager.load(path['sessions'].name)
+        for i in sessions:
+            session_storage = sessions[i.mark]
+            ret._running_sessions.append(Session.load(ret, session_storage))
+        return ret
 
 __all__ = (
     'Handler',

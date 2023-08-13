@@ -440,6 +440,8 @@ class Interface(AsyncLifeTimeManager):
         '''
         Get the Storage of the interface (if any)
 
+        If possible, use save_session alternatively
+
         :param session: Session
         :return: Storage, if there is nothing to store, return None
         '''
@@ -449,9 +451,19 @@ class Interface(AsyncLifeTimeManager):
         '''
         Set the Storage of the interface (if any)
 
+        If possible, use load_session alternatively
+
         :param session: Session
         '''
         pass
+
+    def save_session(self, path:str, session:session.Session):
+        with open(path, 'w') as f:
+            json.dump(self.getStorage(session) or {}, f)
+
+    def load_session(self, path:str, session:session.Session):
+        with open(path, 'r') as f:
+            self.setStorage(session, json.load(f))
     
     def close(self):
         '''Close the interface'''

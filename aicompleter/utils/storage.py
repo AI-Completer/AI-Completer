@@ -1,3 +1,4 @@
+from __future__ import annotations
 import contextlib
 import json
 import os
@@ -7,29 +8,37 @@ import attr
 from ..common import JSONSerializable, JsonType, serialize
 
 @attr.dataclass(frozen=True)
-class Stroage:
+class Storage:
     '''
-    Stroage Metadata
+    Storage Metadata
 
     Args:
     ----------
     mark: JSONSerializable - file mark
     name: str - file name
-    type: Literal['file', 'stroage', 'folder'] - file type
+    type: Literal['file', 'storage', 'folder'] - file type
     '''
     mark:JSONSerializable | JsonType
     '''
-    The stroage mark
-    this identifies the stroage uniquely
+    The storage mark
+    this identifies the storage uniquely
     '''
     name:str = attr.ib(default=None)
     '''
     File name
     '''
-    type:Literal['file', 'stroage', 'folder'] = 'file'
+    type:Literal['file', 'storage', 'folder'] = 'file'
     '''
     File type
     '''
+
+    in_manager:Optional[StorageManager] = attr.ib(default=None, repr=False)
+    @property
+    def path(self):
+        '''
+        Get the file path
+        '''
+        return os.path.join(self.in_manager._basepath, self.mark)
 
     def asdict(self):
         return {
@@ -46,9 +55,9 @@ class Stroage:
         del data['mark-serialized']
         return cls(**data)
 
-class StroageManager:
+class StorageManager:
     '''
-    Stroage Metadata Manager
+    Storage Metadata Manager
 
     Args:
     ----------
@@ -61,13 +70,20 @@ class StroageManager:
             os.makedirs(basepath)
         if not os.path.isdir(basepath):
             raise ValueError(f'{basepath} is not a directory')
-        self._metas:list[Stroage] = []
+        self._metas:list[Storage] = []
         self._indexfile = os.path.join(basepath, 'index.json')
+
+    @property
+    def path(self):
+        '''
+        Get the base path
+        '''
+        return self._basepath
 
     @classmethod
     def load(cls, basepath:str):
         '''
-        Load Stroage Metadata Manager
+        Load Storage Metadata Manager
 
         Args:
         ----------
@@ -75,25 +91,35 @@ class StroageManager:
 
         Returns:
         ----------
-        StroageManager
+        StorageManager
         '''
         manager = cls(basepath)
         with open(manager._indexfile, 'r') as f:
-            manager._metas = [Stroage.fromdict(meta) for meta in json.load(f)]
+            manager._metas = [Storage.fromdict(meta) for meta in json.load(f)]
         return manager
 
     def save(self):
         '''
-        Save Stroage Metadata Manager
+        Save Storage Metadata Manager
         '''
         with open(self._indexfile, 'w') as f:
             json.dump([meta.asdict() for meta in self._metas], f)
+
+    @staticmethod
+    def isstoragedir(path:str):
+        '''
+        Test whether a folder is a storage folder
+        '''
+        if os.path.isdir(path):
+            if os.path.isfile(os.path.join(path, 'index.json')):
+                return True
+        return False
 
     def __getitem__(self, mark:JSONSerializable|JsonType):
         for meta in self._metas:
             if meta.mark == mark:
                 return meta
-        raise KeyError(f'No stroage with mark {mark}')
+        raise KeyError(f'No storage with mark {mark}')
     
     def __contains__(self, mark:JSONSerializable|JsonType):
         for meta in self._metas:
@@ -109,11 +135,11 @@ class StroageManager:
     
     def findmark(self, name:str):
         '''
-        Find stroage mark by name
+        Find storage mark by name
 
         Args:
         ----------
-        name: str - stroage name
+        name: str - storage name
 
         Returns:
         ----------
@@ -144,8 +170,8 @@ class StroageManager:
         The absoult path of the file
         '''
         if mark in self:
-            raise KeyError(f'Stroage with mark {mark} already exists')
-        meta = Stroage(mark, self._get_available_name(recommended_subfix or ''))
+            raise KeyError(f'Storage with mark {mark} already exists')
+        meta = Storage(mark, self._get_available_name(recommended_subfix or ''), in_manager=self)
         self._metas.append(meta)
         return os.path.join(self._basepath, meta.name)
 
@@ -162,41 +188,41 @@ class StroageManager:
         The absoult path of the folder (created)
         '''
         if mark in self:
-            raise KeyError(f'Stroage with mark {mark} already exists')
-        meta = Stroage(mark, self._get_available_name(), 'folder')
+            raise KeyError(f'Storage with mark {mark} already exists')
+        meta = Storage(mark, self._get_available_name(), 'folder', in_manager=self)
         self._metas.append(meta)
         os.mkdir(os.path.join(self._basepath, meta.name))
         return os.path.join(self._basepath, meta.name)
     
-    def alloc_stroage(self, mark:JSONSerializable|JsonType) -> Self:
+    def alloc_storage(self, mark:JSONSerializable|JsonType) -> Self:
         '''
-        Allocate a stroage
+        Allocate a storage
 
         Args:
         ----------
-        name: str - stroage name
-        mark: JSONSerializable - stroage mark
+        name: str - storage name
+        mark: JSONSerializable - storage mark
 
         Returns:
         ----------
-        New StroageManager instance of the allocated folder
+        New StorageManager instance of the allocated folder
         '''
         if mark in self:
-            raise KeyError(f'Stroage with mark {mark} already exists')
-        meta = Stroage(mark, self._get_available_name(), 'stroage')
+            raise KeyError(f'Storage with mark {mark} already exists')
+        meta = Storage(mark, self._get_available_name(), 'storage', in_manager=self)
         self._metas.append(meta)
         return type(self)(os.path.join(self._basepath, meta.name))
 
     def delete(self, mark:JSONSerializable|JsonType):
         '''
-        Delete stroage
+        Delete storage
 
         Args:
         ----------
-        mark: JSONSerializable - stroage mark
+        mark: JSONSerializable - storage mark
         '''
         for meta in self._metas:
             if meta.mark == mark:
                 self._metas.remove(meta)
                 return
-        raise KeyError(f'No stroage with mark {mark}')
+        raise KeyError(f'No storage with mark {mark}')

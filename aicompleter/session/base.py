@@ -155,6 +155,12 @@ class Session:
         '''Data'''
         self._running_tasks:utils.TaskList = utils.TaskList()
         '''Running tasks'''
+        self._running_commands: list[tuple[aicompleter.Command, Message]] = []
+        '''
+        Running commands.
+
+        This is a list of tuple of command and message, containing all running commands.
+        '''
         self.on_call: events.Event = events.Event(type=events.Type.Hook)
         '''
         Event of Call, this will be triggered when a command is called
@@ -325,6 +331,78 @@ class Session:
                 'data': data
             })
         return ret
+    
+    def save(self, storage: utils.StorageManager | str, save_running_commands:bool = False):
+        if isinstance(storage, str):
+            storage = utils.StorageManager(storage)
+        meta = {
+            'id': self.id.hex,
+            'config': dict(self.config),
+            'created_time': self.create_time,
+            'closed': self._closed,
+        }
+        with open(storage.alloc_file('meta'), 'w') as f:
+            json.dump(meta, f)
+        for i in self.in_handler._interfaces:
+            i.save_session(storage.alloc_file({
+                'type': 'interface',
+                'id': i.id.hex,
+            }))
+        for i in self.history:
+            i.save(storage.alloc_file({
+                'type': 'message',
+                'id': i.id.hex,
+            }))
+        if save_running_commands:
+            with open(storage.alloc_file('running_commands'), 'w') as f:
+                json.dump([{
+                    'cmd': cmd,
+                    'msg': msg.id.hex,
+                } for cmd, msg in self._running_commands], f)
+        storage.save()
+
+    @classmethod
+    def load(cls, storage: utils.StorageManager | str, in_handler: Handler):
+        if isinstance(storage, str):
+            storage = utils.StorageManager.load(storage)
+        with open(storage['meta'], 'r') as f:
+            meta = json.load(f)
+        session = cls(handler=in_handler)
+        session.create_time = meta['created_time']
+        session.config = Config(meta['config'])
+        session._closed = meta['closed']
+        session._id = uuid.UUID(meta['id'])
+        intmap = {}
+        hislis = []
+        for i in storage:
+            if not isinstance(i, dict) or 'type' not in i:
+                continue
+            if i['type'] == 'interface':
+                intmap[i['id']] = storage[i]
+            elif i['type'] == 'message':
+                hislis.append(storage[i])
+        for i in in_handler._interfaces:
+            # If not found, will throw KeyError
+            i.load_session(storage[intmap.pop(i.id.hex)].path, session)
+        for i in hislis:
+            session.history.append(Message.load(i.path, session))
+        if 'running_commands' in storage:
+            with open(storage['running_commands'], 'r') as f:
+                cmds = json.load(f)
+            def _find_history(uuidstr):
+                for i in session.history:
+                    if i.id.hex == uuidstr:
+                        return i
+                return None
+            for i in cmds:
+                to_add = _find_history(i['msg'])
+                if to_add is None:
+                    log.warning(f"Message not found: {i['msg']}. The command will be ignored.")
+                    continue
+                session._running_commands.append((i['cmd'], to_add))
+        if len(intmap):
+            log.warning(f"Interfaces(ID-baesd) not found: {intmap.keys()}. Are the interfaces changed?")
+        return session
 
 # Limited by the attrs module, the performance of attr on kw_only is not overridable by the attribute.
 @attr.dataclass
@@ -397,10 +475,10 @@ class Message(BaseMessage):
             'dest_interface': self.dest_interface.namespace if self.dest_interface is not None else None,
         }
     
-    @staticmethod
-    def from_json(data:dict):
+    @classmethod
+    def from_json(cls, data:dict):
         # TODO: add session
-        return Message(
+        return cls(
             content = MultiContent(data['content']),
             session = None,
             id = uuid.UUID(data['id']),
@@ -422,6 +500,39 @@ class Message(BaseMessage):
             return self.content[key]
         else:
             return self.content.json.get(key, default)
+        
+    def save(self, file:str):
+        with open(file, 'w') as f:
+            json.dump(self.to_json(), f)
+
+    @classmethod
+    def load(cls, file:str, session:Session):
+        with open(file, 'r') as f:
+            data = json.load(f)
+        msg = cls.from_json(data)
+        msg.session = session
+        if data['last_message'] is not None:
+            for i in session.history:
+                if i.id.hex == data['last_message']:
+                    msg.last_message = i
+                    break
+            else:
+                log.warning(f"Last message not found: {data['last_message']}")
+        if data['src_interface'] is not None:
+            for i in session.in_handler._interfaces:
+                if i.id == data['src_interface']:
+                    msg.src_interface = i
+                    break
+            else:
+                log.warning(f"Source interface not found: {data['src_interface']}")
+        if data['dest_interface'] is not None:
+            for i in session.in_handler._interfaces:
+                if i.id == data['dest_interface']:
+                    msg.dest_interface = i
+                    break
+            else:
+                log.warning(f"Destination interface not found: {data['dest_interface']}")
+        return msg
     
 class MessageQueue(asyncio.Queue[Message]):
     '''Message Queue'''

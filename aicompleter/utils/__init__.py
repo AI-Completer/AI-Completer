@@ -53,8 +53,7 @@ from .text import (
     extract_html,
     clear_html,
 )
-from .stroage import (
-    Stroage,
-    StroageManager,
+from .storage import (
+    Storage,
+    StorageManager,
 )
-    

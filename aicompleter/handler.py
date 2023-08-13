@@ -206,9 +206,20 @@ class Handler(AsyncLifeTimeManager, Saveable):
             if i in self._interfaces:
                 raise error.Existed(i, handler=self)
             self._interfaces.append(i)
-            self._namespace.subnamespaces[i.namespace.name] = i.namespace
+            if i.namespace.name in self._namespace.subnamespaces:
+                # Discuss whether the namespace is same
+                if not i.namespace == self._namespace.subnamespaces[i.namespace.name]:
+                    raise error.NamespaceConflict(i.namespace, "There is a namespace existed with the same name, but not the same content."\
+                            "Is there two conflicted name?", existed_namespace=self._namespace.subnamespaces[i.namespace.name])
+                # Normal case, in this, there are two or more interfaces in same type added to this handler
+            else:
+                self._namespace.subnamespaces[i.namespace.name] = i.namespace
         for i in interfaces:
-            await i.init(self)
+            params = utils.appliable_parameters(i.init, {
+                'in_handler': self,
+                'handler': self
+            })
+            await i.init(**params)
         self.reload()
 
     @overload
@@ -221,19 +232,30 @@ class Handler(AsyncLifeTimeManager, Saveable):
 
     async def rm_interface(self, param:Interface or uuid.UUID) -> None:
         '''Remove interface from the handler'''
+        def _rm_namespace(name):
+            for sub in self._namespace.subnamespaces.values():
+                if sub.name == name:
+                    break
+            else:
+                # remove
+                del self._namespace.subnamespaces[name]
         if isinstance(param, Interface):
             if param not in self._interfaces:
                 raise error.NotFound(param, handler=self)
             await param.final()
             self._interfaces.remove(param)
-            self._namespace.subnamespaces.pop(param.namespace.name)
+            _rm_namespace(param.namespace.name)
             self.reload()
         elif isinstance(param, uuid.UUID):
             for i in self._interfaces:
                 if i.id == param:
-                    await i.final()
+                    params = utils.appliable_parameters(i.final, {
+                        'in_handler': self,
+                        'handler': self,
+                    })
+                    await i.final(**params)
                     self._interfaces.remove(i)
-                    self._namespace.subnamespaces.pop(i.namespace.name)
+                    _rm_namespace(i.namespace.name)
                     self.reload()
                     return
             raise error.NotFound(param, handler=self)

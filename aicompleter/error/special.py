@@ -11,6 +11,7 @@ Interface = TypeVar('Interface', bound='aicompleter.interface.Interface')
 Message = TypeVar('Message', bound='aicompleter.session.Message')
 Config = TypeVar('Config', bound='aicompleter.config.Config')
 Session = TypeVar('Session', bound='aicompleter.session.Session')
+Namespace = TypeVar('Namespace', bound='aicompleter.Namespace')
 
 class BaseAICompleterError(BaseException):
     '''Base AI Completer Error'''
@@ -26,6 +27,14 @@ class AliasConflict(BaseAICompleterError):
     def __init__(self, command:str, interface: Interface, *args: object, **kwargs: object) -> None:
         self.command:str = command
         super().__init__(interface = interface, *args, **kwargs)
+
+class NamespaceConflict(BaseAICompleterError):
+    '''
+    The namespace have encountered a conflict, may from name conflict, or other problem caused by the inconsistent of the namespaces
+    '''
+    def __init__(self, namespace:Namespace, *args: object, **kwargs: object) -> None:
+        self.namespace = namespace
+        super().__init__(*args, **kwargs)
 
 class PermissionDenied(BaseAICompleterError):
     '''Permission Denied'''

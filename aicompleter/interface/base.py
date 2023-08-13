@@ -284,7 +284,7 @@ class Interface(AsyncLifeTimeManager):
     '''
 
     def __init__(self, 
-                 namespace:str, 
+                 namespace:Optional[str] = None, 
                  user:Optional[User] = None,
                  id:uuid.UUID = uuid.uuid4(), 
                  config: config.Config = config.Config()):
@@ -295,13 +295,19 @@ class Interface(AsyncLifeTimeManager):
         utils.typecheck(id, uuid.UUID)
         self._id:uuid.UUID = id
         '''ID'''
-
-        self.namespace:Namespace = Namespace(
-            name=namespace,
-            description="Interface %s" % str(self._id),
-            config=config,
-            data=self.dataFactory(),
-        )
+        
+        if namespace is None:
+            if hasattr(type(self), "namespace") and isinstance(type(self).namespace, BaseNamespace):
+                self.namespace:Namespace = Namespace(**attr.asdict(type(self).namespace))
+            else:
+                raise error.InvalidArgument("namespace is not specified")
+        else:
+            self.namespace:Namespace = Namespace(
+                name=namespace,
+                description="Interface %s" % str(type(self).__qualname__),
+                config=config,
+                data=self.dataFactory(),
+            )
 
         self.logger:log.Logger = log.getLogger("interface", [self.namespace.name])
         '''Logger of Interface'''

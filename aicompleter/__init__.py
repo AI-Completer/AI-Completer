@@ -67,7 +67,10 @@ from . import (
     implements,
 )
 
-from .namespace import Namespace
+from .namespace import (
+    BaseNamespace, 
+    Namespace
+)
 
 from . import (
     memory,

@@ -51,6 +51,9 @@ class Existed(BaseException):
 class NotFound(BaseException):
     '''Not Found'''
 
+class InvalidArgument(BaseException):
+    '''Invalid Argument'''
+
 class InvalidPath(BaseException):
     '''Invalid Path'''
     def __init__(self, path:str, *args: object, **kwargs: object) -> None:

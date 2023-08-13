@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import functools
 import inspect
+from types import FrameType
 import typing
-from typing import (Any, Callable, Coroutine, Iterable, Literal, Mapping, Optional, Self, TypeAlias,
+from typing import (Any, Callable, Coroutine, Iterable, Literal, LiteralString, Mapping, Optional, Self, TypeAlias,
                     TypeVar, overload)
 
 from .. import common
@@ -258,13 +259,13 @@ def hookclass(obj:_T, hooked_vars:dict[str, Any])-> _T:
 del _T
 
 @overload
-def link_property(link:str):...
+def link_property(link:str, *, enable_set=True, enable_del=True, doc=None):...
 
 @overload
-def link_property(linkdict:dict, key:str):...
+def link_property(linkdict:dict, key:str, *, enable_set=True, enable_del=True, doc=None):...
 
 @overload
-def link_property(linkdict:str, key:str):...
+def link_property(linkdict:str, key:str, *, enable_set=True, enable_del=True, doc=None):...
 
 def link_property(link: str|dict, key:Optional[str]=None, *, enable_set=True, enable_del=True, doc=None):
     '''
@@ -351,6 +352,7 @@ def make_model(model_base:type,
 
     If the handlers are set, this can also make other class be a model class
     '''
+    assert isinstance(model_base, type), 'model_base must be a type'
 
     class ModelProperty:
         '''
@@ -392,7 +394,10 @@ def make_model(model_base:type,
         def __delete__(self, instance:Model) -> None:
             return self.deleter(instance, self)
 
-    class ModelMeta(type):
+    # This operation is to solve the metaclass conflict
+    base_metaclass = type(model_base)
+
+    class ModelMeta(base_metaclass):
         Factory:TypeAlias = model_base
         def __new__(cls, name:str, bases:tuple[type,...], attrs:dict, / ,
                     init:bool = False, global_:Optional[dict[str, Any]] = None, local_:Optional[Mapping[str, Any]] = None):
@@ -572,14 +577,100 @@ class TaskList(common.AsyncContentManager, list[asyncio.Task]):
             task = asyncio.create_task(task)
         return self.TaskSession._setup_list(task, self)
 
-def stack_varibles(stack_level:int = 1) -> tuple[dict[str, Any], dict[str, Any]]:
+def stack_varibles(stack_level:int = 0) -> tuple[dict[str, Any], dict[str, Any]]:
     '''
     Get the varibles of the stack
-    :param stack_level: the stack level, default is 1, will get the varibles of the caller
+    :param stack_level: the stack level, default is 0, will get the varibles of the caller
     :return: the global varibles and local varibles
     '''
     import inspect
     frame = inspect.currentframe()
-    for _ in range(stack_level):
+    for _ in range(stack_level + 1):
         frame = frame.f_back
     return frame.f_globals, frame.f_locals
+
+def getframe(stack_level:int = 0) -> FrameType:
+    '''
+    Get the frame
+    :param stack_level: the stack level, default is 0, will get the frame of the caller
+    '''
+    import inspect
+    frame = inspect.currentframe()
+    for _ in range(stack_level + 1):
+        frame = frame.f_back
+    return frame
+
+def getcaller(stack_level:int = 1):
+    '''
+    Get the caller
+    '''
+    import sys
+    frame = getframe(stack_level + 1)
+    if '<locals>' in frame.f_code.co_qualname:
+        # Unable to get the caller
+        return None
+    splits = frame.f_code.co_qualname.split('.')
+    module = sys.modules[frame.f_globals['__name__']]
+    for split in splits:
+        module = getattr(module, split)
+    return module
+
+def getcallerclass(stack_level:int = 1):
+    '''
+    Get the root class of the caller
+
+    Note: The class defined here is the deepest class that can be get, if the class defined in a function, it will return the upper class
+    '''
+    import sys
+    frame = getframe(stack_level + 1)
+    splits = frame.f_code.co_qualname.split('.')
+    module = sys.modules[frame.f_globals['__name__']]
+    ret = temp = module
+    for split in splits:
+        temp = getattr(temp, split)
+        if isinstance(temp, type):
+            ret = temp
+        else:
+            break
+    if isinstance(ret, type):
+        return ret
+    # It seems that the caller is a function or a variable
+    return None
+
+def getcallerclassinstance(stack_level:int = 1):
+    '''
+    Get the class instance of the caller
+    '''
+    rootclass = getcallerclass(stack_level + 1)
+    if rootclass == None:
+        return None
+    caller = getcaller(stack_level + 1)
+    frame = getframe(stack_level + 1)
+    if caller == None:
+        # Unsure, it may be hacked
+        if 'self' in frame.f_locals:
+            if isinstance(frame.f_locals['self'], rootclass):
+                return frame.f_locals['self']
+        return None
+    if inspect.isfunction(caller):
+        # Standard function
+        from .typeval import get_signature
+        sig = get_signature(caller)
+        # The first parameter is the instance
+        instname = sig.parameters[0].name
+        if instname in frame.f_locals:
+            if isinstance(frame.f_locals[instname], rootclass):
+                return frame.f_locals[instname]
+    # In other cases, it may be a classmethod or staticmethod, which can not get the instance
+    return None
+
+def require_module(name:LiteralString):
+    '''
+    Require a module, else terminate the program
+    '''
+    import importlib
+    try:
+        return importlib.import_module(name)
+    except ImportError:
+        print("Error finding the module %s" % name)
+        exit(-1)

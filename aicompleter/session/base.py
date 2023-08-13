@@ -15,6 +15,7 @@ import aicompleter
 from .. import config, events, log, utils
 from ..config import Config, EnhancedDict
 from ..memory import Memory, MemoryConfigure, MemoryItem
+from ..utils.special import getcallercommand
 
 Handler = TypeVar('Handler', bound='aicompleter.handler.Handler')
 User = TypeVar('User', bound='aicompleter.interface.User')
@@ -153,7 +154,7 @@ class Session:
         '''Session Config'''
         self.data:EnhancedDict = EnhancedDict()
         '''Data'''
-        self._running_tasks:utils.TaskList = utils.TaskList()
+        self._running_tasks: utils.TaskList = utils.TaskList()
         '''Running tasks'''
         self._running_commands: list[tuple[aicompleter.Command, Message]] = []
         '''
@@ -236,6 +237,13 @@ class Session:
                 raise ValueError("Cannot specify content or args or kwargs when sending a Message")
             if self._closed:
                 raise RuntimeError("Session closed")
+            
+            if cmd_or_msg.src_interface is None:
+                callercommand = getcallercommand(commands=self.in_handler.get_executable_cmds())
+                if callercommand is not None:
+                    cmd_or_msg.src_interface = callercommand.in_interface
+            cmd_or_msg._check_cache['src_interface'] = True
+            
             return self.in_handler.call(self, cmd_or_msg)
         elif isinstance(cmd_or_msg, str):
             params = {
@@ -250,7 +258,15 @@ class Session:
                 raise ValueError("Cannot specify args or kwargs when sending a cmd")
             if self._closed:
                 raise RuntimeError("Session closed")
-            return self.in_handler.call(self, Message(**params))
+            
+            if params['src_interface'] is None:
+                callercommand = getcallercommand(commands=self.in_handler.get_executable_cmds())
+                if callercommand is not None:
+                    params['src_interface'] = callercommand.in_interface
+            msg = Message(**params)
+            msg._check_cache['src_interface'] = True
+
+            return self.in_handler.call(self, msg)
         else:
             raise TypeError(f"Unsupported type {type(cmd_or_msg)}")
     
@@ -432,11 +448,10 @@ class Message(BaseMessage):
     dest_interface:Optional[Interface] = None
     '''Interface which receive this message'''
 
+    _check_cache:dict = attr.ib(factory=dict, init=False)
+
     def __attrs_post_init__(self) -> None:
         self._status:MessageStatus = MessageStatus.NOT_SENT
-
-        if not isinstance(self.content, MultiContent):
-            self.content = MultiContent(self.content)
     
     '''
     Status of the message.
@@ -455,7 +470,8 @@ class Message(BaseMessage):
             raise ValueError(f"Cannot set status to {value.name} from {self._status.name}")
         self._status = value
         if value == MessageStatus.SENT and self.session is not None and self._status != MessageStatus.SENT:
-            self.session.history.append(self)
+            if not self in self.session.history:
+                self.session.history.append(self)
 
     def __str__(self) -> str:
         return self.content.pure_text

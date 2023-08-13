@@ -357,7 +357,15 @@ class Handler(AsyncLifeTimeManager, Saveable):
         #         raise error.PermissionDenied(from_, cmd, self)
         message.session = session
         message.dest_interface = cmd.in_interface
-        return await cmd.call(session, message)
+
+        if not message._check_cache.get('src_interface', False): 
+            if message.src_interface is None:
+                callercommand = getcallercommand(commands=self._namespace.get_executable())
+                if callercommand:
+                    message.src_interface = callercommand.in_interface
+            message._check_cache['src_interface'] = True
+
+        return cmd.call(session, message)
 
     def call_soon(self, session:session.Session, message:session.Message):
         '''
@@ -369,7 +377,14 @@ class Handler(AsyncLifeTimeManager, Saveable):
         # Check Premission & valify availablity
         if session.closed:
             raise error.SessionClosed(session, handler=self)
-
+        
+        if not message._check_cache.get('src_interface', False): 
+            if message.src_interface == None:
+                callercommand = getcallercommand(commands=self._namespace.get_executable())
+                if callercommand:
+                    message.src_interface = callercommand.in_interface
+            message._check_cache['src_interface'] = True
+        
         if message.src_interface:
             if message.dest_interface:
                 # Enable self interface command

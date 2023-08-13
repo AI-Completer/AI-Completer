@@ -42,7 +42,7 @@ class PermissionDenied(BaseAICompleterError):
         self.command:str = command
         super().__init__(interface = interface, *args, **kwargs)
 
-class CommandNotImplement(BaseAICompleterError):
+class CommandNotImplement(BaseAICompleterError, NotFound):
     '''Command Not Implement'''
     def __init__(self, command:str, interface: Interface, *args: object, **kwargs: object) -> None:
         self.command:str = command

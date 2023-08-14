@@ -272,11 +272,7 @@ class AsyncLifeTimeManager(AsyncTemplate[LifeTimeManager]):
         Wait until the object is closed
         '''
         await self._close_event.wait()
-        while self._close_tasks:
-            await asyncio.wait(self._close_tasks)
-            for task in self._close_tasks:
-                if task.done():
-                    self._close_tasks.remove(task)
+        await asyncio.wait(self._close_tasks)
 
     def __del__(self) -> None:
         if not self.closed:

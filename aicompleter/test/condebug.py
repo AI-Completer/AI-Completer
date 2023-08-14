@@ -15,14 +15,21 @@ logger = log.getLogger('debug-main')
 logger.setLevel(log.DEBUG)
 
 def run_handler(handler:Handler, config:Optional[Config] = None,*, loop:Optional[asyncio.AbstractEventLoop] = None):
+    try:
+        import readline
+    except ImportError:
+        pass
     if loop == None:
         loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     async def start():
         session = await handler.new_session(config)
         # start the command line
         
         while True:
-            command = input('>>> ')
+            command = input('>>> ').strip()
+            if command == '':
+                continue
             if command.startswith("!"):
                 # internal command
                 if command == "!exit":
@@ -91,7 +98,8 @@ def run_handler(handler:Handler, config:Optional[Config] = None,*, loop:Optional
         loop.close()
         return
 
-    loop.create_task(handler.close())
+    handler.close()
+    loop.create_task(handler.wait_close())
     try:
         utils.launch(loop=loop, logger=logger)
     except Exception as e:
@@ -112,9 +120,10 @@ def run_interface(target:Interface, *dependencies:Interface, config:Optional[Con
     '''
     if loop == None:
         loop = asyncio.new_event_loop()
-    handler = Handler(config or Config())
+    handler = Handler(config or Config(), loop)
     async def _():
         graph = InterfaceDiGraph()
+        graph.add(target)
         for dependency in dependencies:
             graph.add(target, dependency)
         try:

@@ -39,7 +39,7 @@ class Namespace(BaseNamespace):
         # Warning: This may raise the disorder of the execution order
         # TODO: Find a better way to do this
         def _on_change(key, value):
-            asyncio.get_event_loop().create_task(self.onConfigChange(key, value))
+            asyncio.get_running_loop().create_task(self.onConfigChange(key, value))
         self.config.__on_setter__ = _on_change
 
     @subnamespaces.validator

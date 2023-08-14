@@ -58,7 +58,7 @@ class ChatInterface(TransformerInterface):
             )
 
     async def session_init(self, session: Session):
-        await super().session_init(session)
+        # Not necessary
         self.getdata(session)['conversation'] = self.ai.new_conversation(user=session.id.hex)
 
     async def set_conversation(self, session: Session, conversation:Conversation):

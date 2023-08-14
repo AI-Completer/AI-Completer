@@ -309,6 +309,7 @@ class Command(JSONSerializable):
     @staticmethod
     def __format_setattr(inst, attr_, value):
         if value is None:
+            inst.check = lambda x: True
             return None
         if isinstance(value, (dict, list)):
             return CommandParamStruct.load_brief(value)
@@ -349,8 +350,8 @@ class Command(JSONSerializable):
     
     def __attrs_post_init__(self):
         self.logger = log.getLogger("Command", [self.in_interface.user.name if self.in_interface else 'Unknown', self.cmd])
-        self.check = self.format.check if self.format and isinstance(self.format, CommandParamStruct) else lambda x:True
-        self.__format_setattr(self, 'format', self.format)
+        # This seem to be tricky
+        self.format = self.format
 
     @in_interface.validator
     def _(inst, attr_, value):
@@ -429,6 +430,8 @@ class Command(JSONSerializable):
                     params['config'] = self.in_interface.getconfig(session)
                 if 'data' in sig.parameters:
                     params['data'] = self.in_interface.getdata(session)
+                if 'content' in sig.parameters:
+                    params['content'] = message.content
 
                 # if the parameter is in json format, load it
                 with contextlib.suppress(json.JSONDecodeError):
@@ -466,7 +469,7 @@ class Command(JSONSerializable):
                     async with session._running_tasks.session(ret) as task:
                         ret = await task
             if ret is not None:
-                self.logger.debug("Command return value: %s" % str(ret))
+                self.logger.debug("Command return value: %s" % repr(ret))
             return ret
         
     def bind(self, callback:Optional[Callable[[session.Session, session.Message], None]] = None) -> None:

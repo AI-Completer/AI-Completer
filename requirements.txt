@@ -7,7 +7,12 @@ paramiko
 trafilatura
 EdgeGPT
 pandas
+
 # Below are the ones that are optional and they are too big to be installed by default
+
 # sentence_transformers
-# torch
+# pytorch
 # keybert
+
+# If you are running this program on Windows, you may consider installing the following packages
+# pyreadline3   # for history support in the command line on Windows

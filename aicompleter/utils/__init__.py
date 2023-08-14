@@ -27,6 +27,7 @@ from .etype import (
     getcallerclass,
     getcallerclassinstance,
     require_module,
+    get_inherit_methods,
 )
 from .launch import (
     launch,

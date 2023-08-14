@@ -45,20 +45,20 @@ class NullInterface(common.Singleton,Interface, metaclass=NullInterfaceMeta):
         super().__init__(namespace=namespace, config=config)
 
     def on_init(self, func: Optional[Callable[..., Coroutine[None, None, None]]] = None):
-        self.init = func or super().init
-        return self.init
+        self.init = func
+        return func
 
     def on_final(self, func: Optional[Callable[..., Coroutine[None, None, None]]] = None):
-        self.final = func or super().final
-        return self.final
+        self.final = func
+        return func
 
     def on_sessioninit(self, func: Optional[Callable[..., Coroutine[None, None, None]]] = None):
-        self.session_init = func or super().session_init
-        return self.session_init
+        self.session_init = func
+        return func
 
     def on_sessionfinal(self, func: Optional[Callable[..., Coroutine[None, None, None]]] = None):
         self.session_final = func
-        return self.session_final
+        return func
     
     def run(self, cmdname:str, *args:Any, loop:Optional[asyncio.AbstractEventLoop] = None, **kwargs:Any):
         '''

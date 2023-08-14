@@ -34,7 +34,6 @@ class SearchInterface(ai.ChatInterface):
         ))
 
     async def session_init(self, session: Session):
-        ret = await super().session_init(session)
         self.getdata(session)['conversation'] = self.ai.new_conversation(session.id.hex[:8])
 
     async def cmd_search(self, session: Session, message: Message):

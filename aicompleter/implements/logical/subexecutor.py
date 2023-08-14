@@ -107,9 +107,7 @@ Do not reply with anything else.
         return agent
         
     async def session_init(self, session: Session):
-        ret = await super().session_init(session)
         self._gen_agent(session)
-        return ret
 
     @cmdreg.register(
         'agent',

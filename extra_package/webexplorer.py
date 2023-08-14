@@ -81,7 +81,6 @@ class WebExplorerInterface(ac.Interface):
         '''
         Session init
         '''
-        await super().session_init(session)
         if config['driver'] in driverFactory:
             data.driver = driverFactory[config['driver']]()
         else:
@@ -92,7 +91,6 @@ class WebExplorerInterface(ac.Interface):
         Session close
         '''
         data.driver.quit()
-        await super().session_close(session)
 
     @cmdreg.register('webopen', 'Open a web page, this will enable the web explorer', format={'url': 'The url to open'})
     async def webopen(self, data:WebExplorerDataModel, url:str):
@@ -137,7 +135,6 @@ class WebSummarier(ac.ai.ChatInterface):
         '''
         Session init
         '''
-        await super().session_init(session)
         session.in_handler.require_interface(ac.implements.logical.SummaryInterface)
 
     @cmdreg.register('websummarize', 'Summarize a web page', format={'url': 'The url to summarize'})

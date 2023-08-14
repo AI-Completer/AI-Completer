@@ -13,6 +13,7 @@ import attr
 from .. import config, error, handler, log, session, utils
 from ..common import AsyncLifeTimeManager, JSONSerializable
 from ..config import Config
+from ..session import Session
 from ..namespace import Namespace, BaseNamespace
 from ..utils import EnhancedDict
 from .command import Command, Commands
@@ -281,6 +282,10 @@ class Interface(AsyncLifeTimeManager):
     '''
     Data Factory, this factory will be used to create a data class for the interface
     '''
+    namespace: Optional[BaseNamespace] = None
+    '''
+    Base Namespace, this namespace will be used to create a namespace for the interface
+    '''
 
     def __init__(self, 
                  namespace:Optional[str] = None, 
@@ -307,6 +312,7 @@ class Interface(AsyncLifeTimeManager):
                 config=config,
                 data=self.dataFactory(),
             )
+        self.loop:Optional[asyncio.AbstractEventLoop] = None
 
         self.logger:log.Logger = log.getLogger("interface", [self.namespace.name])
         '''Logger of Interface'''
@@ -364,14 +370,60 @@ class Interface(AsyncLifeTimeManager):
     async def init(self, in_handler:Handler) -> Coroutine[None, None, None]:
         '''
         Initial function for Interface
+
+        This method will be called when the interface is initializing,
+
+        *Note*: The method will be called even if this method is inherited or removd from the subclass
         '''
         self.logger.debug("Interface %s initializing" % self.id)
+        self.loop = in_handler._loop
 
     async def final(self) -> Coroutine[None, None, None]:
-        '''Finial function for Interface'''
-        self.logger.debug("Interface %s finalizing" % self.id)
+        '''
+        Finial function for Interface
+        
+        This method will be called when the interface is finalizing,
 
-    async def session_init(self, session:Optional[session.Session] = None):
+        *Note*: The method will be called even if this method is inherited or removd from the subclass
+        '''
+        self.logger.debug("Interface %s finalizing" % self.id)
+    
+    async def _invoke_init(self, in_handler: Handler):
+        '''
+        Invoke the init function of the interface
+        '''
+        # find all init functions from the mro
+        inits = []
+        for func in utils.get_inherit_methods(self.__class__, "init"):
+            if callable(func):
+                inits.append(func)
+        # invoke all init functions
+        for i in inits:
+            params = utils.appliable_parameters(i, {
+                'in_handler': in_handler,
+                'handler': in_handler
+            })
+            await i(self, **params)
+
+    async def _invoke_final(self, in_handler: Handler):
+        '''
+        Invoke the final function of the interface
+        '''
+        # find all final functions from the mro
+        finals = []
+        for func in utils.get_inherit_methods(self.__class__, "final"):
+            if callable(func):
+                finals.append(func)
+        finals.reverse()
+        # invoke all final functions, from the last to the first
+        for i in finals:
+            params = utils.appliable_parameters(i, {
+                'in_handler': in_handler,
+                'handler': in_handler
+            })
+            await i(self, **params)
+
+    async def session_init(self):
         '''
         Initial function for Session
         
@@ -380,12 +432,12 @@ class Interface(AsyncLifeTimeManager):
 
         ::
             >>> async def session_init(self, session:Session):
-            ...     await super().session_init()
             ...     # Do something
+        ::
         '''
         pass
 
-    async def session_final(self, session:Optional[session.Session] = None):
+    async def session_final(self):
         '''
         Finial function for Session
         
@@ -394,10 +446,46 @@ class Interface(AsyncLifeTimeManager):
 
         ::
             >>> async def session_final(self, session:Session):
-            ...     await super().session_final()
             ...     # Do something
         '''
         pass
+
+    async def _invoke_session_init(self, session: Session):
+        '''
+        Invoke the session init function of the interface
+        '''
+        session_inits = []
+        for func in utils.get_inherit_methods(self.__class__, "session_init"):
+            if callable(func):
+                session_inits.append(func)
+        raw_data = self.getdata(self)
+        raw_config = self.getconfig(self)
+        for i in session_inits:
+            params = utils.appliable_parameters(i, {
+                'session': session,
+                'data': raw_data,
+                'config': raw_config
+            })
+            await i(self, **params)
+
+    async def _invoke_session_final(self, session: Session):
+        '''
+        Invoke the session final function of the interface
+        '''
+        session_finals = []
+        for func in utils.get_inherit_methods(self.__class__, "session_final"):
+            if callable(func):
+                session_finals.append(func)
+        session_finals.reverse()
+        raw_data = self.getdata(self)
+        raw_config = self.getconfig(self)
+        for i in session_finals:
+            params = utils.appliable_parameters(i, {
+                'session': session,
+                'data': raw_data,
+                'config': raw_config
+            })
+            await i(self, **params)
 
     @overload
     def getconfig(self, session:session.Session) -> Config:
@@ -472,7 +560,7 @@ class Interface(AsyncLifeTimeManager):
     
     def close(self):
         '''Close the interface'''
-        self._close_tasks.append(asyncio.get_event_loop().create_task(self.final()))
+        self._close_tasks.append((self.loop or asyncio.get_event_loop).create_task(self.final()))
         super().close()
 
     def rename_cmd(self, old:str, new:str):

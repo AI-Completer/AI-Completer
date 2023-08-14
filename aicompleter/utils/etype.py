@@ -16,7 +16,7 @@ def typecheck(value:Any, type_:type|tuple[type, ...]):
     Check the type of value. If not, raise TypeError
     '''
     if not isinstance(value, type_):
-        raise TypeError(f'{value} is not {type_}')
+        raise TypeError(f'Expect {type_}, got {type(value)}')
 
 StructType = TypeVar('StructType', dict, list, type, Callable, tuple)
 '''
@@ -569,12 +569,13 @@ class TaskList(common.AsyncContentManager, list[asyncio.Task]):
             if self._in_list:
                 self._in_list.remove(self.task)
 
-    def session(self, task: asyncio.Task | Coroutine[None, None, Any]) -> TaskSession:
+    def session(self, task: asyncio.Task | Coroutine[None, None, Any], loop:Optional[asyncio.AbstractEventLoop] = None) -> TaskSession:
         '''
         Get a session
         '''
+        loop = loop or asyncio.get_event_loop()
         if isinstance(task, Coroutine):
-            task = asyncio.create_task(task)
+            task = loop.create_task(task)
         return self.TaskSession._setup_list(task, self)
 
 def stack_varibles(stack_level:int = 0) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -674,3 +675,22 @@ def require_module(name:LiteralString):
     except ImportError:
         print("Error finding the module %s" % name)
         exit(-1)
+
+def get_inherit_methods(cls: type, method_name: str) -> list[Callable]:
+    '''
+    Get the method of the class and its base 
+    
+    Returns
+    -------
+    list[Callable] This list is ordered by the order of mro, the first is the method of the base class, the last is the method of the class
+    '''
+    ret = []
+    mro = list(cls.mro())
+    mro.reverse()
+    for base in mro:
+        # Method is inherited by the order of mro
+        if method_name in base.__dict__:
+            ret.append(base.__dict__[method_name])
+    if method_name in cls.__dict__:
+        ret.append(cls.__dict__[method_name])
+    return ret

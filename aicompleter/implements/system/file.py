@@ -73,7 +73,6 @@ class FileInterface(Interface):
         )
 
     async def session_init(self, session:Session):
-        ret = await super().session_init(session)
         # This data will be reuseable in other interfaces
         data = self.getdata(session)
         data['filesystem'] = FileSystem(session.config[self.namespace.name].get('root', 'workspace'))

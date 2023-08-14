@@ -11,14 +11,15 @@ class Agent(common.AsyncLifeTimeManager):
     '''
     AI Agent
     '''
-    def __init__(self, chatai: ChatTransformer, init_prompt:Optional[str] = None, user:Optional[str] = None):
+    def __init__(self, chatai: ChatTransformer, init_prompt:Optional[str] = None, user:Optional[str] = None, loop:Optional[asyncio.AbstractEventLoop] = None):
         super().__init__()
         self.ai = chatai
         self._init_prompt = init_prompt
+        self._loop = loop = loop or asyncio.get_event_loop()
         
         self.conversation = self.ai.new_conversation(user,init_prompt=init_prompt)
         '''The conversation of the agent'''
-        self.on_call: Callable[[str, Any], Coroutine[Any, None, None]] = lambda cmd, param: asyncio.create_task()
+        self.on_call: Callable[[str, Any], Coroutine[Any, None, None]] = lambda cmd, param: self._loop.create_task()
         '''Event when a command is called'''
         self.on_subagent: Callable[[str, Any], None | Coroutine[None, None, None]] = lambda name, word: self.new_subagent(name, word)
         '''Event when a subagent is created'''
@@ -29,8 +30,8 @@ class Agent(common.AsyncLifeTimeManager):
 
         self._result_queue: asyncio.Queue[interface.Result] = asyncio.Queue()
         self._request_queue: asyncio.Queue[ai.Message | None] = asyncio.Queue()
-        self._handle_task = asyncio.get_event_loop().create_task(self._handle_result())
-        self._loop_task = asyncio.get_event_loop().create_task(self._loop())
+        self._handle_task = loop.create_task(self._handle_result())
+        self._loop_task = loop.create_task(self._handle_loop())
         self._result = ...
 
         self._subagents:dict[str, Self] = {}
@@ -55,7 +56,7 @@ class Agent(common.AsyncLifeTimeManager):
         except asyncio.CancelledError as e:
             pass
         except Exception as e:
-            asyncio.get_event_loop().create_task(self.on_exception(e))
+            self._loop.create_task(self.on_exception(e))
     
     @property
     def result(self) -> Any:
@@ -72,7 +73,7 @@ class Agent(common.AsyncLifeTimeManager):
         '''
         Create a subagent
         '''
-        self._subagents[name] = Agent(ai or self.ai, init_prompt or self._init_prompt, user)
+        self._subagents[name] = Agent(ai or self.ai, init_prompt or self._init_prompt, user, self._loop)
         self._subagents[name].on_call = self.on_call
         self._subagents[name]._parent = self
         self._subagents[name]._parent_name = name
@@ -142,7 +143,7 @@ class Agent(common.AsyncLifeTimeManager):
         
         return json_dat
 
-    async def _loop(self):
+    async def _handle_loop(self):
         '''
         The loop for the agent
         '''
@@ -263,7 +264,7 @@ class Agent(common.AsyncLifeTimeManager):
                             else:
                                 self._result_queue.put_nowait(interface.Result(curcmd['cmd'], True, ret))
                                 self.logger.info(f'Command {curcmd["cmd"]} executed successfully, Result: {ret}')
-                        asyncio.get_event_loop().create_task(self.on_call(curcmd['cmd'], curcmd['param'])).add_done_callback(when_result)
+                        self._loop.create_task(self.on_call(curcmd['cmd'], curcmd['param'])).add_done_callback(when_result)
 
                     wrap_context()
             

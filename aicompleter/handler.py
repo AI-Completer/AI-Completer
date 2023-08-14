@@ -37,7 +37,11 @@ class Handler(AsyncLifeTimeManager, Saveable):
     def __init__(self, config:Config) -> None:
         pass
 
-    def __init__(self, config:Optional[Config] = Config()) -> None:
+    @overload
+    def __init__(self, config:Config, loop:asyncio.AbstractEventLoop) -> None:
+        pass
+
+    def __init__(self, config:Optional[Config] = Config(), loop:Optional[asyncio.AbstractEventLoop] = None) -> None:
         super().__init__()
         self._interfaces:list[Interface] = []
         '''Interfaces of Handler'''
@@ -51,6 +55,7 @@ class Handler(AsyncLifeTimeManager, Saveable):
         '''Group Set of Handler'''
         self._running_sessions:list[Session] = []
         '''Running Sessions of Handler'''
+        self._loop = loop or asyncio.get_event_loop()
         
         self._namespace = Namespace(
             name='root',
@@ -96,10 +101,10 @@ class Handler(AsyncLifeTimeManager, Saveable):
         self.logger.debug("Closing handler")
         for i in self._running_sessions:
             if not i.closed:
-                self._close_tasks.append(asyncio.get_event_loop().create_task(i.close()))
+                self._close_tasks.append(self._loop.create_task(i.close()))
         for i in self._interfaces:
             i.close()
-            self._close_tasks.extend(i._close_tasks)
+            self._close_tasks.append(self._loop.create_task(i.wait_close()))
         super().close()
 
     async def close_session(self, session:Session):
@@ -217,11 +222,7 @@ class Handler(AsyncLifeTimeManager, Saveable):
             else:
                 self._namespace.subnamespaces[i.namespace.name] = i.namespace
         for i in interfaces:
-            params = utils.appliable_parameters(i.init, {
-                'in_handler': self,
-                'handler': self
-            })
-            await i.init(**params)
+            await i._invoke_init(self)
         self.reload()
 
     @overload
@@ -420,7 +421,7 @@ class Handler(AsyncLifeTimeManager, Saveable):
             # This is not necessary
             self._update_running_sessions()
 
-        asyncio.get_event_loop().create_task(_handle_call())
+        self._loop.create_task(_handle_call())
 
     def _update_running_sessions(self):
         for i in self._running_sessions:
@@ -445,13 +446,7 @@ class Handler(AsyncLifeTimeManager, Saveable):
                 lambda key,value: value.update(ret.config['global']),
                 lambda key,value: key != 'global'
             )
-        for i in self._interfaces:
-            extra_params = {}
-            if 'data' in i.session_init.__annotations__:
-                extra_params['data'] = i.getdata(ret)
-            if 'config' in i.session_init.__annotations__:
-                extra_params['config'] = i.getconfig(ret)
-            await i.session_init(ret, **extra_params)
+        await ret._init_session()
         self._running_sessions.append(ret)
         return ret
     

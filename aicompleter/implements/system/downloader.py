@@ -22,7 +22,6 @@ class Downloader(Interface):
         )
     
     async def session_init(self, session: Session | None = None):
-        await super().session_init(session)
         session.in_handler.require_interface(FileInterface, self.user)
 
     @cmdreg.register("download", "Download web page/resource and save it to local file.", format={'url': 'str', 'path': 'str'})

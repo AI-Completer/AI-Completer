@@ -46,7 +46,6 @@ class SSHInterface(Interface):
         return stdout.read().decode('utf-8'), stderr.read().decode('utf-8')
 
     async def session_init(self, session: Session):
-        await super().session_init(session)
         
         cfg:Config = session.config[self.namespace]
         async with cfg.session() as config:

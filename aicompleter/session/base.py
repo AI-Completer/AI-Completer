@@ -14,7 +14,7 @@ import aicompleter
 
 from .. import config, events, log, utils
 from ..config import Config, EnhancedDict
-from ..memory import Memory, MemoryConfigure, MemoryItem
+from ..memory import Memory
 from ..utils.special import getcallercommand
 
 Handler = TypeVar('Handler', bound='aicompleter.handler.Handler')
@@ -148,8 +148,6 @@ class Session:
         '''ID'''
         self.in_handler:Handler = handler
         '''In which handler'''
-        # self.src_interface:Interface|None = None
-        # '''Source interface'''
         self.config:Config = Config()
         '''Session Config'''
         self.data:EnhancedDict = EnhancedDict()
@@ -312,6 +310,10 @@ class Session:
             return self.in_handler.call_soon(self, Message(**params))
         else:
             raise TypeError(f"Unsupported type {type(cmd_or_msg)}")
+        
+    async def _init_session(self):
+        for interface in self.in_handler.interfaces:
+            await interface._invoke_session_init(self)
 
     async def close(self):
         '''Close the session.'''
@@ -324,7 +326,7 @@ class Session:
         if any([isinstance(r, Exception) and not isinstance(r, CancelledError) for r in result]):
             self.logger.exception(f"Error when closing session" + "\n".join([str(r) for r in result if isinstance(r, Exception)]))
         for interface in self.in_handler._interfaces:
-            await interface.session_final(self)
+            await interface._invoke_session_final(self)
         self._closed = True
 
     async def _update_tasks(self):

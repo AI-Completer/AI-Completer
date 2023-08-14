@@ -54,20 +54,20 @@ class CustomInterface(ac.Interface):
     async def init(self, in_handler: ac.Handler) -> Coroutine[None, None, None]:
         # in_handler is optional
         # This will be called when the interface is added to the handler
-        await super().init(in_handler)
+        pass
 
     async def final(self) -> Coroutine[None, None, None]:
         # This will be called when the interface is removed from the handler,
         # or when the handler is closed
-        await super().final()
+        pass
 
     async def session_init(self, session: ac.Session):
         # This is called when a session is created, you can have some operations on the new created session
-        await super().session_init(session)
+        pass
 
     async def session_final(self, session: ac.Session):
         # When a session is closed, the method would be called
-        await super().session_final(session)
+        pass
 
 @CustomInterface.cmdreg.register('custom3', '...')
 async def cmd_customcmd3(message: ac.Message, interface: CustomInterface):
@@ -82,9 +82,9 @@ handler = ac.Handler()
 async def main():
     await handler.add_interface(custom_int)
     session = await handler.new_session()
-    await session.asend(ac.Message('customcmd', 'Hello world!'))
-    await session.asend(ac.Message('customcmd2', {'param1':'Hello world!'}))
-    await session.asend(ac.Message('custom3', 'Hello world!'))
+    await session.asend('customcmd', 'Hello world!')
+    await session.asend('customcmd2', {'param1':'Hello world!'})
+    await session.asend('custom3', 'Hello world!')
 
 # A simple way to start the coroutine with runtime check
 ac.utils.start(main())

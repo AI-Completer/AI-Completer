@@ -556,3 +556,8 @@ class makeoverloadmethod:
             return self
         return functools.partial(self.overload._call_class, instance, owner)
     
+    def register_auto(self, func: Callable):
+        return self.overload.register_auto(func)
+    
+    def register(self, *args):
+        return self.overload.register(*args)

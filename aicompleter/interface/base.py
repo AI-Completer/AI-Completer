@@ -560,7 +560,7 @@ class Interface(AsyncLifeTimeManager):
     
     def close(self):
         '''Close the interface'''
-        self._close_tasks.append((self.loop or asyncio.get_event_loop).create_task(self.final()))
+        self._close_tasks.append((self.loop or asyncio.get_event_loop()).create_task(self.final()))
         super().close()
 
     def rename_cmd(self, old:str, new:str):

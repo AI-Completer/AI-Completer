@@ -55,7 +55,18 @@ class Handler(AsyncLifeTimeManager, Saveable):
         '''Group Set of Handler'''
         self._running_sessions:list[Session] = []
         '''Running Sessions of Handler'''
-        self._loop = loop or asyncio.get_event_loop()
+
+        self.logger:log.Logger = log.getLogger('handler')
+        '''Logger of Handler'''
+
+        if loop == None:
+            try:
+                self._loop = asyncio.get_event_loop()
+            except RuntimeError:
+                self._loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self._loop)
+        else:
+            self._loop = loop
         
         self._namespace = Namespace(
             name='root',
@@ -69,9 +80,6 @@ class Handler(AsyncLifeTimeManager, Saveable):
         self.on_exception.add_callback(_default_exception_handler)
         
         self.on_keyboardinterrupt.add_callback(lambda e,obj:self.close())
-
-        self.logger:log.Logger = log.getLogger('handler')
-        '''Logger of Handler'''
 
     def _on_call(self, session:Session, message:session.Message):
         '''Call the on_call event'''

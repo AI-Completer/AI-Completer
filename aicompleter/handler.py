@@ -5,11 +5,13 @@ import asyncio
 import copy
 import functools
 import importlib
+import json
 import uuid
-from typing import Any, Generator, Iterator, Optional, overload
+from typing import Any, Generator, Iterator, Optional, Self, overload
 
-from . import memory, utils
-from .common import AsyncLifeTimeManager
+from . import utils
+from .utils.storage import StorageManager
+from .common import AsyncLifeTimeManager, Saveable
 
 from . import error, events, interface, log, session
 from .config import Config
@@ -18,8 +20,9 @@ from .interface.command import Commands
 from .session.base import Session
 
 from .namespace import Namespace
+from .utils.special import getcallercommand
 
-class Handler(AsyncLifeTimeManager):
+class Handler(AsyncLifeTimeManager, Saveable):
     '''
     Handler for AI-Completer
     
@@ -34,7 +37,11 @@ class Handler(AsyncLifeTimeManager):
     def __init__(self, config:Config) -> None:
         pass
 
-    def __init__(self, config:Optional[Config] = Config()) -> None:
+    @overload
+    def __init__(self, config:Config, loop:asyncio.AbstractEventLoop) -> None:
+        pass
+
+    def __init__(self, config:Optional[Config] = Config(), loop:Optional[asyncio.AbstractEventLoop] = None) -> None:
         super().__init__()
         self._interfaces:list[Interface] = []
         '''Interfaces of Handler'''
@@ -48,6 +55,18 @@ class Handler(AsyncLifeTimeManager):
         '''Group Set of Handler'''
         self._running_sessions:list[Session] = []
         '''Running Sessions of Handler'''
+
+        self.logger:log.Logger = log.getLogger('handler')
+        '''Logger of Handler'''
+
+        if loop == None:
+            try:
+                self._loop = asyncio.get_event_loop()
+            except RuntimeError:
+                self._loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(self._loop)
+        else:
+            self._loop = loop
         
         self._namespace = Namespace(
             name='root',
@@ -62,9 +81,6 @@ class Handler(AsyncLifeTimeManager):
         
         self.on_keyboardinterrupt.add_callback(lambda e,obj:self.close())
 
-        self.logger:log.Logger = log.getLogger('handler')
-        '''Logger of Handler'''
-
     def _on_call(self, session:Session, message:session.Message):
         '''Call the on_call event'''
         return session.on_call.trigger(session, message)
@@ -72,7 +88,7 @@ class Handler(AsyncLifeTimeManager):
     @property
     def commands(self):
         '''Get all commands'''
-        return self._namespace.commands
+        return self._namespace.get_executable()
     
     @property
     def config(self):
@@ -93,10 +109,10 @@ class Handler(AsyncLifeTimeManager):
         self.logger.debug("Closing handler")
         for i in self._running_sessions:
             if not i.closed:
-                self._close_tasks.append(asyncio.get_event_loop().create_task(i.close()))
+                self._close_tasks.append(self._loop.create_task(i.close()))
         for i in self._interfaces:
             i.close()
-            self._close_tasks.extend(i._close_tasks)
+            self._close_tasks.append(self._loop.create_task(i.wait_close()))
         super().close()
 
     async def close_session(self, session:Session):
@@ -205,9 +221,16 @@ class Handler(AsyncLifeTimeManager):
             if i in self._interfaces:
                 raise error.Existed(i, handler=self)
             self._interfaces.append(i)
-            self._namespace.subnamespaces[i.namespace.name] = i.namespace
+            if i.namespace.name in self._namespace.subnamespaces:
+                # Discuss whether the namespace is same
+                if not i.namespace == self._namespace.subnamespaces[i.namespace.name]:
+                    raise error.NamespaceConflict(i.namespace, "There is a namespace existed with the same name, but not the same content."\
+                            "Is there two conflicted name?", existed_namespace=self._namespace.subnamespaces[i.namespace.name])
+                # Normal case, in this, there are two or more interfaces in same type added to this handler
+            else:
+                self._namespace.subnamespaces[i.namespace.name] = i.namespace
         for i in interfaces:
-            await i.init(self)
+            await i._invoke_init(self)
         self.reload()
 
     @overload
@@ -220,19 +243,30 @@ class Handler(AsyncLifeTimeManager):
 
     async def rm_interface(self, param:Interface or uuid.UUID) -> None:
         '''Remove interface from the handler'''
+        def _rm_namespace(name):
+            for sub in self._namespace.subnamespaces.values():
+                if sub.name == name:
+                    break
+            else:
+                # remove
+                del self._namespace.subnamespaces[name]
         if isinstance(param, Interface):
             if param not in self._interfaces:
                 raise error.NotFound(param, handler=self)
             await param.final()
             self._interfaces.remove(param)
-            self._namespace.subnamespaces.pop(param.namespace.name)
+            _rm_namespace(param.namespace.name)
             self.reload()
         elif isinstance(param, uuid.UUID):
             for i in self._interfaces:
                 if i.id == param:
-                    await i.final()
+                    params = utils.appliable_parameters(i.final, {
+                        'in_handler': self,
+                        'handler': self,
+                    })
+                    await i.final(**params)
                     self._interfaces.remove(i)
-                    self._namespace.subnamespaces.pop(i.namespace.name)
+                    _rm_namespace(i.namespace.name)
                     self.reload()
                     return
             raise error.NotFound(param, handler=self)
@@ -314,11 +348,11 @@ class Handler(AsyncLifeTimeManager):
         raise error.NotFound(f"Require Interface {cls}, but not found or permission required" + (f" with user {user.name}" if user else ""))
     
     @property
-    def interfaces(self) -> set[Interface]:
+    def interfaces(self) -> list[Interface]:
         '''Get all interfaces'''
         return self._interfaces
     
-    async def call(self, session:session.Session, message:session.Message):
+    def call(self, session:session.Session, message:session.Message):
         '''
         Call a command
         
@@ -334,7 +368,15 @@ class Handler(AsyncLifeTimeManager):
         #         raise error.PermissionDenied(from_, cmd, self)
         message.session = session
         message.dest_interface = cmd.in_interface
-        return await cmd.call(session, message)
+
+        if not message._check_cache.get('src_interface', False): 
+            if message.src_interface is None:
+                callercommand = getcallercommand(commands=self._namespace.get_executable())
+                if callercommand:
+                    message.src_interface = callercommand.in_interface
+            message._check_cache['src_interface'] = True
+
+        return cmd.call(session, message)
 
     def call_soon(self, session:session.Session, message:session.Message):
         '''
@@ -346,7 +388,14 @@ class Handler(AsyncLifeTimeManager):
         # Check Premission & valify availablity
         if session.closed:
             raise error.SessionClosed(session, handler=self)
-
+        
+        if not message._check_cache.get('src_interface', False): 
+            if message.src_interface == None:
+                callercommand = getcallercommand(commands=self._namespace.get_executable())
+                if callercommand:
+                    message.src_interface = callercommand.in_interface
+            message._check_cache['src_interface'] = True
+        
         if message.src_interface:
             if message.dest_interface:
                 # Enable self interface command
@@ -365,7 +414,7 @@ class Handler(AsyncLifeTimeManager):
 
         async def _handle_call():
             try:
-                await self.call(session, message)
+                await cmd.call(session, message)
             except KeyboardInterrupt:
                 await self.on_keyboardinterrupt.trigger()
             except asyncio.CancelledError:
@@ -380,7 +429,7 @@ class Handler(AsyncLifeTimeManager):
             # This is not necessary
             self._update_running_sessions()
 
-        asyncio.get_event_loop().create_task(_handle_call())
+        self._loop.create_task(_handle_call())
 
     def _update_running_sessions(self):
         for i in self._running_sessions:
@@ -388,31 +437,24 @@ class Handler(AsyncLifeTimeManager):
                 self._running_sessions.remove(i)
 
     async def new_session(self, 
-                          config:Optional[Config] = None,
-                          memoryConfigure:Optional[memory.MemoryConfigure] = None) -> session.Session:
+                          config:Optional[Config] = None) -> session.Session:
         '''
         Create a new session, will call all interfaces' session_init method
         :param interface:Interface, optional, the interface to set as src_interface
         :param config:Config, optional, the config to set as session.config
         :param memoryConfigure:MemoryConfigure, optional, the memory configure to set as session.memoryConfigure
         '''
-        ret = session.Session(self, memoryConfigure)
+        ret = session.Session(self)
         self.logger.debug("Creating new session %s", ret.id)
         # Initialize session
         ret.config = config
-        if config == None: 
+        if config == None:
             ret.config = copy.deepcopy(self.config)
             ret.config.each(
                 lambda key,value: value.update(ret.config['global']),
                 lambda key,value: key != 'global'
             )
-        for i in self._interfaces:
-            extra_params = {}
-            if 'data' in i.session_init.__annotations__:
-                extra_params['data'] = i.getdata(ret)
-            if 'config' in i.session_init.__annotations__:
-                extra_params['config'] = i.getconfig(ret)
-            await i.session_init(ret, **extra_params)
+        await ret._init_session()
         self._running_sessions.append(ret)
         return ret
     
@@ -433,14 +475,18 @@ class Handler(AsyncLifeTimeManager):
         return ret
     
     def getstate(self):
-        '''Get state of handler'''
+        '''
+        Get state of handler
+
+        This method may be removed in the future
+        '''
         return {
             'interfaces': [
                 {
                     'id': i.id.hex,
                     'module': i.__module__,
                     'class': i.__class__.__qualname__,
-                    'config': i.config.__serialize__(),
+                    'config': dict(i.config),
                     'user': i.user.__serialize__(),
                     'commands': [{
                         'name': cmd.cmd,
@@ -451,7 +497,11 @@ class Handler(AsyncLifeTimeManager):
         }
     
     def setstate(self, state:dict[str, Any]):
-        '''Set state of handler'''
+        '''
+        Set state of handler
+        
+        This method may be removed in the future
+        '''
         # Require preload interfaces, because the interface init method varies
         self.logger.debug("Set state of handler")
         _loaded_interfaces = []
@@ -472,7 +522,7 @@ class Handler(AsyncLifeTimeManager):
             # Check if the interface is already loaded
             _inter = get_interface(cls)
             if _inter:
-                _inter.namespace.config = Config.__deserialize__(i['config'])
+                _inter.namespace.config = Config(i['config'])
                 _inter._user = User.__deserialize__(i['user'])
                 _inter._id = uuid.UUID(i['id'])
                 assert _inter in self._interfaces, "Interface not in handler"
@@ -494,6 +544,45 @@ class Handler(AsyncLifeTimeManager):
                 if cmd['name'] not in _inter.commands:
                     raise error.NotFound(cmd['name'], interface=_inter, handler=self)
                 _inter.commands[cmd['name']].callable_groups = set(cmd['callable_groups'])
+
+    def save(self, path:str | StorageManager):
+        '''Save handler to path'''
+        if isinstance(path, str):
+            path = StorageManager(path)
+        intmeta = self.getstate()
+        with open(path.alloc_file('intmeta'), 'w') as f:
+            json.dump(intmeta, f)
+        with open(path.alloc_file('config'), 'w') as f:
+            json.dump(self.config, f)
+        sessions = path.alloc_storage('sessions')
+        for i in self._running_sessions:
+            session_storage = sessions.alloc_storage(i.id.hex)
+            i.save(session_storage, True)
+        sessions.save()
+        path.save()
+        self.logger.info("Handler saved to %s", path.path)
+
+    @classmethod
+    def load(cls, path:str | StorageManager, prehandler: Optional[Self] = None):
+        '''Load handler from path'''
+        if isinstance(path, str):
+            path = StorageManager.load(path)
+        with open(path['intmeta'].path, 'r') as f:
+            intmeta = json.load(f)
+        with open(path['config'].path, 'r') as f:
+            config = Config(json.load(f))
+        if prehandler:
+            ret = prehandler
+            ret._namespace.config = config
+        else:
+            ret = cls(config)
+        ret.setstate(intmeta)
+        sessions = StorageManager.load(path['sessions'].path)
+        for i in sessions:
+            session_storage = sessions[i.mark]
+            ret._running_sessions.append(Session.load(
+                StorageManager.load(session_storage.path), ret))
+        return ret
 
 __all__ = (
     'Handler',

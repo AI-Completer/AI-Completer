@@ -141,9 +141,9 @@ class Saveable(BaseTemplate):
         '''
         raise NotImplementedError('save is not implemented')
 
-    @staticmethod
+    @classmethod
     @abstractmethod
-    def load(path: str) -> Self:
+    def load(cls, path: str, *args, **kwargs) -> Self:
         '''
         Load from file
         '''
@@ -160,9 +160,9 @@ class AsyncSaveable(AsyncTemplate[Saveable]):
         '''
         raise NotImplementedError('save is not implemented')
 
-    @staticmethod
+    @classmethod
     @abstractmethod
-    async def load(path: str) -> Self:
+    async def load(cls, path: str) -> Self:
         '''
         Load from file
         '''
@@ -173,7 +173,7 @@ class ContentManager(BaseTemplate):
     This class is a template for content manager
     '''
     __slots__ = ()
-    def __enter__(self) -> Any:
+    def __enter__(self):
         '''
         Enter the context
         '''
@@ -181,7 +181,7 @@ class ContentManager(BaseTemplate):
             self.acquire()
         raise NotImplementedError('enter is not implemented')
     
-    def __exit__(self, exc_type, exc_value, traceback) -> None:
+    def __exit__(self, exc_type, exc_value, traceback):
         '''
         Exit the context
         '''
@@ -194,7 +194,7 @@ class AsyncContentManager(AsyncTemplate[ContentManager]):
     This class is a template for asynchronous content manager
     '''
     __slots__ = ()
-    async def __aenter__(self) -> Any:
+    async def __aenter__(self):
         '''
         Enter the context
         '''
@@ -202,7 +202,7 @@ class AsyncContentManager(AsyncTemplate[ContentManager]):
             await self.acquire()
         raise NotImplementedError('enter is not implemented')
     
-    async def __aexit__(self, exc_type, exc_value, traceback) -> None:
+    async def __aexit__(self, exc_type, exc_value, traceback):
         '''
         Exit the context
         '''
@@ -272,13 +272,12 @@ class AsyncLifeTimeManager(AsyncTemplate[LifeTimeManager]):
         Wait until the object is closed
         '''
         await self._close_event.wait()
-        while self._close_tasks:
-            await asyncio.wait(self._close_tasks)
-            for task in self._close_tasks:
-                if task.done():
-                    self._close_tasks.remove(task)
+        await asyncio.wait(self._close_tasks)
 
     def __del__(self) -> None:
+        # Sometimes, this will be called randomly? (I don't know why)
+        if '_close_event' not in self.__dict__:
+            return
         if not self.closed:
             self.close()
 
@@ -414,6 +413,13 @@ def serialize(data:Any, pickle_all:bool = False) -> JsonType:
             'type': 'bytes',
             'data': data.hex(),
         }
+    elif isinstance(data, type):
+        # Get the module and class name
+        return {
+            'type': 'type',
+            'module': data.__module__,
+            'class': data.__qualname__,
+        }
     elif SerializeHandler.support(data):
         # Search the match type
         cls, ddata = SerializeHandler.serializeData(data)
@@ -480,6 +486,9 @@ def deserialize(data: JsonType, global_:Optional[dict[str, Any]] = None, unpickl
     elif subtype == 'bytes':
         # hex转bytes
         return bytes.fromhex(data['data'])
+    elif subtype == 'type':
+        cls = _get_class(data['module'], data['class'])
+        return cls
     elif subtype == 'handler':
         cls = _get_class(data['module'], data['class'])
         if not SerializeHandler.support(cls):

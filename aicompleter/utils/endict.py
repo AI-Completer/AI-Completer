@@ -4,7 +4,7 @@ import asyncio
 import copy
 import json
 from typing import Any, Callable, Optional, Self, overload
-from ..common import JSONSerializable, serialize
+from ..common import JSONSerializable
 from .etype import make_model
 
 class defaultdict(dict):
@@ -15,9 +15,10 @@ class defaultdict(dict):
         self[key] = defaultdict()
         return self[key]
 
-class EnhancedDict(defaultdict):
+class EnhancedDict(defaultdict, JSONSerializable):
     '''
     Enhanced dict
+    
     param:
         readonly: bool, Optional, default: False, readonly or not
     '''
@@ -139,7 +140,7 @@ class EnhancedDict(defaultdict):
         return super().__repr__()
 
     def __repr__(self) -> str:
-        return f"<{self.__class__.__name__} {super().__repr__()}>"
+        return super().__repr__()
     
     def __delitem__(self, __key: Any) -> None:
         return super().__delitem__(__key)

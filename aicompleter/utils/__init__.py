@@ -20,6 +20,14 @@ from .etype import (
     appliable_parameters,
     make_model,
     TaskList,
+    stack_varibles,
+    link_property,
+    getframe,
+    getcaller,
+    getcallerclass,
+    getcallerclassinstance,
+    require_module,
+    get_inherit_methods,
 )
 from .launch import (
     launch,
@@ -37,6 +45,8 @@ from .typeval import (
     python_type,
     verify,
     get_signature,
+    makeoverload,
+    makeoverloadmethod,
 )
 from .text import (
     RemoteWebPage,
@@ -48,4 +58,8 @@ from .text import (
     extract_text,
     extract_html,
     clear_html,
+)
+from .storage import (
+    Storage,
+    StorageManager,
 )

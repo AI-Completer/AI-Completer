@@ -1,6 +1,6 @@
 import asyncio
 import sys, os
-from typing import Literal, Optional, Union
+from typing import Coroutine, Literal, Optional, Union
 import uuid
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
@@ -36,7 +36,22 @@ def getFullHtml(url:str, driver:str|RemoteWebDriver = 'Chrome') -> str:
         driver = driverFactory[driver]()
     driver.get(url)
     driver.implicitly_wait(10)
-    return driver.find_element(By.CSS_SELECTOR, 'html').get_attribute('outerHTML')
+    ret = driver.find_element(By.CSS_SELECTOR, 'html').get_attribute('outerHTML')
+    driver.quit()
+    return ret
+
+async def agetFullHtml(url:str, driver:str|RemoteWebDriver = 'Chrome') -> Coroutine[None, None, str]:
+    '''
+    Get the full html of a web page
+    '''
+    if isinstance(driver, str):
+        driver = await ac.utils.thread_run(driverFactory[driver])()
+    await ac.utils.thread_run(driver.get)(url)
+    await ac.utils.thread_run(driver.implicitly_wait)(10)
+    ret = await ac.utils.thread_run(driver.find_element)(By.CSS_SELECTOR, 'html')
+    ret = await ac.utils.thread_run(ret.get_attribute)('outerHTML')
+    await ac.utils.thread_run(driver.quit)()
+    return ret
 
 class WebExplorerDataModel(ac.DataModel):
     '''
@@ -66,7 +81,6 @@ class WebExplorerInterface(ac.Interface):
         '''
         Session init
         '''
-        await super().session_init(session)
         if config['driver'] in driverFactory:
             data.driver = driverFactory[config['driver']]()
         else:
@@ -77,7 +91,6 @@ class WebExplorerInterface(ac.Interface):
         Session close
         '''
         data.driver.quit()
-        await super().session_close(session)
 
     @cmdreg.register('webopen', 'Open a web page, this will enable the web explorer', format={'url': 'The url to open'})
     async def webopen(self, data:WebExplorerDataModel, url:str):
@@ -122,7 +135,6 @@ class WebSummarier(ac.ai.ChatInterface):
         '''
         Session init
         '''
-        await super().session_init(session)
         session.in_handler.require_interface(ac.implements.logical.SummaryInterface)
 
     @cmdreg.register('websummarize', 'Summarize a web page', format={'url': 'The url to summarize'})

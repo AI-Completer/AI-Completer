@@ -25,7 +25,6 @@ class StateExecutor(ai.ChatInterface):
         ))
         
     async def session_init(self, session: Session):
-        ret = await super().session_init(session)
 
         avaliable_commands = Commands()
         avaliable_commands.add(*session.in_handler.get_executable_cmds(self._user))

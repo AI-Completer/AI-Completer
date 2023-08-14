@@ -67,7 +67,7 @@ try:
         # Require debug
         while True:
             try:
-                config['global']['debug'] = str(utils.is_enable(require_input('Debug (default to False): ', False)))
+                config['global']['debug'] =utils.is_enable(require_input('Debug (default to False): ', False))
                 break
             except ValueError as e:
                 print(e.args[0])
@@ -76,9 +76,7 @@ try:
         with open('config.json', 'w') as f:
             json.dump(config, f, indent=4)
     else:
-        logger.info('Config file found, loading...')
-        with open('config.json', 'r') as f:
-            config = json.load(f)
+        logger.info('Config file found')
     
 except KeyboardInterrupt:
     logger.info('KeyboardInterrupt, exiting...')
@@ -93,6 +91,14 @@ if len(sys.argv) == 1:
     # Add default arguments
     sys.argv = ['aicompleter', '--config', 'config.json', 'helper', '--enable-agent', '--include','pythoncode','--include','searcher']
     # TODO: Get available ai model
+
+elif os.path.isfile(sys.argv[1]):
+    # Run the file, instead of the helper
+    # With the other parameters
+    executor = sys.argv[0]
+    logger.info('Running file: ' + sys.argv[1])
+    os.execvp(executor, sys.argv)
+    sys.exit(0)
 
 # Launch the main program
 runpy.run_module('aicompleter', run_name='__main__', alter_sys=True)

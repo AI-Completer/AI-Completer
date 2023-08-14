@@ -9,18 +9,20 @@ import attr
 User = TypeVar('User', bound='interface.User')
 Group = TypeVar('Group', bound='interface.Group')
 
-@attr.s(auto_attribs=True, kw_only=True)
-class Namespace:
+@attr.dataclass(kw_only=False)
+class BaseNamespace:
+    name: str = attr.ib(default="")
+    'The name of the namespace'
+    description: str = attr.ib(default="")
+    'The description of the namespace'
+
+@attr.dataclass(kw_only=True)
+class Namespace(BaseNamespace):
     '''
     Namespace
     '''
-    name: str = attr.ib(default="", kw_only=False)
-    'The name of the namespace'
-    description: str = attr.ib(default="", kw_only=False)
-    'The description of the namespace'
     subnamespaces: dict[str, Self] = attr.ib(factory=dict, on_setattr=attr.setters.frozen)
     'The subnamespaces of the namespace'
-
     commands: Commands = attr.ib(factory=Commands, on_setattr=attr.setters.frozen)
     'The commands of the namespace'
     data: EnhancedDict = attr.ib(factory=EnhancedDict, validator=attr.validators.instance_of(EnhancedDict))
@@ -37,7 +39,7 @@ class Namespace:
         # Warning: This may raise the disorder of the execution order
         # TODO: Find a better way to do this
         def _on_change(key, value):
-            asyncio.get_event_loop().create_task(self.onConfigChange(key, value))
+            asyncio.get_running_loop().create_task(self.onConfigChange(key, value))
         self.config.__on_setter__ = _on_change
 
     @subnamespaces.validator

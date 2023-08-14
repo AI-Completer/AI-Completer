@@ -1,6 +1,5 @@
 from .console import ConsoleInterface
-from .initializer import InitInterface
-from .pythonc import PythonCodeInterface
+from .system.pythonc import PythonCodeInterface
 from .searcher import SearchInterface
 from .authority import AuthorInterface
 from . import logical, system

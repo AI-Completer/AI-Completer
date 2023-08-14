@@ -49,9 +49,6 @@ class PDFloader(ac.ai.ChatInterface):
         return chunks
     
     async def session_init(self, session: Session, data: EnhancedDict):
-        # await super().session_init(session)
-        # not call super().session_init() because it is not necessary
-
         # Construct memory
         from aicompleter.memory import faissimp as fimpl
         memory = fimpl.FaissMemory()

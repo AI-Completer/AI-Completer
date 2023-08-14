@@ -13,16 +13,15 @@ from typing import (Any, Callable, Coroutine, Generator, Iterable, Iterator,
                     Optional, Self, TypeVar, overload)
 
 import attr
+import attrs
+from attrs import field
 
 import aicompleter
-from aicompleter.common import JSONSerializable
-import aicompleter.error as error
-from aicompleter.session.base import MultiContent
 
-from .. import config, log, session, utils
-
-if bool(config.varibles['disable_memory']) == False:
-    from ..memory.base import MemoryItem
+from .. import config, error, log, session, utils
+from ..common import JSONSerializable
+from ..session.base import MultiContent
+from ..utils.special import getcallercommand
 
 Interface = TypeVar('Interface', bound='aicompleter.interface.Interface')
 User = TypeVar('User', bound='aicompleter.interface.User')
@@ -49,35 +48,33 @@ class CommandParamElement(JSONSerializable):
     tooltip:str = ""
     '''Tooltip of the parameter'''
 
-    def __serialize__(self):
-        return {
-            "name":self.name,
-            "type":self.type.__name__ if isinstance(self.type,type) else '',
-            "default":self.default,
-            "description":self.description,
-            "optional":self.optional,
-            "tooltip":self.tooltip,
-        }
-    
-    @staticmethod
-    def __deserialize__(data:dict):
-        raise NotImplementedError("CommandParamElement.deserialize is not implemented")
-        return CommandParamElement(
-            name=data['name'],
-            type=eval(data['type']) if data['type'] else str,
-            # TODO: fix the eval problem
-            default=data['default'],
-            description=data['description'],
-            optional=data['optional'],
-            tooltip=data['tooltip'],
-        )
-
     @property
     def json_text(self):
         '''
         Get the json description of the parameter
         '''
-        return f"<{self.type.__name__ if isinstance(self.type,type) else ''} {self.tooltip}{' = %s' % str(self.default) if self.default else ''}>"
+        if self.tooltip:
+            if self.default != None:
+                return "<{type} {tooltip} = {default}>".format(
+                    type=self.type.__name__ if isinstance(self.type,type) else 'auto',
+                    tooltip=self.tooltip,
+                    default=self.default,
+                )
+            else:
+                return "<{type} {tooltip}>".format(
+                    type=self.type.__name__ if isinstance(self.type,type) else 'auto',
+                    tooltip=self.tooltip,
+                )
+        else:
+            if self.default != None:
+                return "<{type} = {default}>".format(
+                    type=self.type.__name__ if isinstance(self.type,type) else 'auto',
+                    default=self.default,
+                )
+            else:
+                return "<{type}>".format(
+                    type=self.type.__name__ if isinstance(self.type,type) else 'auto',
+                )
 
 class CommandParamStruct(JSONSerializable):
     '''
@@ -295,60 +292,73 @@ class CommandAuthority(JSONSerializable):
         return sum([_level_map[i]**2 for i in self.__dict__ if self.__dict__[i] == True])**0.5
 
 
-@attr.s(auto_attribs=True,hash=False,kw_only=True)
+@attrs.define(slots=False)
 class Command(JSONSerializable):
     '''Command Struct'''
-    cmd:str = attr.ib(default="", kw_only=False)
+    cmd:str = field(default="", kw_only=False)
     '''Command'''
-    description:str = attr.ib(default="", kw_only=False)
+    description:str = field(default="", kw_only=False)
     '''
     Description For Command
     
     This is sometimes necessery for AI to know what the command is
     '''
-    alias:set[str] = set()
+    alias:set[str] = field(default=set(), kw_only=True)
     '''Alias Names'''
-    format:Optional[CommandParamStruct] = attr.ib(default=None)
+
+    @staticmethod
+    def __format_setattr(inst, attr_, value):
+        if value is None:
+            inst.check = lambda x: True
+            return None
+        if isinstance(value, (dict, list)):
+            return CommandParamStruct.load_brief(value)
+        utils.typecheck(value, (CommandParamStruct, CommandParamElement))
+        inst.check = value.check
+        return value
+    
+    format:Optional[CommandParamStruct] = field(default=None, kw_only=True, on_setattr=__format_setattr)
     '''Format For Command, if None, no format required'''
-    callable_groups:set[str] = set()
+    callable_groups:set[str] = field(default=set(), kw_only=True)
     '''Groups who can call this command'''
-    overrideable:bool = False
+    overrideable:bool = field(default=True, kw_only=True)
     '''Whether this command can be overrided by other command'''
-    extra:dict = {}
+    data:dict = field(default={}, kw_only=True)
     '''Extra information'''
-    expose:bool = True
+    expose:bool = field(default=True, kw_only=True)
     '''Whether this command can be exposed to handlers'''
-    authority:CommandAuthority = CommandAuthority()
+    authority:CommandAuthority = field(default=CommandAuthority(), kw_only=True)
     '''Authority of the command'''
 
-    in_interface:Optional[Interface] = None
+    in_interface:Optional[Interface] = field(default=None, kw_only=True)
     '''Interface where the command is from'''
-    callback:Optional[Callable[[session.Session, session.Message], Coroutine[Any, Any, Any]]] = None
+    callback:Optional[Callable[..., Any | Coroutine[Any, Any, Any]]] = field(default=None, kw_only=True)
     '''
     Call Function To Call The Command
 
     If None, the command will be called by in_interface
     '''
-    to_return:bool = True
+    to_return:bool = field(default=True, kw_only=True)
     '''
     Whether the command will return a value
     '''
 
+    name = utils.link_property('cmd')
+    '''
+    Name of the command
+    '''
+    
     def __attrs_post_init__(self):
         self.logger = log.getLogger("Command", [self.in_interface.user.name if self.in_interface else 'Unknown', self.cmd])
-        # if self.format is not None:
-        #     if isinstance(self.format, (dict, list)):
-        #         self.format = CommandParamStruct.load_brief(self.format)
-        #     utils.typecheck(self.format, (CommandParamStruct, CommandParamElement))
+        # This seem to be tricky
+        self.format = self.format
 
-    def _(value: Optional[CommandParamStruct | dict[str, Any]]):
-        if value is None:
-            return None
-        if isinstance(value, (dict, list)):
-            return CommandParamStruct.load_brief(value)
-        utils.typecheck(value, (CommandParamStruct, CommandParamElement))
-        return value
-    format.converter = _
+    @in_interface.validator
+    def _(inst, attr_, value):
+        from ..interface import Interface
+        if value == None:
+            return
+        attr.validators.instance_of(Interface)(inst, attr_, value)
     del _
 
     def check_support(self, handler:Handler, user:User) -> bool:
@@ -358,75 +368,118 @@ class Command(JSONSerializable):
                 if user in group:
                     return True
         return False
+    
+    @contextlib.contextmanager
+    def __add_running_command(self, message:session.Message):
+        '''Add running command to session'''
+        message.session._running_commands.append((self, message))
+        try:
+            yield
+        finally:
+            message.session._running_commands.remove((self, message))
 
     async def call(self, session:session.Session, message:session.Message):
         '''Call the command'''
+        if message.status == aicompleter.session.MessageStatus.SENT:
+            raise error.Failed("Message has been sent before.",session, message, interface=self.in_interface)
         if session.closed:
             raise error.SessionClosed(session,content=f"session {session.id} closed: Command.call",message=message,interface=self.in_interface)
         message.session = session
-        if message.src_interface:
-            # Enable self call
-            if message.src_interface != message.dest_interface:
-                if not self.check_support(session.in_handler, message.src_interface.user):  
-                    raise error.PermissionDenied(f"user {message.src_interface.user} not in callable_groups: Command.call{str(self.callable_groups)}",message=message,interface=self.in_interface)
-        self.logger.info(f"Call ({session.id}, {message.id}) {message.content}")
-        message.dest_interface = self.in_interface
-        if self.format != None:
-            if not self.format.check(message.content.pure_text):
-                raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",self.in_interface, src_message = message, format=self.format)
-            message.content = MultiContent(self.format.setdefault(message.content.json))
-        
-        try:
-            # Trigger the call event
-            await session.in_handler._on_call(session, message)
-        except error.Interrupted as e:
-            self.logger.info("Call interrupted by event")
-            raise e
-        except Exception as e:
-            self.logger.error("Call interrupted by exception of event", exc_info=True)
-            raise error.Interrupted(f"Call interrupted by exception: Command.call",message=message,interface=self.in_interface, error=e) from e
-        
-        if self.callback is not None:
-            extra_params = utils.appliable_parameters(self.callback, {
-                'session': session,
-                'message': message,
-                'logger': self.logger,
-                'interface': self.in_interface,
-            })
-            
-            if 'config' in self.callback.__annotations__:
-                extra_params['config'] = self.in_interface.getconfig(session)
-            if 'data' in self.callback.__annotations__:
-                extra_params['data'] = self.in_interface.getdata(session)
 
-            # if the parameter is in json format, load it
-            with contextlib.suppress(json.JSONDecodeError):
-                # use message content because it has been loaded by format
-                data = message.content.json
-                if isinstance(data, dict):
-                    for k,v in data.items():
-                        if k not in self.callback.__annotations__:
-                            continue
-                        extra_params.setdefault(k, v) # do not override (!important)
-            
-            async with session._running_tasks.session(self.callback(**extra_params)) as task:
-                ret = await task
-        else:   
-            if self.in_interface is None:
-                raise error.ParamRequired(f"[Command <{self.cmd}>]in_interface required: Command.call")
-            
-            async with session._running_tasks.session(self.in_interface.call(session, message)) as task:
-                ret = await task
+        if not message._check_cache.get('src_interface', False): 
+            if message.src_interface == None:
+                callercommand = getcallercommand(commands=session.in_handler.commands)
+                if callercommand:
+                    message.src_interface = callercommand.in_interface
+            message._check_cache['src_interface'] = True
         
-        if ret is not None:
-            self.logger.debug("Command return value: %s" % str(ret))
-        return ret
+        message.status = aicompleter.session.MessageStatus.SENT
+        with self.__add_running_command(message):
+            if message.src_interface:
+                # Enable self call
+                if message.src_interface != message.dest_interface:
+                    if not self.check_support(session.in_handler, message.src_interface.user):  
+                        raise error.PermissionDenied(f"user {message.src_interface.user} not in callable_groups: Command.call{str(self.callable_groups)}",message=message,interface=self.in_interface)
+            self.logger.info(f"Call ({session.id}, {message.id}) {message.content}")
+            message.dest_interface = self.in_interface
+            if self.format != None:
+                if not self.format.check(message.content.pure_text):
+                    raise error.FormatError(f"[Command <{self.cmd}>]format error: Command.call",self.in_interface, src_message = message, format=self.format)
+                message.content = MultiContent(self.format.setdefault(message.content.json))
         
-    def bind(self, callback:Callable[[session.Session, session.Message], None]) -> None:
+            try:
+                # Trigger the call event
+                await session.in_handler._on_call(session, message)
+            except error.Interrupted as e:
+                self.logger.info("Call interrupted by event")
+                raise e
+            except Exception as e:
+                self.logger.error("Call interrupted by exception of event", exc_info=True)
+                raise error.Interrupted(f"Call interrupted by exception: Command.call",message=message,interface=self.in_interface, error=e) from e
+            
+            if self.callback is not None:
+                params = utils.appliable_parameters(self.callback, {
+                    'session': session,
+                    'message': message,
+                    'logger': self.logger,
+                    'interface': self.in_interface,
+                })
+                sig = utils.get_signature(self.callback)
+                
+                if 'config' in sig.parameters:
+                    params['config'] = self.in_interface.getconfig(session)
+                if 'data' in sig.parameters:
+                    params['data'] = self.in_interface.getdata(session)
+                if 'content' in sig.parameters:
+                    params['content'] = message.content
+
+                # if the parameter is in json format, load it
+                with contextlib.suppress(json.JSONDecodeError):
+                    # use message content because it has been loaded by format
+                    data = message.content.json
+                    if isinstance(data, dict):
+                        for k,v in data.items():
+                            if k not in sig.parameters:
+                                continue
+                            params.setdefault(k, v) # do not override (!important)
+
+                if len(sig.parameters) != len(params):
+                    # It seems that something unwanted happened
+                    raise error.InnerException(
+                        "The parameters list seem to have extra parameters as unexcepted. The function is called by Command.call." \
+                        "The function is at {modulepath}:{qualname}, the interface is at {int_modulepath}:{int_qualname}. The excepted parameters " \
+                        "are {paramslist}".format(
+                            modulepath=self.callback.__code__.co_filename,
+                            qualname=self.callback.__code__.co_qualname,
+                            int_modulepath=self.in_interface.__module__ if self.in_interface else None,
+                            int_qualname=self.in_interface.__class__.__qualname__ if self.in_interface else None,
+                            paramslist='[%s]' % ','.join(params)
+                        ))
+                
+                ret = self.callback(**params)
+                if asyncio.iscoroutine(ret):
+                    async with session._running_tasks.session(ret) as task:
+                        ret = await task
+            else:   
+                if self.in_interface is None:
+                    raise error.ParamRequired(f"[Command <{self.cmd}>]in_interface required: Command.call")
+                
+                ret = self.in_interface.call(session, message)
+                if asyncio.iscoroutine(ret):
+                    async with session._running_tasks.session(ret) as task:
+                        ret = await task
+            if ret is not None:
+                self.logger.debug("Command return value: %s" % repr(ret))
+            return ret
+        
+    def bind(self, callback:Optional[Callable[[session.Session, session.Message], None]] = None) -> None:
         '''
         Bind a call function to the command
         If not bind, the command will be called by in_interface
         '''
+        if callback is None:
+            self.callback = None
+            return
         if not callable(callback):
             raise TypeError("call_func must be a callable function")
         self.callback = callback
@@ -452,7 +505,7 @@ class Command(JSONSerializable):
             "format":self.format.__serialize__() if self.format else None,
             "callable_groups":list(self.callable_groups),
             "overrideable":self.overrideable,
-            "extra":self.extra,
+            "data":self.data,
             "expose":self.expose,
             "authority":self.authority.__serialize__(),
             "to_return":self.to_return,
@@ -464,6 +517,7 @@ class Command(JSONSerializable):
     def __deserialize__(self, data:dict):
         raise NotImplementedError("Command.__deserialize__ is not implemented")
 
+_T = TypeVar("_T")
 class Commands(dict[str,Command]):
     '''
     Commands Dict
@@ -551,7 +605,7 @@ class Commands(dict[str,Command]):
             func(i)
 
     @overload
-    def register(self, command:Command):
+    def register(self, command:Command) -> Callable[[Callable[..., _T]], Callable[..., _T]]:
         ...
 
     @overload
@@ -567,7 +621,7 @@ class Commands(dict[str,Command]):
                  expose:bool=True, 
                  authority:CommandAuthority=CommandAuthority(), 
                  to_return:bool=True,
-                 **kwargs):
+                 **kwargs) -> Callable[[Callable[..., _T]], Callable[..., _T]]:
         ...
 
     def register(self, *args, **kwargs):
@@ -632,7 +686,8 @@ class Commands(dict[str,Command]):
         '''
         return len(self) == 0
 
-@attr.s(auto_attribs=True)
+# It seem that there is no need to build a structure for the result
+@attr.dataclass
 class Result:
     '''Command Result Struct'''
     cmd:str = ""

@@ -1,13 +1,14 @@
 from typing import Optional
 import uuid
 
-from aicompleter.ai.implements.openai.api import Chater
+from ...ai.implements.openai.api import Chater
+from ...ai import ChatInterface, AI
 from ... import *
 
-class SummaryInterface(ai.ChatInterface):
+class SummaryInterface(ChatInterface):
     cmdreg:Commands = Commands()
 
-    def __init__(self, ai:ai.AI, config:Config = Config(), id: uuid.UUID = uuid.uuid4()):
+    def __init__(self, ai:AI, config:Config = Config(), id: uuid.UUID = uuid.uuid4()):
         super().__init__(
             ai=ai,
             namespace='summary',

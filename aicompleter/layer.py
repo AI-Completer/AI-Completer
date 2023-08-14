@@ -2,6 +2,7 @@ import functools
 from typing import Generic, Iterator, Optional, Self, TypeVar, overload
 
 from . import *
+from .utils.typeval import makeoverloadmethod
 
 _T = TypeVar('_T')
 
@@ -11,14 +12,25 @@ class DiGraph(Generic[_T]):
     '''
     def __init__(self):
         self._src:dict[_T, set[_T]] = {}
-        
+    
+    @overload
+    def add(self, src:_T):
+        ...
+
+    @overload
     def add(self, src:_T, dest:_T):
-        '''Add a edge'''
+        ...
+
+    def add(self, src:_T, dest:Optional[_T] = None):
+        '''
+        Add a edge or add a node.
+        '''
         if src not in self._src:
             self._src[src] = set()
-        self._src[src].add(dest)
-        if dest not in self._src:
-            self._src[dest] = set()
+        if dest != None:
+            self._src[src].add(dest)
+            if dest not in self._src:
+                self._src[dest] = set()
 
     @overload
     def remove(self, src:_T) -> None:
@@ -127,18 +139,34 @@ class CommandCallMap:
         :param str dest: dest command name
         '''
 
-    def add(self, src:Interface, dest:Interface, dest_cmd:Optional[str] = None):
+
+    @overload
+    def add(self, node: Interface):
+        ...
+
+    @overload
+    def add(self, src:Interface, dest:Interface):
+        ...
+
+    @overload
+    def add(self, src:Interface, dest:Interface, dest_cmd:str):
+        ...
+
+    def add(self, src:Interface, dest:Optional[Interface] = None, dest_cmd:Optional[str] = None):
         '''
-        Add a edge
+        Add a node or an edge
+
+        If dest is None, this command will add a node.
         If dest_cmd is None, all commands in dest will be callable.
         '''
         if (src, dest) not in self._src:
             self._src[(src, dest)] = set()
-        if dest_cmd is None:
-            for cmd in dest.commands:
-                self._src[(src, dest)].add(cmd.cmd)
-        else:
-            self._src[(src, dest)].add(dest_cmd)
+        if dest != None:
+            if dest_cmd is None:
+                for cmd in dest.commands:
+                    self._src[(src, dest)].add(cmd.cmd)
+            else:
+                self._src[(src, dest)].add(dest_cmd)
 
     @overload
     def remove(self, src:Interface) -> None:
@@ -152,28 +180,28 @@ class CommandCallMap:
     def remove(self, src:Interface, dest:Interface, dest_cmd:str) -> None:
         pass
 
-    @functools.singledispatch
+    @makeoverloadmethod
     def remove(self, *args):
         raise TypeError(f'Invalid args: {args}')
     
-    @remove.register
-    def _(self, src:Interface, dest:Interface, dest_cmd:str):
-        '''Remove a edge'''
-        if (src, dest) in self._src:
-            self._src[(src, dest)].remove(dest_cmd)
-
-    @remove.register
-    def _(self, src:Interface, dest:Interface):
-        '''Remove a edge'''
-        if (src, dest) in self._src:
-            self._src.pop((src, dest))
-
-    @remove.register
+    @remove.register_auto
     def _(self, src:Interface):
         '''Remove a edge'''
         for i in self._src:
             if i[0] == src:
                 self._src.pop(i)
+
+    @remove.register_auto
+    def _(self, src:Interface, dest:Interface):
+        '''Remove a edge'''
+        if (src, dest) in self._src:
+            self._src.pop((src, dest))
+
+    @remove.register_auto
+    def _(self, src:Interface, dest:Interface, dest_cmd:str):
+        '''Remove a edge'''
+        if (src, dest) in self._src:
+            self._src[(src, dest)].remove(dest_cmd)
 
     def get(self, src:Interface, dest:Interface) -> set[str]:
         '''Get the dests of a src'''

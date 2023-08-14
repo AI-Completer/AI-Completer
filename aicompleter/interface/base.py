@@ -2,26 +2,25 @@
 Base Objects for Interface of AutoDone-AI
 '''
 import copy
+import json
 import os
-from typing_extensions import deprecated
 import uuid
-from abc import ABCMeta, abstractmethod
 from typing import Coroutine, Optional, Self, TypeVar, Union, overload
 import asyncio
 
 import attr
 
-from .. import config, error, handler, log, memory, session, utils
-from ..common import AsyncLifeTimeManager, BaseTemplate, JSONSerializable
+from .. import config, error, handler, log, session, utils
+from ..common import AsyncLifeTimeManager, JSONSerializable
 from ..config import Config
-from ..namespace import Namespace
+from ..session import Session
+from ..namespace import Namespace, BaseNamespace
 from ..utils import EnhancedDict
-from ..memory import Memory, JsonMemory
 from .command import Command, Commands
 
 Handler = TypeVar('Handler', bound='handler.Handler')
 
-@attr.dataclass(kw_only=True, hash=False)
+@attr.dataclass(hash=False)
 class User(JSONSerializable):
     '''User'''
     name:str = attr.ib(default="", kw_only=False)
@@ -32,13 +31,13 @@ class User(JSONSerializable):
     description:Optional[str] = attr.ib(default=None, kw_only=False)
     '''Description of the user'''
     
-    id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
+    id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID), kw_only=True)
     '''ID of the user'''
-    in_group:str = attr.ib(default="",on_setattr=lambda self, attr, value: self.all_groups.add(value))
+    in_group:str = attr.ib(default="",on_setattr=lambda self, attr, value: self.all_groups.add(value), kw_only=True)
     '''Main Group that the user in'''
-    all_groups:set[str] = attr.ib(factory=set)
+    all_groups:set[str] = attr.ib(factory=set, kw_only=True)
     '''Groups that the user in'''
-    support:set[str] = attr.ib(factory=set)
+    support:set[str] = attr.ib(factory=set, kw_only=True)
     '''Supports of the user'''
 
     @property
@@ -60,7 +59,8 @@ class User(JSONSerializable):
         return hash(self.id) + hash(self.name)
     
     def __attrs_post_init__(self):
-        self.all_groups.add(self.in_group)
+        if self.in_group not in self.all_groups:
+            self.all_groups.add(self.in_group)
 
 class Group:
     '''
@@ -283,14 +283,16 @@ class Interface(AsyncLifeTimeManager):
     '''
     Data Factory, this factory will be used to create a data class for the interface
     '''
+    namespace: Optional[BaseNamespace] = None
+    '''
+    Base Namespace, this namespace will be used to create a namespace for the interface
+    '''
 
     def __init__(self, 
-                 namespace:str, 
-                 user:User,
+                 namespace:Optional[str] = None, 
+                 user:Optional[User] = None,
                  id:uuid.UUID = uuid.uuid4(), 
-                 config: config.Config = config.Config(), 
-                 configFactory:Optional[type[Config]] = None,
-                 dataFactory:Optional[type[utils.EnhancedDict]] = None):
+                 config: config.Config = config.Config()):
         
         super().__init__()
         self._user = user
@@ -298,17 +300,20 @@ class Interface(AsyncLifeTimeManager):
         utils.typecheck(id, uuid.UUID)
         self._id:uuid.UUID = id
         '''ID'''
-        if configFactory:
-            self.configFactory:type[Config] = configFactory
-        if dataFactory:
-            self.dataFactory:type[utils.EnhancedDict] = dataFactory
-
-        self.namespace:Namespace = Namespace(
-            name=namespace,
-            description="Interface %s" % str(self._id),
-            config=config,
-            data=self.dataFactory(),
-        )
+        
+        if namespace is None:
+            if hasattr(type(self), "namespace") and isinstance(type(self).namespace, BaseNamespace):
+                self.namespace:Namespace = Namespace(**attr.asdict(type(self).namespace))
+            else:
+                raise error.InvalidArgument("namespace is not specified")
+        else:
+            self.namespace:Namespace = Namespace(
+                name=namespace,
+                description="Interface %s" % str(type(self).__qualname__),
+                config=config,
+                data=self.dataFactory(),
+            )
+        self.loop:Optional[asyncio.AbstractEventLoop] = None
 
         self.logger:log.Logger = log.getLogger("interface", [self.namespace.name])
         '''Logger of Interface'''
@@ -320,7 +325,7 @@ class Interface(AsyncLifeTimeManager):
                         newcmd.in_interface = self
                         # if is a class method, bind the method to the instance
                         if not hasattr(newcmd.callback, "__self__") and '.' in newcmd.callback.__qualname__:
-                            if self.__class__.__name__ == newcmd.callback.__qualname__.split('.')[0]:
+                            if self.__class__.__name__ == newcmd.callback.__qualname__.rsplit('.', maxsplit=2)[-2]:
                                 newcmd.callback = newcmd.callback.__get__(self, self.__class__)
                         self.commands.add(newcmd)
 
@@ -366,14 +371,60 @@ class Interface(AsyncLifeTimeManager):
     async def init(self, in_handler:Handler) -> Coroutine[None, None, None]:
         '''
         Initial function for Interface
+
+        This method will be called when the interface is initializing,
+
+        *Note*: The method will be called even if this method is inherited or removd from the subclass
         '''
         self.logger.debug("Interface %s initializing" % self.id)
+        self.loop = in_handler._loop
 
     async def final(self) -> Coroutine[None, None, None]:
-        '''Finial function for Interface'''
-        self.logger.debug("Interface %s finalizing" % self.id)
+        '''
+        Finial function for Interface
+        
+        This method will be called when the interface is finalizing,
 
-    async def session_init(self, session:Optional[session.Session] = None):
+        *Note*: The method will be called even if this method is inherited or removd from the subclass
+        '''
+        self.logger.debug("Interface %s finalizing" % self.id)
+    
+    async def _invoke_init(self, in_handler: Handler):
+        '''
+        Invoke the init function of the interface
+        '''
+        # find all init functions from the mro
+        inits = []
+        for func in utils.get_inherit_methods(self.__class__, "init"):
+            if callable(func):
+                inits.append(func)
+        # invoke all init functions
+        for i in inits:
+            params = utils.appliable_parameters(i, {
+                'in_handler': in_handler,
+                'handler': in_handler
+            })
+            await i(self, **params)
+
+    async def _invoke_final(self, in_handler: Handler):
+        '''
+        Invoke the final function of the interface
+        '''
+        # find all final functions from the mro
+        finals = []
+        for func in utils.get_inherit_methods(self.__class__, "final"):
+            if callable(func):
+                finals.append(func)
+        finals.reverse()
+        # invoke all final functions, from the last to the first
+        for i in finals:
+            params = utils.appliable_parameters(i, {
+                'in_handler': in_handler,
+                'handler': in_handler
+            })
+            await i(self, **params)
+
+    async def session_init(self):
         '''
         Initial function for Session
         
@@ -382,12 +433,12 @@ class Interface(AsyncLifeTimeManager):
 
         ::
             >>> async def session_init(self, session:Session):
-            ...     await super().session_init()
             ...     # Do something
+        ::
         '''
         pass
 
-    async def session_final(self, session:Optional[session.Session] = None):
+    async def session_final(self):
         '''
         Finial function for Session
         
@@ -396,10 +447,46 @@ class Interface(AsyncLifeTimeManager):
 
         ::
             >>> async def session_final(self, session:Session):
-            ...     await super().session_final()
             ...     # Do something
         '''
         pass
+
+    async def _invoke_session_init(self, session: Session):
+        '''
+        Invoke the session init function of the interface
+        '''
+        session_inits = []
+        for func in utils.get_inherit_methods(self.__class__, "session_init"):
+            if callable(func):
+                session_inits.append(func)
+        raw_data = self.getdata(self)
+        raw_config = self.getconfig(self)
+        for i in session_inits:
+            params = utils.appliable_parameters(i, {
+                'session': session,
+                'data': raw_data,
+                'config': raw_config
+            })
+            await i(self, **params)
+
+    async def _invoke_session_final(self, session: Session):
+        '''
+        Invoke the session final function of the interface
+        '''
+        session_finals = []
+        for func in utils.get_inherit_methods(self.__class__, "session_final"):
+            if callable(func):
+                session_finals.append(func)
+        session_finals.reverse()
+        raw_data = self.getdata(self)
+        raw_config = self.getconfig(self)
+        for i in session_finals:
+            params = utils.appliable_parameters(i, {
+                'session': session,
+                'data': raw_data,
+                'config': raw_config
+            })
+            await i(self, **params)
 
     @overload
     def getconfig(self, session:session.Session) -> Config:
@@ -432,19 +519,22 @@ class Interface(AsyncLifeTimeManager):
         '''
         return session.data[self.id.hex]
 
-    @deprecated("Interface global call is deprecated, use stable command instead")
     async def call(self, session:session.Session, message:session.Message):
         '''
         Call the command
 
         :param session: Session
         :param message: Message
+
+        When no callback is found, use this method to call the command
         '''
         raise NotImplementedError("Interface.call() is not implemented")
 
     def getStorage(self, session:session.Session) -> Optional[dict]:
         '''
         Get the Storage of the interface (if any)
+
+        If possible, use save_session alternatively
 
         :param session: Session
         :return: Storage, if there is nothing to store, return None
@@ -455,23 +545,24 @@ class Interface(AsyncLifeTimeManager):
         '''
         Set the Storage of the interface (if any)
 
+        If possible, use load_session alternatively
+
         :param session: Session
         '''
         pass
+
+    def save_session(self, path:str, session:session.Session):
+        with open(path, 'w') as f:
+            json.dump(self.getStorage(session) or {}, f)
+
+    def load_session(self, path:str, session:session.Session):
+        with open(path, 'r') as f:
+            self.setStorage(session, json.load(f))
     
     def close(self):
         '''Close the interface'''
-        self._close_tasks.append(asyncio.get_event_loop().create_task(self.final()))
+        self._close_tasks.append((self.loop or asyncio.get_event_loop()).create_task(self.final()))
         super().close()
-
-    def register_cmd(self, *args, **kwargs):
-        '''Register a command'''
-        kwargs.pop("in_interface", None)
-        return self.commands.register(Command(
-            in_interface=self,
-            *args,
-            **kwargs
-        ))
 
     def rename_cmd(self, old:str, new:str):
         '''

@@ -31,12 +31,10 @@ class WebAnalyse(Interface):
         ))
 
     async def init(self, in_handler: Handler) -> None:
-        ret = await super().init(in_handler)
         # Check summary interface
         from .summarizer import SummaryInterface
         if not in_handler.has_interface(SummaryInterface):
             raise Exception('WebAnalyse interface requires SummaryInterface')
-        return ret
 
     async def analyse(self, session:Session, url: str, user: Optional[str] = None, language: str = 'en-us', split_length:int = 3072, *, proxy:Optional[str] = None) -> str:
         '''

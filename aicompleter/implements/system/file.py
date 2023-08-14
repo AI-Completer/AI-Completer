@@ -8,21 +8,25 @@ from aicompleter.utils import Struct
 from ...interface import CommandAuthority
 from . import *
 
+# File Interface
+# TODO: add more file operations
 class FileInterface(Interface):
     '''
     File Interface for Autodone-AI
+
     Including File Read and Write
     '''
-    def __init__(self, user: Optional[User] = None, id: Optional[uuid.UUID] = uuid.uuid4()):
+    def __init__(self, config:Config = Config(), id: Optional[uuid.UUID] = uuid.uuid4()):
         super().__init__(
             namespace="file",
-            user = user or User(
+            user = User(
                 name="file",
                 in_group="system",
                 all_groups={"system","command"},
                 support={"text","file"}
             ),
-            id=id
+            id=id,
+            config = config,
         )
         self.commands.add(
             Command(
@@ -69,11 +73,13 @@ class FileInterface(Interface):
         )
 
     async def session_init(self, session:Session):
-        ret = await super().session_init(session)
         # This data will be reuseable in other interfaces
         data = self.getdata(session)
         data['filesystem'] = FileSystem(session.config[self.namespace.name].get('root', 'workspace'))
         data['workspace'] = WorkSpace(data['filesystem'], '/')
+
+    def getworkspace(self, session:Session) -> WorkSpace:
+        return self.getdata(session)['workspace']
 
     async def cmd_read(self, session:Session, message:Message) -> str:
         '''Command for reading file'''

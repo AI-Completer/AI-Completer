@@ -201,8 +201,8 @@ class Logger(logging.Logger):
     
     fatal_stream = critical_stream
 
-    async def typewriter_log(self, level: int, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1) -> None:
-        loop = asyncio.get_event_loop()
+    async def typewriter_log(self, level: int, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
+        loop = loop or asyncio.get_event_loop()
         reader = asyncio.StreamReader(limit=1, loop=loop)
         task = loop.create_task(self.log_stream(level, reader, *args, exc_info, extra, stack_info, stacklevel))
         for char in msg:
@@ -211,20 +211,20 @@ class Logger(logging.Logger):
         reader.feed_eof()
         await task
     
-    def typewriter_debug(self, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
-        return self.typewriter_log(logging.DEBUG, msg, time_delta, *args, exc_info, extra, stack_info, stacklevel)
+    def typewriter_debug(self, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1, loop: Optional[asyncio.AbstractEventLoop] = None):
+        return self.typewriter_log(logging.DEBUG, msg, time_delta, *args, exc_info = exc_info, extra = extra, stakc_info = stack_info, stacklevel = stacklevel, loop = loop)
     
-    def typewriter_info(self, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
-        return self.typewriter_log(logging.INFO, msg, time_delta, *args, exc_info, extra, stack_info, stacklevel)
+    def typewriter_info(self, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1, loop: Optional[asyncio.AbstractEventLoop] = None):
+        return self.typewriter_log(logging.INFO, msg, time_delta, *args, exc_info = exc_info, extra = extra, stakc_info = stack_info, stacklevel = stacklevel, loop = loop)
     
-    def typewriter_warning(self, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
-        return self.typewriter_log(logging.WARNING, msg, time_delta, *args, exc_info, extra, stack_info, stacklevel)
+    def typewriter_warning(self, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1, loop: Optional[asyncio.AbstractEventLoop] = None):
+        return self.typewriter_log(logging.WARNING, msg, time_delta, *args, exc_info = exc_info, extra = extra, stakc_info = stack_info, stacklevel = stacklevel, loop = loop)
     
-    def typewriter_error(self, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
-        return self.typewriter_log(logging.ERROR, msg, time_delta, *args, exc_info, extra, stack_info, stacklevel)
+    def typewriter_error(self, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1, loop: Optional[asyncio.AbstractEventLoop] = None):
+        return self.typewriter_log(logging.ERROR, msg, time_delta, *args, exc_info = exc_info, extra = extra, stakc_info = stack_info, stacklevel = stacklevel, loop = loop)
     
-    def typewriter_critical(self, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
-        return self.typewriter_log(logging.CRITICAL, msg, time_delta, *args, exc_info, extra, stack_info, stacklevel)
+    def typewriter_critical(self, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1, loop: Optional[asyncio.AbstractEventLoop] = None):
+        return self.typewriter_log(logging.CRITICAL, msg, time_delta, *args, exc_info = exc_info, extra = extra, stakc_info = stack_info, stacklevel = stacklevel, loop = loop)
     
     typewriter_fatal = typewriter_critical
 
@@ -249,6 +249,7 @@ setLevel = root.setLevel
 debug = root.debug
 info = root.info
 warning = root.warning
+warn = root.warn
 error = root.error
 critical = root.critical
 fatal = root.fatal
@@ -265,7 +266,7 @@ def getLogger(name:str, substruct:list[str] = []) -> Logger:
     # _log.handlers = _common_handlers
 
     # Below is a hack to make the logger share a same class and level
-    _log = hookclass(root, {
+    _log:Logger = hookclass(root, {
         'name': name,
         '_stack': copy.copy(substruct),
     })

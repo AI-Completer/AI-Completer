@@ -15,3 +15,9 @@ from .workspace import (
 from .file import (
     FileInterface,
 )
+from .downloader import (
+    Downloader,
+)
+from .shell import (
+    ShellInterface,
+)

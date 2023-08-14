@@ -7,7 +7,7 @@ import functools
 import importlib
 import json
 import uuid
-from typing import Any, Generator, Iterator, Optional, overload
+from typing import Any, Generator, Iterator, Optional, Self, overload
 
 from . import utils
 from .utils.storage import StorageManager
@@ -486,7 +486,7 @@ class Handler(AsyncLifeTimeManager, Saveable):
                     'id': i.id.hex,
                     'module': i.__module__,
                     'class': i.__class__.__qualname__,
-                    'config': i.config.__serialize__(),
+                    'config': dict(i.config),
                     'user': i.user.__serialize__(),
                     'commands': [{
                         'name': cmd.cmd,
@@ -522,7 +522,7 @@ class Handler(AsyncLifeTimeManager, Saveable):
             # Check if the interface is already loaded
             _inter = get_interface(cls)
             if _inter:
-                _inter.namespace.config = Config.__deserialize__(i['config'])
+                _inter.namespace.config = Config(i['config'])
                 _inter._user = User.__deserialize__(i['user'])
                 _inter._id = uuid.UUID(i['id'])
                 assert _inter in self._interfaces, "Interface not in handler"
@@ -558,23 +558,30 @@ class Handler(AsyncLifeTimeManager, Saveable):
         for i in self._running_sessions:
             session_storage = sessions.alloc_storage(i.id.hex)
             i.save(session_storage, True)
+        sessions.save()
+        path.save()
         self.logger.info("Handler saved to %s", path.path)
 
     @classmethod
-    def load(cls, path:str | StorageManager):
+    def load(cls, path:str | StorageManager, prehandler: Optional[Self] = None):
         '''Load handler from path'''
         if isinstance(path, str):
-            path = StorageManager(path)
-        with open(path.alloc_file('intmeta'), 'r') as f:
+            path = StorageManager.load(path)
+        with open(path['intmeta'].path, 'r') as f:
             intmeta = json.load(f)
-        with open(path.alloc_file('config'), 'r') as f:
+        with open(path['config'].path, 'r') as f:
             config = Config(json.load(f))
-        ret = cls(config)
+        if prehandler:
+            ret = prehandler
+            ret._namespace.config = config
+        else:
+            ret = cls(config)
         ret.setstate(intmeta)
-        sessions = StorageManager.load(path['sessions'].name)
+        sessions = StorageManager.load(path['sessions'].path)
         for i in sessions:
             session_storage = sessions[i.mark]
-            ret._running_sessions.append(Session.load(ret, session_storage))
+            ret._running_sessions.append(Session.load(
+                StorageManager.load(session_storage.path), ret))
         return ret
 
 __all__ = (

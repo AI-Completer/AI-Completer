@@ -143,7 +143,7 @@ class Saveable(BaseTemplate):
 
     @classmethod
     @abstractmethod
-    def load(cls, path: str) -> Self:
+    def load(cls, path: str, *args, **kwargs) -> Self:
         '''
         Load from file
         '''
@@ -275,6 +275,9 @@ class AsyncLifeTimeManager(AsyncTemplate[LifeTimeManager]):
         await asyncio.wait(self._close_tasks)
 
     def __del__(self) -> None:
+        # Sometimes, this will be called randomly? (I don't know why)
+        if '_close_event' not in self.__dict__:
+            return
         if not self.closed:
             self.close()
 

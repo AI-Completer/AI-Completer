@@ -14,7 +14,6 @@ import aicompleter
 
 from .. import config, events, log, utils
 from ..config import Config, EnhancedDict
-from ..memory import Memory
 from ..utils.special import getcallercommand
 
 Handler = TypeVar('Handler', bound='aicompleter.handler.Handler')
@@ -22,6 +21,7 @@ User = TypeVar('User', bound='aicompleter.interface.User')
 Group = TypeVar('Group', bound='aicompleter.interface.Group')
 Character = TypeVar('Character', bound='aicompleter.interface.Character')
 Interface = TypeVar('Interface', bound='aicompleter.interface.Interface')
+Command = TypeVar('Command', bound='aicompleter.interface.Command')
 
 class Content(object):
     '''Common content class.'''
@@ -169,11 +169,6 @@ class Session:
         self.logger:log.Logger=log.Logger('session')
         '''Logger'''
         self.logger = log.getLogger('Session', [self.id.hex[:8]])
-
-    @property
-    def memory(self) -> Memory:
-        '''Memory'''
-        return self._memory
 
     @property
     def id(self) -> uuid.UUID:
@@ -350,7 +345,7 @@ class Session:
             })
         return ret
     
-    def save(self, storage: utils.StorageManager | str, save_running_commands:bool = False):
+    def save(self, storage: utils.StorageManager | str):
         if isinstance(storage, str):
             storage = utils.StorageManager(storage)
         meta = {
@@ -365,25 +360,19 @@ class Session:
             i.save_session(storage.alloc_file({
                 'type': 'interface',
                 'id': i.id.hex,
-            }))
+            }), self)
         for i in self.history:
             i.save(storage.alloc_file({
                 'type': 'message',
                 'id': i.id.hex,
             }))
-        if save_running_commands:
-            with open(storage.alloc_file('running_commands'), 'w') as f:
-                json.dump([{
-                    'cmd': cmd,
-                    'msg': msg.id.hex,
-                } for cmd, msg in self._running_commands], f)
         storage.save()
 
     @classmethod
     def load(cls, storage: utils.StorageManager | str, in_handler: Handler):
         if isinstance(storage, str):
             storage = utils.StorageManager.load(storage)
-        with open(storage['meta'], 'r') as f:
+        with open(storage['meta'].path, 'r') as f:
             meta = json.load(f)
         session = cls(handler=in_handler)
         session.create_time = meta['created_time']
@@ -393,31 +382,17 @@ class Session:
         intmap = {}
         hislis = []
         for i in storage:
-            if not isinstance(i, dict) or 'type' not in i:
+            if not isinstance(i.mark, dict) or 'type' not in i.mark:
                 continue
-            if i['type'] == 'interface':
-                intmap[i['id']] = storage[i]
-            elif i['type'] == 'message':
-                hislis.append(storage[i])
+            if i.mark['type'] == 'interface':
+                intmap[i.mark['id']] = storage[i.mark]
+            elif i.mark['type'] == 'message':
+                hislis.append(storage[i.mark])
         for i in in_handler._interfaces:
             # If not found, will throw KeyError
-            i.load_session(storage[intmap.pop(i.id.hex)].path, session)
+            i.load_session(storage[intmap.pop(i.id.hex).mark].path, session)
         for i in hislis:
             session.history.append(Message.load(i.path, session))
-        if 'running_commands' in storage:
-            with open(storage['running_commands'], 'r') as f:
-                cmds = json.load(f)
-            def _find_history(uuidstr):
-                for i in session.history:
-                    if i.id.hex == uuidstr:
-                        return i
-                return None
-            for i in cmds:
-                to_add = _find_history(i['msg'])
-                if to_add is None:
-                    log.warning(f"Message not found: {i['msg']}. The command will be ignored.")
-                    continue
-                session._running_commands.append((i['cmd'], to_add))
         if len(intmap):
             log.warning(f"Interfaces(ID-baesd) not found: {intmap.keys()}. Are the interfaces changed?")
         return session

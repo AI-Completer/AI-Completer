@@ -20,7 +20,7 @@ from .command import Command, Commands
 
 Handler = TypeVar('Handler', bound='handler.Handler')
 
-@attr.dataclass(kw_only=True, hash=False)
+@attr.dataclass(hash=False)
 class User(JSONSerializable):
     '''User'''
     name:str = attr.ib(default="", kw_only=False)
@@ -31,13 +31,13 @@ class User(JSONSerializable):
     description:Optional[str] = attr.ib(default=None, kw_only=False)
     '''Description of the user'''
     
-    id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
+    id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID), kw_only=True)
     '''ID of the user'''
-    in_group:str = attr.ib(default="",on_setattr=lambda self, attr, value: self.all_groups.add(value))
+    in_group:str = attr.ib(default="",on_setattr=lambda self, attr, value: self.all_groups.add(value), kw_only=True)
     '''Main Group that the user in'''
-    all_groups:set[str] = attr.ib(factory=set)
+    all_groups:set[str] = attr.ib(factory=set, kw_only=True)
     '''Groups that the user in'''
-    support:set[str] = attr.ib(factory=set)
+    support:set[str] = attr.ib(factory=set, kw_only=True)
     '''Supports of the user'''
 
     @property
@@ -59,7 +59,8 @@ class User(JSONSerializable):
         return hash(self.id) + hash(self.name)
     
     def __attrs_post_init__(self):
-        self.all_groups.add(self.in_group)
+        if self.in_group not in self.all_groups:
+            self.all_groups.add(self.in_group)
 
 class Group:
     '''

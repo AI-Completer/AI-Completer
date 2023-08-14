@@ -44,6 +44,22 @@ class NullInterface(common.Singleton,Interface, metaclass=NullInterfaceMeta):
         namespace = namespace or 'null'
         super().__init__(namespace=namespace, config=config)
 
+    def setConfigFactory(self, factory:Callable[..., Any]):
+        '''
+        Set the config factory of the interface
+        '''
+        self.configFactory = factory
+
+    def setDataFactory(self, factory:Callable[..., Any]):
+        '''
+        Set the data factory of the interface
+        '''
+        self.dataFactory = factory
+        if isinstance(self.namespace.data, DataModel):
+            self.namespace.data = factory(self.namespace.data.__wrapped__)
+        else:
+            self.namespace.data = factory(self.namespace.data)
+
     def on_init(self, func: Optional[Callable[..., Coroutine[None, None, None]]] = None):
         self.init = func
         return func

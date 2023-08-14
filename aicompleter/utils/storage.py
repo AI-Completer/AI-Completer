@@ -38,7 +38,7 @@ class Storage:
         '''
         Get the file path
         '''
-        return os.path.join(self.in_manager._basepath, self.mark)
+        return os.path.join(self.in_manager._basepath, self.name)
 
     def asdict(self):
         return {
@@ -49,10 +49,12 @@ class Storage:
         }
     
     @classmethod
-    def fromdict(cls, data:dict):
+    def fromdict(cls, data:dict, in_manager:Optional[StorageManager]=None):
         if data['mark-serialized']:
             data['mark'] = json.loads(data['mark'])
         del data['mark-serialized']
+        if in_manager != None:
+            data['in_manager'] = in_manager
         return cls(**data)
 
 class StorageManager:
@@ -66,8 +68,8 @@ class StorageManager:
     '''
     def __init__(self, basepath:str):
         self._basepath = basepath
-        with contextlib.suppress(FileNotFoundError):
-            os.makedirs(basepath)
+        with contextlib.suppress(FileExistsError):
+            os.mkdir(basepath)
         if not os.path.isdir(basepath):
             raise ValueError(f'{basepath} is not a directory')
         self._metas:list[Storage] = []
@@ -93,9 +95,11 @@ class StorageManager:
         ----------
         StorageManager
         '''
-        manager = cls(basepath)
+        manager = cls.__new__(cls)
+        manager._basepath = basepath
+        manager._indexfile = os.path.join(basepath, 'index.json')
         with open(manager._indexfile, 'r') as f:
-            manager._metas = [Storage.fromdict(meta) for meta in json.load(f)]
+            manager._metas = [Storage.fromdict(meta, manager) for meta in json.load(f)]
         return manager
 
     def save(self):

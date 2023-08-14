@@ -691,6 +691,4 @@ def get_inherit_methods(cls: type, method_name: str) -> list[Callable]:
         # Method is inherited by the order of mro
         if method_name in base.__dict__:
             ret.append(base.__dict__[method_name])
-    if method_name in cls.__dict__:
-        ret.append(cls.__dict__[method_name])
     return ret

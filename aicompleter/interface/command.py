@@ -505,7 +505,7 @@ class Command(JSONSerializable):
             "format":self.format.__serialize__() if self.format else None,
             "callable_groups":list(self.callable_groups),
             "overrideable":self.overrideable,
-            "extra":self.extra,
+            "data":self.data,
             "expose":self.expose,
             "authority":self.authority.__serialize__(),
             "to_return":self.to_return,

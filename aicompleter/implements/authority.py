@@ -96,5 +96,5 @@ class AuthorInterface(Interface):
         session.on_call.add_callback(self.hook)
 
     async def session_final(self, session: Session) -> None:
-        session.in_handler.on_call.callbacks.remove(self.hook)
+        session.on_call.callbacks.remove(self.hook)
 

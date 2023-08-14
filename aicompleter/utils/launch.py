@@ -70,11 +70,13 @@ def start(*tasks: asyncio.Future, loop:Optional[asyncio.AbstractEventLoop] = Non
 
     This should be called only in the main module
     '''
+    from .. import log
     if loop==None:
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
     for task in tasks:
         loop.create_task(task)
-    launch(loop=loop, logger=logger or logging.getLogger('main'))
+    launch(loop=loop, logger=logger or log.getLogger('main'))
 
 def run_handler(entry: asyncio.Future, handler, loop:Optional[asyncio.AbstractEventLoop] = None, logger: Optional[logging.Logger] = None):
     '''
@@ -82,12 +84,13 @@ def run_handler(entry: asyncio.Future, handler, loop:Optional[asyncio.AbstractEv
 
     This should be called only in the main module
     '''
-    from .. import Handler
+    from .. import Handler, log
     if not isinstance(handler, Handler):
         raise TypeError(f"Invalid handler type: {handler!r}")
     start(entry, loop=loop, logger=logger)
     loop = loop or asyncio.get_event_loop()
-    loop.create_task(handler.close())
+    handler.close()
+    loop.create_task(handler.wait_close())
     if logger == None:
-        logger = logging.getLogger('main')
+        logger = log.getLogger('main')
     launch(loop=loop, logger=logger)

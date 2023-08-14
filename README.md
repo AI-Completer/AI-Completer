@@ -55,7 +55,7 @@ chater = ai.openai.Chater(cfg['openaichat'])
 # Chat Interface, based on chater -> OpenAI API
 chatinterface:ai.ChatInterface = ai.ChatInterface(ai=chater, namespace='openaichat')
 # Handler, interacting between interfaces
-handl:Handler = Handler(cfg)
+hand:Handler = Handler(cfg)
 
 async def main():
     # Add Interfaces

@@ -57,7 +57,7 @@ class SSHInterface(Interface):
                 config.require('ssh.private_key_passphrase')
         
         default_client = paramiko.SSHClient()
-        default_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        default_client.set_missing_host_key_policy(paramiko.WarningPolicy())
         default_client.connect(
             cfg.get('ssh.host'),
             port=cfg.get('ssh.port'),

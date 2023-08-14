@@ -18,3 +18,6 @@ from .file import (
 from .downloader import (
     Downloader,
 )
+from .shell import (
+    ShellInterface,
+)

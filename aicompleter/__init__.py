@@ -49,6 +49,12 @@ from .interface import (
     CommandParamElement,
     CommandParamStruct,
     CommandParam,
+    CommandAuthority,
+)
+
+from .namespace import (
+    BaseNamespace, 
+    Namespace
 )
 
 from .layer import (
@@ -65,11 +71,6 @@ from . import (
     events,
     ai,
     implements,
-)
-
-from .namespace import (
-    BaseNamespace, 
-    Namespace
 )
 
 from . import (

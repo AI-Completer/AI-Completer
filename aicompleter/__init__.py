@@ -3,7 +3,7 @@ AI-Completer
 AI-Completer is a framework for interaction among AI, human and system.
 '''
 
-__version__ = "0.0.1rc4"
+__version__ = "0.0.1rc5"
 __author__ = "Li Yan"
 __package__ = "aicompleter"
 __license__ = "GPL-3.0"

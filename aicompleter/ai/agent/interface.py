@@ -1,17 +1,16 @@
-from abc import abstractclassmethod
 import copy
 import uuid
+from abc import abstractclassmethod
 from typing import Optional
 
-from aicompleter import Session, session
-from aicompleter.common import serialize
-
+from ... import Session, utils
+from ...ai import ChatTransformer, TransformerInterface
+from ...common import serialize
 from ...config import Config
 from ...interface import User
-from ...ai import TransformerInterface, ChatTransformer
 from .. import ai
-from ... import utils
 from .agent import Agent
+
 
 class AgentDataModel(utils.DataModel):
     '''

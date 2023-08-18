@@ -74,9 +74,14 @@ def start(*tasks: asyncio.Future, loop:Optional[asyncio.AbstractEventLoop] = Non
     if loop==None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+    intasks = []
     for task in tasks:
-        loop.create_task(task)
-    launch(loop=loop, logger=logger or log.getLogger('main'))
+        intasks.append(loop.create_task(task))
+    logger = logger or log.getLogger('main')
+    launch(loop=loop, logger=logger)
+    for task in intasks:
+        if task.done() and task.exception() != None:
+            logger.debug(f"Task {task!r} has exception: {task.exception()!r}")
 
 def run_handler(entry: asyncio.Future, handler, loop:Optional[asyncio.AbstractEventLoop] = None, logger: Optional[logging.Logger] = None):
     '''
@@ -87,10 +92,15 @@ def run_handler(entry: asyncio.Future, handler, loop:Optional[asyncio.AbstractEv
     from .. import Handler, log
     if not isinstance(handler, Handler):
         raise TypeError(f"Invalid handler type: {handler!r}")
+    if logger == None:
+        logger = log.getLogger('main')
+    if loop != None:
+        if handler._loop != None and handler._loop != loop:
+            logger.warning(f"Handler's loop is not None and not equal to the given loop, use the given loop")
+            handler._loop.close()
+        handler._loop = loop
     start(entry, loop=loop, logger=logger)
     loop = loop or asyncio.get_event_loop()
     handler.close()
     loop.create_task(handler.wait_close())
-    if logger == None:
-        logger = log.getLogger('main')
     launch(loop=loop, logger=logger)

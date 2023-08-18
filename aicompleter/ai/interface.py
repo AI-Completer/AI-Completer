@@ -7,8 +7,6 @@ from __future__ import annotations
 import uuid
 from typing import Optional, TypeVar
 
-from aicompleter import session
-
 from .. import *
 from ..ai import ChatTransformer, Conversation, Transformer
 from ..config import Config
@@ -67,33 +65,10 @@ class ChatInterface(TransformerInterface):
         '''
         self.getdata(session)['conversation'] = conversation
     
-    # async def generate(self, session:Session, message:Message):
-    #     '''
-    #     Ask the AI
-    #     '''
-    #     raise NotImplementedError("generate() is not implemented in ChatInterface, will be implemented in the future")
-    #     self.ai.config = session.config[self.namespace]
-    #     conversation:Conversation = session.extra[f'{self.namespace}.conversation']
-    #     new_conversion = copy.copy(conversation)
-    #     new_conversion.messages.append(ai.Message(
-    #         content=message.content.text,
-    #         role='user',
-    #         user=session.id.hex,
-    #     ))
-    #     # Generate
-    #     ret = await self.ai.generate_text(conversation=new_conversion)
-    #     new_conversion.messages.append(ai.Message(
-    #         content=ret,
-    #         role='assistant',
-    #     ))
-    #     session.data[f'interface.{self.namespace}.conversation'] = new_conversion
-    #     return conversation.messages[-1].content
-    
     async def ask(self, session:Session, message:Message):
         '''
         Ask the AI
         '''
-        self.ai.config = self.getconfig(session)
         conversation:Conversation = self.getdata(session)['conversation']
         
         async for i in self.ai.ask(message=ai.Message(
@@ -101,9 +76,8 @@ class ChatInterface(TransformerInterface):
             role='user',
             user=session.id.hex,
         ), history=conversation):
-            ret_message = i
-        
-        return ret_message
+            pass
+        return i
 
     def __hash__(self):
         return hash(self.id)

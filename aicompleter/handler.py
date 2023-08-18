@@ -112,7 +112,7 @@ class Handler(AsyncLifeTimeManager, Saveable):
                 self._close_tasks.append(self._loop.create_task(i.close()))
         for i in self._interfaces:
             i.close()
-            self._close_tasks.append(self._loop.create_task(i.wait_close()))
+            self._close_tasks.append(self._loop.create_task(i._invoke_final(self)))
         super().close()
 
     async def close_session(self, session:Session):

@@ -4,12 +4,13 @@ Custom logging module
 
 import asyncio
 import copy
+import functools
 import logging
 import os
 import sys
 from collections.abc import Mapping
 from types import TracebackType
-from typing import Any, Iterable, Optional, TypeAlias
+from typing import Any, Callable, Iterable, Optional, TypeAlias
 from .utils.etype import hookclass
 
 import colorama
@@ -109,18 +110,21 @@ class Logger(logging.Logger):
         super().__init__(name, level)
         self._stack = copy.copy(substruct)
 
-    def push(self, name:str) -> None:
+    def push(self, name:str | Iterable[str]) -> None:
         '''
         Push a name to stack
         '''
-        self._stack.append(str(name))
+        if isinstance(name, str):
+            self._stack.append(str(name))
+        else:
+            for n in name:
+                self._stack.append(str(n))
 
-    def pop(self) -> str:
+    def pop(self):
         '''
         Pop a name from stack
         '''
-        ret = self._stack.pop()
-        return ret
+        return self._stack.pop()
 
     def makeRecord(self, name, level, fn, lno, msg, args, exc_info,
                    func=None, extra=None, sinfo=None):
@@ -137,9 +141,43 @@ class Logger(logging.Logger):
                 rv.__dict__[key] = extra[key]
         return rv
     
+    def debug_function(self, func:Optional[Callable] = None, **kwargs) -> None:
+        '''
+        Log the function call
+
+        This will import the package outside the stdlib, if the `func` is not provided, the function name will be guessed from the stack frame
+        '''
+        if not self.isEnabledFor(DEBUG):
+            # There is no need to log
+            return
+        if func:
+            if kwargs:
+                self.debug(f"Calling {func.__name__} with {kwargs}")
+                return
+            from .utils.typeval import get_signature
+            from .utils.etype import getframe
+            sig = get_signature(func)
+            frame = getframe(1)
+            # match the parameters
+            locals_ = frame.f_locals
+            kwparams = {}
+            for name in sig.parameters:
+                if name in frame.f_locals:
+                    kwparams[name] = locals_[name]
+            self.debug(f"Calling {func.__name__} with {kwparams}")
+        else:
+            from .utils.etype import getframe
+            frame = getframe(1)
+            if kwargs:
+                self.debug(f"Calling {frame.f_code.co_name} with {kwargs}")
+                return
+            # function object may be ungettable, we don't match the parameters
+            self.debug(f"Calling {frame.f_code.co_name} with {frame.f_locals}")
+    
     async def log_stream(self, level: int, msg: asyncio.StreamReader, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1) -> None:
         if not self.isEnabledFor(level):
             return
+        from .utils.aio import aiterfunc
         async with _on_reading:
             # Record the console cursor
             print("\033[s",end="")
@@ -152,13 +190,10 @@ class Logger(logging.Logger):
             # Stream the log
             output = ""
             srcfile = os.path.normcase(__file__)
-            while True:
-                addchar = await msg.read(1)
+            async for addchar in aiterfunc(functools.partial(msg.read, 1), ''):
                 output += addchar
                 # Move the cursor to the recorded position
                 print("\033[u",end="",flush=True)
-                if addchar == "":
-                    break
                 # Print the log
                 # The code is copied from logging.Logger._log
                 sinfo = None
@@ -202,6 +237,9 @@ class Logger(logging.Logger):
     fatal_stream = critical_stream
 
     async def typewriter_log(self, level: int, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
+        if not self.isEnabledFor(level):
+            # no need to log and wait
+            return
         loop = loop or asyncio.get_event_loop()
         reader = asyncio.StreamReader(limit=1, loop=loop)
         task = loop.create_task(self.log_stream(level, reader, *args, exc_info, extra, stack_info, stacklevel))

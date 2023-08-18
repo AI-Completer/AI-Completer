@@ -266,6 +266,9 @@ class CommandParamStruct(JSONSerializable):
                 raise TypeError("struct must be a dict, list or str instance")
         return _load_brief(data)
     
+    def __str__(self):
+        return self.json_text
+    
 @attr.s(auto_attribs=True)
 class CommandAuthority(JSONSerializable):
     '''

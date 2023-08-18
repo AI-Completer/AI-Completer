@@ -1,17 +1,41 @@
 from __future__ import annotations
 
 import copy
+import enum
 import time
 import uuid
 from abc import abstractmethod
-from typing import Any, AsyncGenerator, Coroutine, Generator, Optional, Self, final
+from typing import Any, AsyncGenerator, Coroutine, Generator, Optional, Self, Union, final, overload
 
 import attr
 
-from ..common import JSONSerializable, deserialize, serialize
+from ..utils.etype import link_property
+from ..common import JSONSerializable
 from ..config import Config
-from ..memory import JsonMemory, Memory, Memoryable, MemoryItem
+from ..memory import JsonMemory, Memory, MemoryItem
 from . import token
+
+@enum.unique
+class AuthorType(enum.Enum):
+    '''
+    Type of author
+    '''
+    BASE = None
+    '''
+    The base, not anyone
+    '''
+    SYSTEM = 'system'
+    '''
+    System
+    '''
+    USER = 'user'
+    '''
+    User
+    '''
+    ASSISTANT = 'assistant'
+    '''
+    Assistant
+    '''
 
 @attr.dataclass
 class AI(JSONSerializable):
@@ -63,13 +87,6 @@ class Transformer(AI):
     max_tokens: Optional[int] = attr.ib(
         default=None, validator=attr.validators.optional(attr.validators.instance_of(int)))
     'Max tokens of transformer, will limit the length of generated content'
-
-    def generate_many(self, *args, num: int,  **kwargs) -> Coroutine[list[Any], Any, None]:
-        '''
-        Generate many possible content (if supported)
-        '''
-        raise NotImplementedError(
-            f"generate_many() is not implemented in {self.__class__.__name__}")
     
     def getToken(self, text: str) -> list[int]:
         '''
@@ -85,11 +102,93 @@ class Transformer(AI):
         if '_encoder' not in self.__dict__:
             if self.encoding:
                 self._encoder = token.Encoder(encoding=self.encoding)
-            elif self.name:
-                self._encoder = token.Encoder(model=self.name)
+            elif self.model:
+                self._encoder = token.Encoder(model=self.model)
             else:
                 raise ValueError("No encoder specified")
         return self._encoder
+
+class Embedder(Transformer):
+    '''
+    Abstract class for Embed transformer
+    '''
+    @abstractmethod
+    def generate(self, prompt: str) -> AsyncGenerator[list[float], None]:
+        '''
+        Generate content
+        *Require Coroutine*, this abstract method will raise NotImplementedError if not implemented
+        '''
+        raise NotImplementedError(
+            f"generate() is not implemented in {self.__class__.__name__}")
+    
+    async def generate_embedding(self, prompt: str) -> list[float]:
+        '''
+        Generate embedding
+        '''
+        async for value in self.generate(prompt):
+            pass
+        return value
+
+@attr.dataclass(init=False, str=False)
+class ZipContent(JSONSerializable):
+    '''
+    Zipped content
+
+    Which identifies the raw content, zipped content and omitted replacement of the raw content, this is used to slim the count of tokens and enhance the context of the AI
+
+    Examples:
+    --------
+    >>> ZipContent(raw="Hello world", zip="Hello world", omitrepl="Hello world")
+    ZipContent(raw='Hello world', zip='Hello world', omitrepl='Hello world')
+    >>> ZipContent(raw="123456789012345678901234567890", zip="123{...}890", omitrepl="{...}")
+    ZipContent(raw='123456789012345678901234567890', zip='123{...}890', omitrepl='{...}')
+    '''
+    raw:str = attr.ib(validator=attr.validators.instance_of(str))
+    '''The raw content which will be handled by the operation system'''
+    zip:str = attr.ib(validator=attr.validators.instance_of(str))
+    '''The zipped content which will be sent to the AI'''
+    omitrepl:Optional[str] = attr.ib(default = None, validator=attr.validators.optional(attr.validators.instance_of(str)))
+    '''The omitted replacement of the raw content'''
+
+    @overload
+    def __init__(self, content:str):
+        '''
+        Init from content
+        '''
+        pass
+
+    @overload
+    def __init__(self, right:Self):
+        '''
+        Init from another ZipContent
+        '''
+        pass
+    
+    @overload
+    def __init__(self, raw:str, zip:str, omitrepl:Optional[str] = None):
+        '''
+        Init from raw, zip and omitrepl
+        '''
+        pass
+
+    def __init__(self, *args, **kwargs):
+        if len(args) == 1:
+            if isinstance(args[0], self.__class__):
+                self.raw = args[0].raw
+                self.zip = args[0].zip
+                self.omitrepl = args[0].omitrepl
+            else:
+                self.zip = self.raw = args[0]
+                self.omitrepl = None
+        elif len(args) == 3:
+            self.raw = args[0]
+            self.zip = args[1]
+            self.omitrepl = args[2]
+        else:
+            raise ValueError("Invalid arguments")
+        
+    def __str__(self):
+        return self.zip
 
 @attr.dataclass
 class Message(JSONSerializable):
@@ -97,8 +196,9 @@ class Message(JSONSerializable):
     Message of conversation
     '''
     content: str = attr.ib(validator=attr.validators.instance_of(str))
-    'Content of message'
-    role: str = attr.ib(validator=attr.validators.instance_of(str))
+    'Content of message, may be zipped in the future'
+    # TODO: Add zipped content
+    role: Union[str, AuthorType] = attr.ib(default=AuthorType.BASE)
     'Role of message'
     id: Optional[uuid.UUID] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.instance_of(uuid.UUID)))
     'ID of message'
@@ -108,6 +208,8 @@ class Message(JSONSerializable):
     'Time of message'
     data: dict = attr.ib(factory=dict, validator=attr.validators.instance_of(dict))
     'Extra data of message'
+
+    author = link_property("role")
 
     def __str__(self):
         return self.content
@@ -125,7 +227,7 @@ class Message(JSONSerializable):
             'user': self.user,
             'data': self.data,
         }, timestamp=self.time, user=self.user, content=self.content, category='message')
-    
+
 @attr.dataclass
 class FuncParam(JSONSerializable):
     '''
@@ -214,6 +316,12 @@ class Conversation(JSONSerializable):
         for message in self.messages:
             ret.put(message.getMemoryItem())
         return ret
+    
+    def __len__(self):
+        return len(self.messages)
+    
+    def __bool__(self):
+        return True
 
 class ChatTransformer(Transformer):
     '''
@@ -229,6 +337,14 @@ class ChatTransformer(Transformer):
             ret.messages.append(
                 Message(content=init_prompt, role='system', user=user))
         return ret
+    
+    def update_config(self, config: Config):
+        '''
+        Update config, and update the dict to the varible
+
+        Default is load config to local vars
+        '''
+        self.config = config
 
     def generate(self, conversation: Conversation, *args, **kwargs) -> AsyncGenerator[Message, None]:
         '''
@@ -259,49 +375,122 @@ class ChatTransformer(Transformer):
         '''
         Ask the AI once
         '''
-        rvalue = ''
         async for value in self.ask(history=history, message=message, *args, **kwargs):
-            rvalue = value
-        return rvalue
+            pass
+        return value
     
     async def generate_text(self, *args, **kwargs) -> str:
         '''
         Generate text
         '''
-        rvalue = ''
         async for value in self.generate(*args, **kwargs):
-            rvalue = value.content
-        return rvalue
+            pass
+        return value.content
 
     async def generate_many_texts(self, *args, num: int, **kwargs) -> list[str]:
         '''
         Generate many texts
         '''
-        rvalue = []
         async for value in self.generate_many(*args, num=num, **kwargs):
-            rvalue = value
-        return rvalue
+            pass
+        return [message.content for message in value]
     
     async def generate_message(self, *args, **kwargs) -> Message:
         '''
         Generate message
         '''
-        rvalue = None
         async for value in self.generate(*args, **kwargs):
-            rvalue = value
-        return rvalue
+            pass
+        return value
 
 class TextTransformer(Transformer):
     '''
     Abstract class for Text transformer
     '''
     @abstractmethod
-    async def generate(self, *args, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
-        return super().generate(*args, prompt=prompt, **kwargs)
+    def generate(self, prompt: str, *args,  **kwargs) -> AsyncGenerator[Message, None]:
+        return super().generate(prompt=prompt, *args, **kwargs)
 
-    async def generate_many(self, *args, prompt: str, num: int,  **kwargs) -> AsyncGenerator[list[str], None]:
+    def generate_many(self, prompt: str, num: int, *args,  **kwargs) -> AsyncGenerator[list[Message], None]:
         '''
         Generate many possible content (if supported)
         '''
         raise NotImplementedError(
             f"generate_many() is not implemented in {self.__class__.__name__}")
+    
+    def set_stopwords(self, stopwords: set[str]):
+        '''
+        Set stopwords
+        '''
+        raise NotImplementedError(
+            f"set_stopwords() is not implemented in {self.__class__.__name__}")
+
+class WrappedTextTransformer(ChatTransformer):
+    def __init__(self, wrapped: TextTransformer, wordend: str = '<|END|>', init_prompt: Optional[str] = None, max_textlen: Optional[int] = None):
+        self.__wrapped = wrapped
+        self.__wordend = wordend
+        self.__init_prompt = init_prompt
+        self.__max_textlen = max_textlen
+        wrapped.set_stopwords([wordend])
+    
+    async def generate(self, conversation: Conversation, *args, **kwargs) -> AsyncGenerator[Message, None]:
+        raw = self.__init_prompt or ""
+        text = ""
+        for message in conversation.messages:
+            if message.role == AuthorType:
+                text += message.content + '\n'
+                continue
+            role = message.role
+            if role == AuthorType.ASSISTANT:
+                role = 'you'
+            text += f'{role}: {message.content}{self.__wordend}\n'
+        text += 'you: '
+        if self.__max_textlen:
+            if len(text) > self.__max_textlen:
+                text = text[-self.__max_textlen:]
+        raw = raw + text
+        async for ret in self.__wrapped.generate(raw, *args, **kwargs):
+            ret.role = AuthorType.ASSISTANT
+            yield ret
+
+    async def generate_many(self, conversation: Conversation, num: int, *args, **kwargs) -> AsyncGenerator[list[Message], None]:
+        raw = self.__init_prompt or ""
+        text = ""
+        for message in conversation.messages:
+            if message.role == AuthorType:
+                text += message.content + '\n'
+                continue
+            role = message.role
+            if role == AuthorType.ASSISTANT:
+                role = 'you'
+            text += f'{role}: {message.content}{self.__wordend}\n'
+        text += 'you: '
+        if self.__max_textlen:
+            if len(text) > self.__max_textlen:
+                text = text[-self.__max_textlen:]
+        async for ret in self.__wrapped.generate_many(raw, num, *args, **kwargs):
+            for retmsg in ret:
+                retmsg.role = AuthorType.ASSISTANT
+            yield ret
+
+    def __getattribute__(self, __name: str) -> Any:
+        if __name.startswith('_WrappedTextTransformer__'):
+            return super().__getattribute__(__name)
+        elif hasattr(ChatTransformer, __name) and callable(getattr(ChatTransformer, __name)):
+            return super().__getattribute__(__name)
+        else:
+            return getattr(self.__wrapped, __name)
+    
+    def __setattr__(self, name: str, value: Any):
+        if name.startswith('_WrappedTextTransformer__'):
+            super().__setattr__(name, value)
+        else:
+            setattr(self.__wrapped, name, value)
+
+    def __delattr__(self, __name: str) -> None:
+        if __name.startswith('_WrappedTextTransformer__'):
+            super().__delattr__(__name)
+        else:
+            delattr(self.__wrapped, __name)
+
+

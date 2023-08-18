@@ -329,6 +329,8 @@ class Interface(AsyncLifeTimeManager):
                                 newcmd.callback = newcmd.callback.__get__(self, self.__class__)
                         self.commands.add(newcmd)
 
+        self.__inited = False
+
     @property
     def data(self) -> EnhancedDict:
         '''Data of the interface'''
@@ -378,6 +380,7 @@ class Interface(AsyncLifeTimeManager):
         '''
         self.logger.debug("Interface %s initializing" % self.id)
         self.loop = in_handler._loop
+        self.__inited = True
 
     async def final(self) -> Coroutine[None, None, None]:
         '''
@@ -561,7 +564,6 @@ class Interface(AsyncLifeTimeManager):
     
     def close(self):
         '''Close the interface'''
-        self._close_tasks.append((self.loop or asyncio.get_event_loop()).create_task(self.final()))
         super().close()
 
     def rename_cmd(self, old:str, new:str):

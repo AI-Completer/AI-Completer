@@ -1,12 +1,6 @@
 from .cmd_translator import (
     CmdTranslator,
 )
-from .difficulty_test import (
-    DifficultyTestInt,
-)
-from .enexecutor import (
-    StateExecutor,
-)
 from .subexecutor import (
     SelfStateExecutor,
 )

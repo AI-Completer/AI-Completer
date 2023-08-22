@@ -128,7 +128,9 @@ def test_InterfaceCommand():
         return True
 
     test = TestInterface()
-    handler = ac.Handler()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    handler = ac.Handler(loop=loop)
     async def _intest():
         await handler.add_interface(test)
 
@@ -137,4 +139,5 @@ def test_InterfaceCommand():
         assert await session.asend('test2', {'key': 1, 'key2': '2'}) == (1, '2')
         assert await session.asend('test3', {'key': 1}) == True
 
-    asyncio.run(_intest())
+    loop.run_until_complete(_intest())
+

@@ -10,8 +10,7 @@ import os
 import sys
 from collections.abc import Mapping
 from types import TracebackType
-from typing import Any, Callable, Iterable, Optional, TypeAlias
-from .utils.etype import hookclass
+from typing import Any, Callable, Coroutine, Iterable, Optional, TypeAlias
 
 import colorama
 
@@ -26,9 +25,9 @@ INFO = logging.INFO
 DEBUG = logging.DEBUG
 NOTSET = logging.NOTSET
 
-_SysExcInfoType: TypeAlias = tuple[type[BaseException], BaseException, TracebackType | None] | tuple[None, None, None]
-_ExcInfoType: TypeAlias = None | bool | _SysExcInfoType | BaseException
-_ArgsType: TypeAlias = tuple[object, ...] | Mapping[str, object]
+_SysExcInfoType = tuple[type[BaseException], BaseException, TracebackType | None] | tuple[None, None, None]
+_ExcInfoType = None | bool | _SysExcInfoType | BaseException
+_ArgsType = tuple[object, ...] | Mapping[str, object]
 
 colorama.init()
 
@@ -71,23 +70,27 @@ class ColorStrFormatStyle(logging.StrFormatStyle):
         if levelcolormap:
             self._levelcolormap.update(levelcolormap)
 
-    def _format(self, record: LogRecord):
-        if defaults := self._defaults:
-            values = defaults | record.__dict__
-        else:
-            values = record.__dict__
-        for key, value in values.items():
-            if isinstance(value, str) and key in self._colormap:
-                values[key] = self._colormap.get(key) + value + colorama.Fore.RESET + colorama.Style.RESET_ALL
-        # levelname
-        values['levelname'] = self._levelcolormap[int(record.levelno / 10) * 10] + values['levelname'] + colorama.Fore.RESET + colorama.Style.RESET_ALL
+    def format(self, record: LogRecord):
+        record = copy.copy(record)
+        try:
+            if defaults := self._defaults:
+                values = defaults | record.__dict__
+            else:
+                values = record.__dict__
+            for key, value in values.items():
+                if isinstance(value, str) and key in self._colormap:
+                    values[key] = self._colormap.get(key) + value + colorama.Fore.RESET + colorama.Style.RESET_ALL
+            # levelname
+            values['levelname'] = self._levelcolormap[int(record.levelno / 10) * 10] + values['levelname'] + colorama.Fore.RESET + colorama.Style.RESET_ALL
 
-        if 'substruct' in values:
-            values['substruct'] = "".join([
-                f"[{self._colormap['substruct'] + sub + colorama.Fore.RESET + colorama.Style.RESET_ALL}]" 
-                    for sub in values['substruct']
-                ])
-        return self._fmt.format(**values)
+            if 'substruct' in values:
+                values['substruct'] = "".join([
+                    f"[{self._colormap['substruct'] + sub + colorama.Fore.RESET + colorama.Style.RESET_ALL}]" 
+                        for sub in values['substruct']
+                    ])
+            return self._fmt.format(**values)
+        except KeyError as e:
+            raise ValueError('Formatting field not found in record: %s' % e)
 
 class Formatter(logging.Formatter):
     '''
@@ -100,7 +103,11 @@ class Formatter(logging.Formatter):
         self._fmt = self._style._fmt
         self.datefmt = datefmt
 
-StreamHandler: TypeAlias = logging.StreamHandler
+class StreamHandler(logging.StreamHandler):
+    def __init__(self, stream=None):
+        if stream == None:
+            stream = sys.stdout     # Just set stdout as default
+        super().__init__(stream)
 
 class Logger(logging.Logger):
     '''
@@ -154,8 +161,8 @@ class Logger(logging.Logger):
             if kwargs:
                 self.debug(f"Calling {func.__name__} with {kwargs}")
                 return
-            from .utils.typeval import get_signature
             from .utils.etype import getframe
+            from .utils.typeval import get_signature
             sig = get_signature(func)
             frame = getframe(1)
             # match the parameters
@@ -174,7 +181,14 @@ class Logger(logging.Logger):
             # function object may be ungettable, we don't match the parameters
             self.debug(f"Calling {frame.f_code.co_name} with {frame.f_locals}")
     
-    async def log_stream(self, level: int, msg: asyncio.StreamReader, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1) -> None:
+    async def log_stream(self, level: int, msg: asyncio.StreamReader, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1) -> None:
+        '''
+        Log the stream
+
+        Note
+        ----
+        There are some bugs on this function: mutli-lines message support
+        '''
         if not self.isEnabledFor(level):
             return
         from .utils.aio import aiterfunc
@@ -183,15 +197,30 @@ class Logger(logging.Logger):
             print("\033[s",end="")
             # Get console formater
             formatter = None
-            for handler in self.handlers:
-                if isinstance(handler, StreamHandler) and StreamHandler.stream == sys.stdout:
-                    formatter = handler.formatter
+            c = self
+            while c:
+                for handler in c.handlers:
+                    if isinstance(handler, StreamHandler) and handler.stream in (sys.stdout, sys.stderr):
+                        formatter = handler.formatter
+                        break
+                if formatter:
                     break
+                if c.propagate:
+                    c = c.parent
+                else:
+                    c = None
+            
+            if formatter == None:
+                raise Exception('StreamHandler logger not found')
             # Stream the log
-            output = ""
+            output = b""
             srcfile = os.path.normcase(__file__)
-            async for addchar in aiterfunc(functools.partial(msg.read, 1), ''):
+            async for addchar in aiterfunc(functools.partial(msg.read, 1), b''):
                 output += addchar
+                try:
+                    decode_value = output.decode()
+                except UnicodeDecodeError:
+                    continue
                 # Move the cursor to the recorded position
                 print("\033[u",end="",flush=True)
                 # Print the log
@@ -212,76 +241,80 @@ class Logger(logging.Logger):
                         exc_info = (type(exc_info), exc_info, exc_info.__traceback__)
                     elif not isinstance(exc_info, tuple):
                         exc_info = sys.exc_info()
-                record = self.makeRecord(self.name, level, fn, lno, output, args,
+                record = self.makeRecord(self.name, level, fn, lno, decode_value, (),
                                         exc_info, func, extra, sinfo)
                 print(formatter.format(record), end="", flush=True)
             
+            # Move the cursor to the recorded position
+            print("\033[u",end="",flush=True)
             # Use the original log function to log the output
-            self._log(level, output, args, exc_info, extra, stack_info, stacklevel)
+            self.handle(record)
 
-    def debug_stream(self, msg: asyncio.StreamReader, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
-        return self.log_stream(logging.DEBUG, msg, *args, exc_info, extra, stack_info, stacklevel)
+    def debug_stream(self, msg: asyncio.StreamReader, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
+        return self.log_stream(logging.DEBUG, msg, exc_info, extra, stack_info, stacklevel)
     
-    def info_stream(self, msg: asyncio.StreamReader, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
-        return self.log_stream(logging.INFO, msg, *args, exc_info, extra, stack_info, stacklevel)
+    def info_stream(self, msg: asyncio.StreamReader, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
+        return self.log_stream(logging.INFO, msg, exc_info, extra, stack_info, stacklevel)
     
-    def warning_stream(self, msg: asyncio.StreamReader, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
-        return self.log_stream(logging.WARNING, msg, *args, exc_info, extra, stack_info, stacklevel)
+    def warning_stream(self, msg: asyncio.StreamReader, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
+        return self.log_stream(logging.WARNING, msg, exc_info, extra, stack_info, stacklevel)
     
-    def error_stream(self, msg: asyncio.StreamReader, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
-        return self.log_stream(logging.ERROR, msg, *args, exc_info, extra, stack_info, stacklevel)
+    def error_stream(self, msg: asyncio.StreamReader, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
+        return self.log_stream(logging.ERROR, msg, exc_info, extra, stack_info, stacklevel)
     
-    def critical_stream(self, msg: asyncio.StreamReader, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
-        return self.log_stream(logging.CRITICAL, msg, *args, exc_info, extra, stack_info, stacklevel)
+    def critical_stream(self, msg: asyncio.StreamReader, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1):
+        return self.log_stream(logging.CRITICAL, msg, exc_info, extra, stack_info, stacklevel)
     
     fatal_stream = critical_stream
 
-    async def typewriter_log(self, level: int, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
+    async def typewriter_log(self, level: int, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1, loop: Optional[asyncio.AbstractEventLoop] = None) -> Coroutine[None, None, None]:
+        '''
+        Log just like a typewriter
+        '''
         if not self.isEnabledFor(level):
             # no need to log and wait
             return
         loop = loop or asyncio.get_event_loop()
         reader = asyncio.StreamReader(limit=1, loop=loop)
-        task = loop.create_task(self.log_stream(level, reader, *args, exc_info, extra, stack_info, stacklevel))
-        for char in msg:
+        task = loop.create_task(self.log_stream(level, reader, exc_info, extra, stack_info, stacklevel))
+        for char in (msg % args):
             await asyncio.sleep(time_delta)
             reader.feed_data(char.encode())
         reader.feed_eof()
         await task
     
     def typewriter_debug(self, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1, loop: Optional[asyncio.AbstractEventLoop] = None):
-        return self.typewriter_log(logging.DEBUG, msg, time_delta, *args, exc_info = exc_info, extra = extra, stakc_info = stack_info, stacklevel = stacklevel, loop = loop)
+        return self.typewriter_log(logging.DEBUG, msg, time_delta, *args, exc_info = exc_info, extra = extra, stack_info = stack_info, stacklevel = stacklevel, loop = loop)
     
     def typewriter_info(self, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1, loop: Optional[asyncio.AbstractEventLoop] = None):
-        return self.typewriter_log(logging.INFO, msg, time_delta, *args, exc_info = exc_info, extra = extra, stakc_info = stack_info, stacklevel = stacklevel, loop = loop)
+        return self.typewriter_log(logging.INFO, msg, time_delta, *args, exc_info = exc_info, extra = extra, stack_info = stack_info, stacklevel = stacklevel, loop = loop)
     
     def typewriter_warning(self, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1, loop: Optional[asyncio.AbstractEventLoop] = None):
-        return self.typewriter_log(logging.WARNING, msg, time_delta, *args, exc_info = exc_info, extra = extra, stakc_info = stack_info, stacklevel = stacklevel, loop = loop)
+        return self.typewriter_log(logging.WARNING, msg, time_delta, *args, exc_info = exc_info, extra = extra, stack_info = stack_info, stacklevel = stacklevel, loop = loop)
     
     def typewriter_error(self, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1, loop: Optional[asyncio.AbstractEventLoop] = None):
-        return self.typewriter_log(logging.ERROR, msg, time_delta, *args, exc_info = exc_info, extra = extra, stakc_info = stack_info, stacklevel = stacklevel, loop = loop)
+        return self.typewriter_log(logging.ERROR, msg, time_delta, *args, exc_info = exc_info, extra = extra, stack_info = stack_info, stacklevel = stacklevel, loop = loop)
     
     def typewriter_critical(self, msg: str, time_delta:float = 0.1, *args: object, exc_info: _ExcInfoType = None, extra: Mapping[str, object] | None = None, stack_info: bool = False, stacklevel: int = 1, loop: Optional[asyncio.AbstractEventLoop] = None):
-        return self.typewriter_log(logging.CRITICAL, msg, time_delta, *args, exc_info = exc_info, extra = extra, stakc_info = stack_info, stacklevel = stacklevel, loop = loop)
+        return self.typewriter_log(logging.CRITICAL, msg, time_delta, *args, exc_info = exc_info, extra = extra, stack_info = stack_info, stacklevel = stacklevel, loop = loop)
     
     typewriter_fatal = typewriter_critical
 
-_common_handlers = [
-    StreamHandler()
-]
-_common_handlers[0].setFormatter(Formatter(ColorStrFormatStyle(
-    "{asctime} - {levelname} [{name}]{substruct} {message}"
-)))
-
-def configHandlers(handlers:Iterable[logging.Handler]) -> None:
-    '''
-    Config handlers
-    '''
-    global _common_handlers
-    _common_handlers = handlers
-
 root = Logger('ROOT')
-root.handlers = _common_handlers
+root.propagate = False
+root.setLevel(WARNING)
+
+Logger.root = root
+Logger.manager = logging.Manager(Logger.root)
+Logger.manager.setLoggerClass(Logger)
+Logger.manager.setLogRecordFactory(LogRecord)
+
+colorstyle = Formatter(ColorStrFormatStyle(
+    "{asctime} - {levelname} [{name}]{substruct} {message}"
+))
+consolehandler = StreamHandler()
+consolehandler.setFormatter(colorstyle)
+root.handlers.append(consolehandler)
 
 setLevel = root.setLevel
 debug = root.debug
@@ -296,20 +329,12 @@ def getLogger(name:str, substruct:list[str] = []) -> Logger:
     '''
     Get a logger
     '''
-    # _log = Logger(name, substruct=substruct)
-    # if level != None:
-    #     _log.setLevel(level)
-    # else:
-    #     _log.setLevel(config.varibles['log_level'])
-    # _log.handlers = _common_handlers
-
-    # Below is a hack to make the logger share a same class and level
-    _log:Logger = hookclass(root, {
-        'name': name,
-        '_stack': copy.copy(substruct),
-    })
+    _log = Logger(name, substruct=substruct)
+    _log.parent = root
     return _log
 
-del _ArgsType
-del _ExcInfoType
-del _SysExcInfoType
+__all__ = (
+    'CRITICAL', 'FATAL', 'ERROR', 'WARNING', 'WARN', 'INFO', 'DEBUG', 'NOTSET',
+    'StreamHandler', 'Logger', 'getLogger', 'setLevel', 'debug', 'info', 'warning', 'warn', 'error', 'critical', 'fatal',
+    'root', 'Formatter', 'ColorStrFormatStyle', 'LogRecord', 'defaultColorMap', 'defaultLevelColorMap'
+)

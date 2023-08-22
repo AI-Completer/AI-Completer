@@ -3,15 +3,19 @@ Implement the interface of the AI
 Will generate a interface by the specified AI class
 '''
 from __future__ import annotations
+import asyncio
+import copy
+import json
 
 import uuid
 from typing import Optional, TypeVar
 
 from .. import *
-from ..ai import ChatTransformer, Conversation, Transformer
+from ..ai import ChatTransformer, Conversation, Transformer, Message as AIMessage
 from ..config import Config
-from ..interface import Command, Interface, User
+from ..interface import Command, Interface, User, CommandCall
 from ..common import deserialize, serialize
+from .. import Message, error
 
 from . import *
 
@@ -21,7 +25,7 @@ class TransformerInterface(Interface):
     '''
     Transformer interface
     '''
-    def __init__(self,*, ai:Transformer, namespace:str = "transformer", user:Optional[User] = None, id:Optional[uuid.UUID] = None, config:Config = Config()):
+    def __init__(self,*, ai:Transformer, namespace:Optional[str] = "transformer", user:Optional[User] = None, id:Optional[uuid.UUID] = None, config:Config = Config()):
         super().__init__(
             user=user or User(
                 in_group="agent",
@@ -89,4 +93,3 @@ class ChatInterface(TransformerInterface):
     def setStorage(self, session: Session, data: dict):
         conversation = deserialize(data)
         self.getdata(session)['conversation'] = conversation
-

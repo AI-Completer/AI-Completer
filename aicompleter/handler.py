@@ -7,7 +7,7 @@ import functools
 import importlib
 import json
 import uuid
-from typing import Any, Generator, Iterator, Optional, Self, overload
+from typing import Any, Coroutine, Generator, Iterator, Optional, Self, overload
 
 from . import utils
 from .utils.storage import StorageManager
@@ -352,7 +352,7 @@ class Handler(AsyncLifeTimeManager, Saveable):
         '''Get all interfaces'''
         return self._interfaces
     
-    def call(self, session:session.Session, message:session.Message):
+    def call(self, session:session.Session, message:session.Message) -> Coroutine[None, None, Any]:
         '''
         Call a command
         
@@ -454,7 +454,11 @@ class Handler(AsyncLifeTimeManager, Saveable):
                 lambda key,value: value.update(ret.config['global']),
                 lambda key,value: key != 'global'
             )
-        await ret._init_session()
+        try:
+            await ret._init_session()
+        except Exception as e:
+            self.logger.critical("Unexception: %s", e)
+            raise e
         self._running_sessions.append(ret)
         return ret
     

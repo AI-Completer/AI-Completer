@@ -1,5 +1,7 @@
 '''
 AI Agent With Function
+
+Depreciated, use Agent instead
 '''
 
 import asyncio

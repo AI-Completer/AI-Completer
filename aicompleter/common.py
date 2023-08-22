@@ -81,7 +81,10 @@ class SerializableMeta(ABCMeta):
     The mata class for serializable
     '''
     def __subclasscheck__(cls: ABCMeta, subclass: type) -> bool:
-        return hasattr(subclass, '__serialize__') and hasattr(subclass, '__deserialize__')
+        if cls == Serializable:
+            return hasattr(subclass, '__serialize__') and hasattr(subclass, '__deserialize__')
+        return type.__subclasscheck__(cls, subclass)
+    
     def __instancecheck__(cls: ABCMeta, instance: Any) -> bool:
         return issubclass(type(instance), cls)
 

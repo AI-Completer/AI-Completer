@@ -206,13 +206,16 @@ class Message(JSONSerializable):
     'User of message'
     time: float = attr.ib(factory=time.time, validator=attr.validators.instance_of(float))
     'Time of message'
-    data: dict = attr.ib(factory=dict, validator=attr.validators.instance_of(dict))
+    data: Optional[dict] = attr.ib(factory=dict, validator=attr.validators.optional(attr.validators.instance_of(dict)))
     'Extra data of message'
 
     author = link_property("role")
 
     def __str__(self):
         return self.content
+    
+    def __getitem__(self, index):
+        return self.content[index]
 
     def __repr__(self):
         return f"{{content: {self.content}, role: {self.role}, id: {self.id}, user: {self.user}}}"
@@ -303,14 +306,20 @@ class Conversation(JSONSerializable):
     'Creation time of conversation'
     timeout: Optional[float] = None
     'Timeout of conversation'
-    data: dict = attr.ib(factory=dict, validator=attr.validators.deep_iterable(member_validator=attr.validators.instance_of(str), iterable_validator=attr.validators.instance_of(dict)))
+    data: dict = attr.ib(factory=dict, validator=attr.validators.instance_of(dict))
     'Extra data of conversation'
-    functions: Optional[list[Function]] = attr.ib(default=None, validator=attr.validators.optional(attr.validators.deep_iterable(member_validator=attr.validators.instance_of(Function), iterable_validator=attr.validators.instance_of(list))))
-    '''
-    Functions of conversation, this function is callable by AI, when it\'s none, no parameter will be passed to AI, note: AI may not support this feature
-    
-    *Note*: Not fully implemented, do NOT use this feature
-    '''
+    @property
+    def functions(self):
+        '''
+        Functions of conversation, this function is callable by AI, when it\'s none, no parameter will be passed to AI, note: AI may not support this feature
+        
+        *Note*: Depreciated
+        '''
+        return self.data.get('functions', None)
+    @functions.setter
+    def functions(self, value):
+        self.data['functions'] = value
+        
     def getMemory(self, memoryFactory:type[Memory] = JsonMemory) -> Memory:
         ret = memoryFactory()
         for message in self.messages:
@@ -426,6 +435,22 @@ class TextTransformer(Transformer):
             f"set_stopwords() is not implemented in {self.__class__.__name__}")
 
 class WrappedTextTransformer(ChatTransformer):
+    '''
+    Wrapped TextTransformer to ChatTransformer
+
+    This class will wrap a TextTransformer to a ChatTransformer, and will add the conversation to the prompt
+
+    Parameters:
+    ----------
+    wrapped: TextTransformer
+        The wrapped TextTransformer
+    wordend: str
+        The split end of conversation, default is '<|END|>'
+    init_prompt: Optional[str]
+        The initial prompt of the text, default is None
+    max_textlen: Optional[int]
+        The max length of the text, default is None
+    '''
     def __init__(self, wrapped: TextTransformer, wordend: str = '<|END|>', init_prompt: Optional[str] = None, max_textlen: Optional[int] = None):
         self.__wrapped = wrapped
         self.__wordend = wordend
@@ -437,12 +462,16 @@ class WrappedTextTransformer(ChatTransformer):
         raw = self.__init_prompt or ""
         text = ""
         for message in conversation.messages:
-            if message.role == AuthorType:
+            if message.role == AuthorType.BASE:
                 text += message.content + '\n'
                 continue
-            role = message.role
-            if role == AuthorType.ASSISTANT:
-                role = 'you'
+            if isinstance(message.role, AuthorType):
+                if message.role == AuthorType.ASSISTANT:
+                    role = 'you'
+                else:
+                    role = message.role.value
+            else:
+                role = message.role
             text += f'{role}: {message.content}{self.__wordend}\n'
         text += 'you: '
         if self.__max_textlen:
@@ -457,12 +486,16 @@ class WrappedTextTransformer(ChatTransformer):
         raw = self.__init_prompt or ""
         text = ""
         for message in conversation.messages:
-            if message.role == AuthorType:
+            if message.role == AuthorType.BASE:
                 text += message.content + '\n'
                 continue
-            role = message.role
-            if role == AuthorType.ASSISTANT:
-                role = 'you'
+            if isinstance(message.role, AuthorType):
+                if message.role == AuthorType.ASSISTANT:
+                    role = 'you'
+                else:
+                    role = message.role.value
+            else:
+                role = message.role
             text += f'{role}: {message.content}{self.__wordend}\n'
         text += 'you: '
         if self.__max_textlen:

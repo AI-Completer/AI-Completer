@@ -1,16 +1,20 @@
 import copy
+import json
 from typing import Any, AsyncGenerator, Optional
 import uuid
 
 import aiohttp
 
-from aicompleter.ai.ai import Conversation, Message
-
+from ...ai import Conversation, Message
+from .... import error
 from ....config import Config, ConfigModel
 from ....utils import asdict
 from ...ai import AuthorType, ChatTransformer, Conversation, Message, TextTransformer
 from ...token import Encoder
 from ... import ai
+
+# When using palm api, the encoding of request is a problem
+# We use json module to ensure ascii
 
 class ChatOptions(ConfigModel):
     temperature: Optional[float] = None
@@ -124,11 +128,15 @@ class Chater(ChatTransformer):
         if not self.check_conversation(conversation):
             raise ValueError('Conversation is not in proper format')
         async with aiohttp.ClientSession() as session:
-            async with session.post(f'{self.api_url}{self.model}:generateMessage?key={self.api_key}', json={
+            async with session.post(f'{self.api_url}{self.model}:generateMessage?key={self.api_key}', data=json.dumps({
                 "prompt":self._generate_format(conversation),
                 **asdict(self.config.options, filter=lambda k, v: v is not None and k != 'candidate_count')
+            }), headers={
+                'Content-Type': 'application/json'
             }, proxy = self.config.proxy) as response:
                 data = await response.json()
+                if not response.ok:
+                    raise error.HTTPStatusError(response.status, data=data)
                 if 'candidates' not in data:
                     # The message is banned by some reason
                     from ....error import AIGenerateError
@@ -153,12 +161,16 @@ class Chater(ChatTransformer):
         if not self.check_conversation(conversation):
             raise ValueError('Conversation is not in proper format')
         async with aiohttp.ClientSession() as session:
-            async with session.post(f'{self.api_url}{self.model}:generateMessage?key={self.api_key}', json={
+            async with session.post(f'{self.api_url}{self.model}:generateMessage?key={self.api_key}', data=json.dumps({
                 "prompt":self._generate_format(conversation),
                 "candidate_count":num,
                 **asdict(self.config.options, filter=lambda k, v: v is not None and k != 'candidate_count'),
+            }), headers={
+                'Content-Type': 'application/json'
             }, proxy = self.config.proxy) as response:
                 data = await response.json()
+                if not response.ok:
+                    raise error.HTTPStatusError(response.status, data=data)
                 if 'candidates' not in data:
                     # The message is banned by some reason
                     from ....error import AIGenerateError
@@ -255,14 +267,17 @@ class TextCompleter(TextTransformer):
         AsyncGenerator[Message, None], the completed Message, due to the API limit, the message will be yield for only one time.
         '''
         async with aiohttp.ClientSession() as session:
-            async with session.post(f'{self.api_url}{self.model}:generateText?key={self.api_key}', json={
+            async with session.post(f'{self.api_url}{self.model}:generateText?key={self.api_key}', data=json.dumps({
                 "prompt": {
                     "text": text
                 },
                 **asdict(self.config.options, filter=lambda k, v: v is not None)
+            }), headers={
+                'Content-Type': 'application/json'
             }, proxy = self.config.proxy) as response:
-                response.raise_for_status()
                 data = await response.json()
+                if not response.ok:
+                    raise error.HTTPStatusError(response.status, data=data)
                 if 'candidates' not in data:
                     # The message is banned by some reason
                     from ....error import AIGenerateError
@@ -284,13 +299,16 @@ class TextCompleter(TextTransformer):
         AsyncGenerator[list[Message], None], the completed Messages, due to the API limit, the messages will be yield for only one time.
         '''
         async with aiohttp.ClientSession() as session:
-            async with session.post(f'{self.api_url}{self.model}:generateText?key={self.api_key}', json={
+            async with session.post(f'{self.api_url}{self.model}:generateText?key={self.api_key}', data=json.dumps({
                 "prompt": prompt,
                 "candidate_count":num,
                 **asdict(self.config.options, filter=lambda k, v: v is not None and k != 'candidate_count'),
+            }), headers={
+                'Content-Type': 'application/json'
             }, proxy = self.config.proxy) as response:
-                response.raise_for_status()
                 data = await response.json()
+                if not response.ok:
+                    raise error.HTTPStatusError(response.status, data=data)
                 candidates = data['candidates']
                 if 'candidates' not in data:
                     # The message is banned by some reason
@@ -323,11 +341,14 @@ class Embedder(ai.Embedder):
         AsyncGenerator[list[float], None], the embedding, due to the API limit, the embedding will be yield for only one time.
         '''
         async with aiohttp.ClientSession() as session:
-            async with session.post(f'https://generativelanguage.googleapis.com/v1beta2/models/{self.model}:embedText?key={self.api_key}', json={
+            async with session.post(f'https://generativelanguage.googleapis.com/v1beta2/models/{self.model}:embedText?key={self.api_key}', data=json.dumps({
                 "text": prompt,
+            }), headers={
+                'Content-Type': 'application/json'
             }, proxy = self.proxy) as response:
-                response.raise_for_status()
                 data = await response.json()
+                if not response.ok:
+                    raise error.HTTPStatusError(response.status, data=data)
                 yield data['embedding']['value']
 
 class GooglePaLMAPI:

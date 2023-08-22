@@ -181,9 +181,41 @@ _T = TypeVar('_T')
 def hookclass(obj:_T, hooked_vars:dict[str, Any])-> _T:
     '''
     Hook class varible
+
     After wrapped by this function
     You will have a copy of the hooked_vars when using the class,
-    Note: When passing list, dict, or so on of cantainer type in hooked_vars, you should use a copy
+
+    Note:
+    -----
+    When passing list, dict, or so on of cantainer type in hooked_vars, you should use a copy
+
+    Examples:
+    ---------
+    ::
+        >>> class A:
+        ...     def __init__(self):
+        ...         self.a = 1
+        ...         self.b = 2
+        ...     def func(self):
+        ...         return self.a + self.b
+        >>> a = A()
+        >>> a.func()
+        3
+        >>> b = hookclass(a, {'a': 2})
+        >>> b.func()
+        4
+        >>> a.a
+        1
+        >>> b.a
+        2
+        >>> b.a = 3
+        >>> b.func()
+        5
+        >>> a.func()
+        3
+        >>> b.b = 4
+        >>> a.b
+        4
     '''
     class Deleted:
         ...
@@ -439,7 +471,7 @@ def make_model(model_base:type,
             for name, method in inspect.getmembers(cls.Factory):
                 if not callable(method):
                     continue
-                if name in ('__new__', '__getattribute__', '__setattr__', '__delattr__', '__eq__', '__ne__'):
+                if name in ('__new__', '__getattribute__', '__setattr__', '__delattr__', '__eq__', '__ne__', '__class__'):
                     continue
                 def _wrap(name, method):
                     def _replace(self:Model, *args, **kwargs):
@@ -549,7 +581,7 @@ def asdict(model: BaseModel, filter:Optional[Callable[[str, Any], bool]]=None) -
     '''
     ret = {}
     for k, v in model.__models__.items():
-        if filter and not filter(k, v):
+        if filter and not filter(k, getattr(model, k)):
             continue
         ret[k] = getattr(model, k)
     return ret

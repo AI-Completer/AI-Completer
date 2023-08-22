@@ -14,7 +14,8 @@ def launch(loop:asyncio.AbstractEventLoop, logger:logging.Logger, max_try:int = 
         # The one task is this function
         while True:
             try:
-                if len(asyncio.all_tasks(loop)) == 1:
+                running_tasks = [task for task in asyncio.all_tasks(loop) if not task.done()]
+                if len(running_tasks) == 1:
                     loop.stop()
                     return
                 else:
@@ -37,6 +38,13 @@ def launch(loop:asyncio.AbstractEventLoop, logger:logging.Logger, max_try:int = 
             traceback.print_exc()
     finally:
         if not loop.is_closed():
+            exception_tasks = [task for task in asyncio.all_tasks(loop) if task.done() and task.exception() != None]
+            if len(exception_tasks) > 0:
+                logger.critical(f"Exception tasks: {exception_tasks!r}")
+                # remove them
+                for task in exception_tasks:
+                    task.cancel()
+                
             try_time = 0
             while not all(task.done() for task in asyncio.all_tasks(loop) if task not in expecttasks) and try_time < max_try:
                 try_time += 1
@@ -50,6 +58,12 @@ def launch(loop:asyncio.AbstractEventLoop, logger:logging.Logger, max_try:int = 
                     logger.critical(f"Unexception: {e}")
                     if logger.isEnabledFor(logging.DEBUG):
                         traceback.print_exc()
+                
+                exception_tasks = [task for task in asyncio.all_tasks(loop) if task.done() and task.exception() != None]
+                if len(exception_tasks) > 0:
+                    logger.critical(f"Exception tasks: {exception_tasks!r}")
+                    for task in exception_tasks:
+                        task.cancel()
 
             if try_time >= max_try:
                 logger.critical("Force Quit")
@@ -99,6 +113,8 @@ def run_handler(entry: asyncio.Future, handler, loop:Optional[asyncio.AbstractEv
             logger.warning(f"Handler's loop is not None and not equal to the given loop, use the given loop")
             handler._loop.close()
         handler._loop = loop
+    else:
+        loop = handler._loop
     start(entry, loop=loop, logger=logger)
     loop = loop or asyncio.get_event_loop()
     handler.close()

@@ -12,7 +12,7 @@ import attr
 
 from .. import config, error, handler, log, session, utils
 from ..common import AsyncLifeTimeManager, JSONSerializable
-from ..config import Config
+from ..config import Config, ConfigModel
 from ..session import Session
 from ..namespace import Namespace, BaseNamespace
 from ..utils import EnhancedDict
@@ -303,7 +303,7 @@ class Interface(AsyncLifeTimeManager):
         
         if namespace is None:
             if hasattr(type(self), "namespace") and isinstance(type(self).namespace, BaseNamespace):
-                self.namespace:Namespace = Namespace(**attr.asdict(type(self).namespace))
+                self.namespace.__dict__.update(attr.asdict(type(self).namespace))
             else:
                 raise error.InvalidArgument("namespace is not specified")
         else:
@@ -462,8 +462,8 @@ class Interface(AsyncLifeTimeManager):
         for func in utils.get_inherit_methods(self.__class__, "session_init"):
             if callable(func):
                 session_inits.append(func)
-        raw_data = self.getdata(self)
-        raw_config = self.getconfig(self)
+        raw_data = self.getdata(session)
+        raw_config = self.getconfig(session)
         for i in session_inits:
             params = utils.appliable_parameters(i, {
                 'session': session,
@@ -471,6 +471,8 @@ class Interface(AsyncLifeTimeManager):
                 'config': raw_config
             })
             await i(self, **params)
+        self.setdata(session, raw_data)
+        self.setconfig(raw_config, session)
 
     async def _invoke_session_final(self, session: Session):
         '''
@@ -481,8 +483,8 @@ class Interface(AsyncLifeTimeManager):
             if callable(func):
                 session_finals.append(func)
         session_finals.reverse()
-        raw_data = self.getdata(self)
-        raw_config = self.getconfig(self)
+        raw_data = self.getdata(session)
+        raw_config = self.getconfig(session)
         for i in session_finals:
             params = utils.appliable_parameters(i, {
                 'session': session,
@@ -490,6 +492,8 @@ class Interface(AsyncLifeTimeManager):
                 'config': raw_config
             })
             await i(self, **params)
+        self.setdata(session, raw_data)
+        self.setconfig(raw_config, session)
 
     @overload
     def getconfig(self, session:session.Session) -> Config:
@@ -515,12 +519,36 @@ class Interface(AsyncLifeTimeManager):
             ret.update(session.config[self.namespace.name])
         return ret
     
-    def getdata(self, session:session.Session) -> utils.EnhancedDict:
+    def setconfig(self, config: Config, session:Optional[session.Session] = None):
+        '''
+        Set the config of the interface
+        :param config: Config, the config to be set
+        :param session: Session, if specified, the session data will be modified but not interface
+        '''
+        if isinstance(config, ConfigModel):
+            config = config.__wrapped__
+        if session != None:
+            session.config[self.namespace.name] = config
+        else:
+            self.namespace.config = config
+    
+    def getdata(self, session:session.Session) -> EnhancedDict:
         '''
         Get the data of the interface
         :param session: Session
         '''
-        return session.data[self.id.hex]
+        ret = session.data[self.id.hex]
+        if type(ret) != self.dataFactory:
+            ret = session.data[self.id.hex] = self.dataFactory(ret)
+        return ret
+    
+    def setdata(self, session:session.Session, data: EnhancedDict):
+        '''
+        Set the data of the interface
+        :param session: Session
+        :param data: Data
+        '''
+        session.data[self.id.hex] = data
 
     async def call(self, session:session.Session, message:session.Message):
         '''

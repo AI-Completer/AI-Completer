@@ -35,3 +35,7 @@ from . import (
     prompts,
     agent,
 )
+
+from .agent import (
+    ReAgentInterface
+)

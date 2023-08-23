@@ -314,7 +314,15 @@ colorstyle = Formatter(ColorStrFormatStyle(
 ))
 consolehandler = StreamHandler()
 consolehandler.setFormatter(colorstyle)
+
+emptystyle = Formatter(logging.StrFormatStyle(
+    "{asctime} - {levelname} [{name}]{substruct} {message}"
+))
+filehandler = logging.FileHandler("log.log", encoding='utf-8')
+filehandler.setFormatter(emptystyle)
+
 root.handlers.append(consolehandler)
+root.handlers.append(filehandler)
 
 setLevel = root.setLevel
 debug = root.debug

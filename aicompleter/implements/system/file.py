@@ -31,7 +31,7 @@ class FileInterface(Interface):
         self.commands.add(
             Command(
                 cmd='read',
-                description='Read File',
+                description='Read a file',
                 callback=self.cmd_read,
                 format=CommandParamStruct({
                     'path': CommandParamElement('path', str, description='File Path',tooltip='filepath')
@@ -44,7 +44,7 @@ class FileInterface(Interface):
             ),
             Command(
                 cmd='write',
-                description='Write File',
+                description='Write a file',
                 callback=self.cmd_write,
                 format=CommandParamStruct({
                     'path': CommandParamElement('path', str, description='File Path',tooltip='filepath'),
@@ -59,7 +59,7 @@ class FileInterface(Interface):
             ),
             Command(
                 cmd='listdir',
-                description='List Directory',
+                description='List the contents of a directory',
                 callback=self.cmd_listdir,
                 format=CommandParamStruct({
                     'path': CommandParamElement('path', str, description='Directory Path',tooltip='path', default='.', optional=True)

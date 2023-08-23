@@ -589,10 +589,6 @@ class Interface(AsyncLifeTimeManager):
     def load_session(self, path:str, session:session.Session):
         with open(path, 'r') as f:
             self.setStorage(session, json.load(f))
-    
-    def close(self):
-        '''Close the interface'''
-        super().close()
 
     def rename_cmd(self, old:str, new:str):
         '''

@@ -252,10 +252,6 @@ class AsyncLifeTimeManager(AsyncTemplate[LifeTimeManager]):
         '''
         The close event
         '''
-        self._close_tasks:list[asyncio.Future] = []
-        '''
-        The tasks that will be awaited when the object is closed
-        '''
 
     @property
     def closed(self) -> bool:
@@ -264,7 +260,7 @@ class AsyncLifeTimeManager(AsyncTemplate[LifeTimeManager]):
         '''
         return self._close_event.is_set()
     
-    def close(self) -> None:
+    async def close(self) -> None:
         '''
         Close the object
         '''
@@ -275,7 +271,6 @@ class AsyncLifeTimeManager(AsyncTemplate[LifeTimeManager]):
         Wait until the object is closed
         '''
         await self._close_event.wait()
-        await asyncio.wait(self._close_tasks)
 
     def __del__(self) -> None:
         # Sometimes, this will be called randomly? (I don't know why)

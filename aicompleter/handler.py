@@ -104,15 +104,15 @@ class Handler(AsyncLifeTimeManager, Saveable):
     def __len__(self) -> int:
         return len(self._interfaces)
     
-    def close(self):
+    async def close(self):
         '''Close the handler'''
         self.logger.debug("Closing handler")
         for i in self._running_sessions:
             if not i.closed:
-                self._close_tasks.append(self._loop.create_task(i.close()))
+                await i.close()
         for i in self._interfaces:
             i.close()
-            self._close_tasks.append(self._loop.create_task(i._invoke_final(self)))
+            await i._invoke_final(self)
         super().close()
 
     async def close_session(self, session:Session):

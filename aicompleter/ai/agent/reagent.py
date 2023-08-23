@@ -35,9 +35,15 @@ class Agent(AsyncLifeTimeManager):
         self._pre_request_time: float = 0.1                                             
         # The time between the requests, for example, the agent got a request at time 0,
         # and the next request(and all new requests) will be sent at time 0.1
-        self._close_tasks.append(self._loop.create_task(self._agent_loop()))
+
+        task = self._loop.create_task(self._agent_loop())
 
         self._result = None
+        def _done(_task: asyncio.Task):
+            if _task.exception():
+                self._result = _task.exception()
+            self._close_event.set()
+        task.add_done_callback(_done)
 
         self._subagents: dict[str, Self] = {}
 
@@ -168,6 +174,9 @@ class Agent(AsyncLifeTimeManager):
         if self.closed:
             raise RuntimeError('The agent is closed')
         self._request_queue.put_nowait(aiclass.Message(word, role=AuthorType.USER, user=user, data=data))
+
+    def append_system(self, prompt:str, data:Optional[dict] = None):
+        self.append_message(aiclass.Message(prompt, role=AuthorType.SYSTEM, data=data))
 
     def trigger(self):
         '''

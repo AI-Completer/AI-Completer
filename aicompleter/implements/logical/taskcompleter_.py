@@ -245,6 +245,11 @@ Imported variables:
                     if arguments_str != arguments:
                         arguments = json.loads(arguments_str)
 
+                    if command=='stop':
+                        agent.set_result(arguments)
+                        await agent.close()
+                        return
+
                     ret = await session.asend(command, arguments, src_interface=self)
 
                     agent.append_system(json.dumps({

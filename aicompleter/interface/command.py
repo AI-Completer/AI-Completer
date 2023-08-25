@@ -557,6 +557,14 @@ class Commands(dict[str,Command]):
     '''
     Commands Dict
     '''
+    @classmethod
+    def from_yield(cls, commands:Iterable[Command]) -> Commands:
+        '''Create a Commands from a list of commands'''
+        ret = cls()
+        for i in commands:
+            ret.add(i)
+        return ret
+
     @overload
     def add(self, cmd:Command) -> None:
         ...

@@ -88,12 +88,14 @@ def start(*tasks: asyncio.Future, loop:Optional[asyncio.AbstractEventLoop] = Non
     if loop==None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-    intasks = []
+    intasks:list[asyncio.Task] = []
     for task in tasks:
         intasks.append(loop.create_task(task))
     logger = logger or log.getLogger('main')
     launch(loop=loop, logger=logger)
     for task in intasks:
+        if task.cancelled():
+            continue
         if task.done() and task.exception() != None:
             logger.debug(f"Task {task!r} has exception: {task.exception()!r}")
 
@@ -117,6 +119,5 @@ def run_handler(entry: asyncio.Future, handler, loop:Optional[asyncio.AbstractEv
         loop = handler._loop
     start(entry, loop=loop, logger=logger)
     loop = loop or asyncio.get_event_loop()
-    handler.close()
-    loop.create_task(handler.wait_close())
+    loop.create_task(handler.close())
     launch(loop=loop, logger=logger)

@@ -1,5 +1,7 @@
 '''
 All AI Generate Error
+
+Find a better naming rule for this module
 '''
 
 from .base import BaseException

@@ -277,7 +277,7 @@ class AsyncLifeTimeManager(AsyncTemplate[LifeTimeManager]):
         if '_close_event' not in self.__dict__:
             return
         if not self.closed:
-            self.close()
+            print(f"Warning: The object is not closed: {self!r}")
 
 class SerializeHandler(Generic[_T]):
     '''

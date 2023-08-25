@@ -278,7 +278,7 @@ class Agent(common.AsyncLifeTimeManager):
         finally:
             # The loop is done
             self.logger.debug('The agent is stopped')
-            self.close()
+            self._loop.create_task(self.close())
             if exception is not None:
                 if isinstance(exception, asyncio.CancelledError):
                     raise exception

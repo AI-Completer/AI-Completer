@@ -111,9 +111,9 @@ class Handler(AsyncLifeTimeManager, Saveable):
             if not i.closed:
                 await i.close()
         for i in self._interfaces:
-            i.close()
             await i._invoke_final(self)
-        super().close()
+            await i.close()
+        await super().close()
 
     async def close_session(self, session:Session):
         '''Close the session'''

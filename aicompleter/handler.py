@@ -7,7 +7,7 @@ import functools
 import importlib
 import json
 import uuid
-from typing import Any, Generator, Iterator, Optional, Self, overload
+from typing import Any, Coroutine, Generator, Iterator, Optional, Self, overload
 
 from . import utils
 from .utils.storage import StorageManager
@@ -104,16 +104,16 @@ class Handler(AsyncLifeTimeManager, Saveable):
     def __len__(self) -> int:
         return len(self._interfaces)
     
-    def close(self):
+    async def close(self):
         '''Close the handler'''
         self.logger.debug("Closing handler")
         for i in self._running_sessions:
             if not i.closed:
-                self._close_tasks.append(self._loop.create_task(i.close()))
+                await i.close()
         for i in self._interfaces:
-            i.close()
-            self._close_tasks.append(self._loop.create_task(i.wait_close()))
-        super().close()
+            await i._invoke_final(self)
+            await i.close()
+        await super().close()
 
     async def close_session(self, session:Session):
         '''Close the session'''
@@ -352,7 +352,7 @@ class Handler(AsyncLifeTimeManager, Saveable):
         '''Get all interfaces'''
         return self._interfaces
     
-    def call(self, session:session.Session, message:session.Message):
+    def call(self, session:session.Session, message:session.Message) -> Coroutine[None, None, Any]:
         '''
         Call a command
         
@@ -454,7 +454,11 @@ class Handler(AsyncLifeTimeManager, Saveable):
                 lambda key,value: value.update(ret.config['global']),
                 lambda key,value: key != 'global'
             )
-        await ret._init_session()
+        try:
+            await ret._init_session()
+        except Exception as e:
+            self.logger.critical("Unexception: %s", e)
+            raise e
         self._running_sessions.append(ret)
         return ret
     

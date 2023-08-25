@@ -278,7 +278,7 @@ class Agent(common.AsyncLifeTimeManager):
         finally:
             # The loop is done
             self.logger.debug('The agent is stopped')
-            self.close()
+            self._loop.create_task(self.close())
             if exception is not None:
                 if isinstance(exception, asyncio.CancelledError):
                     raise exception
@@ -331,7 +331,7 @@ class Agent(common.AsyncLifeTimeManager):
             'value': value,
         })
 
-    def close(self):
+    async def close(self):
         '''
         Close the agent
         '''
@@ -340,15 +340,21 @@ class Agent(common.AsyncLifeTimeManager):
         if self._handle_task:
             self._handle_task.cancel()
             self._handle_task.remove_done_callback(self._unexception)
-            self._close_tasks.append(self._handle_task)
+            try:
+                await self._handle_task
+            except asyncio.CancelledError:
+                pass
         if self._loop_task:
             self._loop_task.cancel()
             self._loop_task.remove_done_callback(self._unexception)
-            self._close_tasks.append(self._loop_task)
+            try:
+                await self._loop_task
+            except asyncio.CancelledError:
+                pass
         self._handle_task = None
         self._loop_task = None
         self.logger.debug('The agent is closed')
-        super().close()
+        await super().close()
 
     def wait(self):
         '''

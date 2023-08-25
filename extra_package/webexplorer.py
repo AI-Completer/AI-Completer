@@ -70,7 +70,7 @@ class WebExplorerInterface(ac.Interface):
     configFactory = WebExplorerConfigModel
     dataFactory = WebExplorerDataModel
 
-    def __init__(self, config: ac.Config):
+    def __init__(self, config: ac.Config = ac.Config()):
         super().__init__(
             'webexplorer',
             ac.User('webexplorer', 'Web Explorer, which can help you to explore the web page'),

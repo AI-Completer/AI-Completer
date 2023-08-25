@@ -45,7 +45,7 @@ class CommandParamElement(JSONSerializable):
     '''Description of the parameter'''
     optional:bool = False
     '''Whether the parameter is optional'''
-    tooltip:str = ""
+    tooltip:Optional[str] = None
     '''Tooltip of the parameter'''
 
     @property
@@ -266,6 +266,9 @@ class CommandParamStruct(JSONSerializable):
                 raise TypeError("struct must be a dict, list or str instance")
         return _load_brief(data)
     
+    def __str__(self):
+        return self.json_text
+    
 @attr.s(auto_attribs=True)
 class CommandAuthority(JSONSerializable):
     '''
@@ -290,7 +293,6 @@ class CommandAuthority(JSONSerializable):
         }
         # square mean
         return sum([_level_map[i]**2 for i in self.__dict__ if self.__dict__[i] == True])**0.5
-
 
 @attrs.define(slots=False)
 class Command(JSONSerializable):
@@ -378,7 +380,7 @@ class Command(JSONSerializable):
         finally:
             message.session._running_commands.remove((self, message))
 
-    async def call(self, session:session.Session, message:session.Message):
+    async def call(self, session:session.Session, message:session.Message) -> Coroutine[None, None, Any]:
         '''Call the command'''
         if message.status == aicompleter.session.MessageStatus.SENT:
             raise error.Failed("Message has been sent before.",session, message, interface=self.in_interface)
@@ -517,11 +519,52 @@ class Command(JSONSerializable):
     def __deserialize__(self, data:dict):
         raise NotImplementedError("Command.__deserialize__ is not implemented")
 
+@attrs.define(frozen=True)
+class CommandCall:
+    '''
+    Command Call Struct
+    '''
+    cmd: str
+    'The command to be called'
+    parameter: Optional[Any] = None
+    'The parameter which will be passed to the command'
+
+    def call(self, session:session.Session, *,
+                    src_interface:Optional[Interface] = None, 
+                    dest_interface:Optional[Interface] = None,
+                    **kwargs):
+        return session.asend(self.cmd, self.parameter, src_interface=src_interface, dest_interface=dest_interface, **kwargs)
+    
+    def call_soon(self, session:session.Session, *,
+                    src_interface:Optional[Interface] = None, 
+                    dest_interface:Optional[Interface] = None,
+                    **kwargs):
+        return session.send(self.cmd, self.parameter, src_interface=src_interface, dest_interface=dest_interface, **kwargs)
+    
+    def template(self, *args, **kwargs):
+        if isinstance(self.parameter, dict):
+            newkwargs = {}
+            for k,v in self.parameter.items():
+                if isinstance(v, str):
+                    newkwargs[k] = v.format(*args, **kwargs)
+                else:
+                    newkwargs[k] = v
+            return self.__class__(self.cmd, newkwargs)
+        return self.__class__(self.cmd, str(self.parameter).format(*args, **kwargs))
+
 _T = TypeVar("_T")
 class Commands(dict[str,Command]):
     '''
     Commands Dict
     '''
+    @classmethod
+    def from_yield(cls, commands:Iterable[Command]) -> Commands:
+        '''Create a Commands from a list of commands'''
+        ret = cls()
+        for i in commands:
+            ret.add(i)
+        return ret
+
     @overload
     def add(self, cmd:Command) -> None:
         ...

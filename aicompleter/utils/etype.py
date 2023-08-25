@@ -181,9 +181,41 @@ _T = TypeVar('_T')
 def hookclass(obj:_T, hooked_vars:dict[str, Any])-> _T:
     '''
     Hook class varible
+
     After wrapped by this function
     You will have a copy of the hooked_vars when using the class,
-    Note: When passing list, dict, or so on of cantainer type in hooked_vars, you should use a copy
+
+    Note:
+    -----
+    When passing list, dict, or so on of cantainer type in hooked_vars, you should use a copy
+
+    Examples:
+    ---------
+    ::
+        >>> class A:
+        ...     def __init__(self):
+        ...         self.a = 1
+        ...         self.b = 2
+        ...     def func(self):
+        ...         return self.a + self.b
+        >>> a = A()
+        >>> a.func()
+        3
+        >>> b = hookclass(a, {'a': 2})
+        >>> b.func()
+        4
+        >>> a.a
+        1
+        >>> b.a
+        2
+        >>> b.a = 3
+        >>> b.func()
+        5
+        >>> a.func()
+        3
+        >>> b.b = 4
+        >>> a.b
+        4
     '''
     class Deleted:
         ...
@@ -344,7 +376,10 @@ def appliable_parameters(func:Callable, parameters:dict[str, Any]) -> dict[str, 
             ret[name] = value
     return ret
 
-# Model = TypeVar('Model')
+class BaseModel:
+    '''
+    Base defination of Model
+    '''
 def make_model(model_base:type, 
                doc:Optional[str] = None):
     '''
@@ -436,7 +471,7 @@ def make_model(model_base:type,
             for name, method in inspect.getmembers(cls.Factory):
                 if not callable(method):
                     continue
-                if name in ('__new__', '__getattribute__', '__setattr__', '__delattr__', '__eq__', '__ne__'):
+                if name in ('__new__', '__getattribute__', '__setattr__', '__delattr__', '__eq__', '__ne__', '__class__'):
                     continue
                 def _wrap(name, method):
                     def _replace(self:Model, *args, **kwargs):
@@ -473,7 +508,7 @@ def make_model(model_base:type,
             ret = super().__new__(cls, name, bases, attrs)
             return ret
         
-    class Model(model_base, metaclass=ModelMeta):
+    class Model(model_base, BaseModel, metaclass=ModelMeta):
         def __new__(cls, *args, **kwargs) -> Self:
             self = super().__new__(cls)
             if len(args) == 1 and len(kwargs) == 0 and isinstance(args[0], model_base):
@@ -482,9 +517,14 @@ def make_model(model_base:type,
                 config = model_base(*args, **kwargs)
             self.__wrapped__ = config
             for k,v in self.__defaults__.items():
-                setattr(self, k, v)
+                if k not in config:
+                    setattr(self, k, v)
                 # use setattr to avoid __setattr__ hook
             return self
+        
+        def __init__(self, *args, **kwargs) -> None:
+            # Do nothing, avoid __init__ autocall
+            pass
         
         def __getattribute__(self, name:str) -> Any:
             if name in ('__wrapped__', '__defaults__', '__models__', '__model_attrs__'):
@@ -529,6 +569,22 @@ def make_model(model_base:type,
             return self.__wrapped__ != right.__wrapped__
     
     return Model
+
+def asdict(model: BaseModel, filter:Optional[Callable[[str, Any], bool]]=None) -> dict[str, Any]:
+    '''
+    Convert model to dict
+
+    Parameters
+    ----------
+    model: BaseModel, the model to convert
+    filter: Callable[[str, Any], bool], Optional, default: None, the filter function, if return True, the key-value will be added to the dict
+    '''
+    ret = {}
+    for k, v in model.__models__.items():
+        if filter and not filter(k, getattr(model, k)):
+            continue
+        ret[k] = getattr(model, k)
+    return ret
 
 class TaskList(common.AsyncContentManager, list[asyncio.Task]):
     '''
@@ -593,7 +649,7 @@ def stack_varibles(stack_level:int = 0) -> tuple[dict[str, Any], dict[str, Any]]
 def getframe(stack_level:int = 0) -> FrameType:
     '''
     Get the frame
-    :param stack_level: the stack level, default is 0, will get the frame of the caller
+    :param stack_level: the stack level, default is 0, will get the frame of the current function
     '''
     import inspect
     frame = inspect.currentframe()

@@ -42,7 +42,55 @@ class NullInterface(common.Singleton,Interface, metaclass=NullInterfaceMeta):
     '''
     def __init__(self, namespace:Optional[str] = None, config:Config = Config()):
         namespace = namespace or 'null'
-        super().__init__(namespace=namespace, config=config)
+        super().__init__(namespace=namespace, config=config, user=User(
+            name="null",
+        ))
+        self._init = None
+        self._final = None
+        self._session_init = None
+        self._session_final = None
+
+    async def init(self, in_handler:Handler):
+        if self._init:
+            params = utils.appliable_parameters(self._init, {
+                'in_handler': in_handler,
+                'handler': in_handler,
+            })
+            ret = self._init(**params)
+            if asyncio.iscoroutine(ret):
+                await ret
+
+    async def final(self, in_handler:Handler):
+        if self._final:
+            param = utils.appliable_parameters(self._final,{
+                'in_handler': in_handler,
+                'handler': in_handler,
+            })
+            ret = self._final(**param)
+            if asyncio.iscoroutine(ret):
+                await ret
+            
+    async def session_init(self, session:Session, data:EnhancedDict, config: Config):
+        if self._session_init:
+            param = utils.appliable_parameters(self._session_init,{
+                'session': session,
+                'data': data,
+                'config': config,
+            })
+            ret = self._session_init(**param)
+            if asyncio.iscoroutine(ret):
+                await ret
+
+    async def session_final(self, session:Session, data:EnhancedDict, config: Config):
+        if self._session_final:
+            param = utils.appliable_parameters(self._session_final,{
+                'session': session,
+                'data': data,
+                'config': config,
+            })
+            ret = self._session_final(**param)
+            if asyncio.iscoroutine(ret):
+                await ret
 
     def setConfigFactory(self, factory:Callable[..., Any]):
         '''
@@ -61,19 +109,19 @@ class NullInterface(common.Singleton,Interface, metaclass=NullInterfaceMeta):
             self.namespace.data = factory(self.namespace.data)
 
     def on_init(self, func: Optional[Callable[..., Coroutine[None, None, None]]] = None):
-        self.init = func
+        self._init = func
         return func
 
     def on_final(self, func: Optional[Callable[..., Coroutine[None, None, None]]] = None):
-        self.final = func
+        self._final = func
         return func
 
     def on_sessioninit(self, func: Optional[Callable[..., Coroutine[None, None, None]]] = None):
-        self.session_init = func
+        self._session_init = func
         return func
 
     def on_sessionfinal(self, func: Optional[Callable[..., Coroutine[None, None, None]]] = None):
-        self.session_final = func
+        self._session_final = func
         return func
     
     def run(self, cmdname:str, *args:Any, loop:Optional[asyncio.AbstractEventLoop] = None, **kwargs:Any):
@@ -114,7 +162,11 @@ class NullInterface(common.Singleton,Interface, metaclass=NullInterfaceMeta):
         ...
 
     def register(self, *args, **kwargs):
+        kwargs['in_interface'] = self
         return self.commands.register(*args, **kwargs)
+
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
 
 null_interface = NullInterface()
 '''
@@ -134,7 +186,7 @@ Example:
     >>> null_interface.run('test')
 '''
 
-null_handler = Handler()
+null_handler:Optional[Handler] = None
 '''
 Null Handler instance
 
@@ -144,7 +196,17 @@ so it is not recommended to use it in production environment or for multi-instan
 
 This handler instance will automatically setup the null_interface instance
 '''
-asyncio.run(null_handler.add_interface(null_interface))
+def get_handler():
+    '''
+    Get a handler
+
+    if the handler is not created, it will create a new handler
+    '''
+    global null_handler
+    if null_handler == None:
+        null_handler = Handler(loop=loop)
+        loop.run_until_complete(null_handler.add_interface(null_interface))
+    return null_handler
 
 null_session:Optional[Session] = None
 '''
@@ -159,7 +221,7 @@ def get_session(config:Config = Config()) -> Session:
     '''
     global null_session
     if null_session is None:
-        null_session = asyncio.run(null_handler.new_session(config))
+        null_session = loop.run_until_complete(get_handler().new_session(config))
     return null_session
 
 @overload
@@ -180,13 +242,13 @@ def call(*args, **kwargs):
     '''
     Call a command
     '''
-    return asyncio.run(get_session().asend(*args, **kwargs))
+    return loop.run_until_complete(get_session().asend(*args, **kwargs))
 
 def terminate():
     '''
     Terminate the session
     '''
     global null_session
-    asyncio.run(get_session().close())
+    loop.run_until_complete(get_session().close())
     null_session = None
 

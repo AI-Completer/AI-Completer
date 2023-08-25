@@ -81,7 +81,10 @@ class SerializableMeta(ABCMeta):
     The mata class for serializable
     '''
     def __subclasscheck__(cls: ABCMeta, subclass: type) -> bool:
-        return hasattr(subclass, '__serialize__') and hasattr(subclass, '__deserialize__')
+        if cls == Serializable:
+            return hasattr(subclass, '__serialize__') and hasattr(subclass, '__deserialize__')
+        return type.__subclasscheck__(cls, subclass)
+    
     def __instancecheck__(cls: ABCMeta, instance: Any) -> bool:
         return issubclass(type(instance), cls)
 
@@ -249,10 +252,6 @@ class AsyncLifeTimeManager(AsyncTemplate[LifeTimeManager]):
         '''
         The close event
         '''
-        self._close_tasks:list[asyncio.Future] = []
-        '''
-        The tasks that will be awaited when the object is closed
-        '''
 
     @property
     def closed(self) -> bool:
@@ -261,7 +260,7 @@ class AsyncLifeTimeManager(AsyncTemplate[LifeTimeManager]):
         '''
         return self._close_event.is_set()
     
-    def close(self) -> None:
+    async def close(self) -> None:
         '''
         Close the object
         '''
@@ -272,14 +271,13 @@ class AsyncLifeTimeManager(AsyncTemplate[LifeTimeManager]):
         Wait until the object is closed
         '''
         await self._close_event.wait()
-        await asyncio.wait(self._close_tasks)
 
     def __del__(self) -> None:
         # Sometimes, this will be called randomly? (I don't know why)
         if '_close_event' not in self.__dict__:
             return
         if not self.closed:
-            self.close()
+            print(f"Warning: The object is not closed: {self!r}")
 
 class SerializeHandler(Generic[_T]):
     '''

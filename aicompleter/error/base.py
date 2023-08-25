@@ -14,7 +14,7 @@ class BaseException(Exception):
         
         from .. import log
         self._logger:log.Logger = log.getLogger('Exception', [self.__class__.__name__])
-        self._logger.debug(f"Exception raised. interface={interface} parent={self.parent} args={args} kwargs={kwargs}")
+        self._logger.debug(f"Exception raised. args={args} kwargs={kwargs}")
 
     def __str__(self) -> str:
         return f"<{self.__class__.__name__}: {self.args} {self.kwargs}>"

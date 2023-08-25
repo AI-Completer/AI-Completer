@@ -61,15 +61,15 @@ class EnhancedDict(defaultdict, JSONSerializable):
             value = self.__class__(value)
         return super().__setitem__(path, value)
 
-    def get(self, path:str, default:Any = None) -> Any:
+    def get(self, path:str, default:Any = ...) -> Any:
         '''
         Get a value
 
-        If the path is not found, return default or raise KeyError
+        If the path is not found, return default or Self
         '''
         spilts = path.split('.', 1)
         if len(spilts) == 1:
-            if default is None:
+            if default is ...:
                 if path not in self:
                     return self.__class__()
             ret = super().get(path, default)

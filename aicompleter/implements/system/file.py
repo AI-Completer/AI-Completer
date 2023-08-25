@@ -31,10 +31,10 @@ class FileInterface(Interface):
         self.commands.add(
             Command(
                 cmd='read',
-                description='Read File',
+                description='Read a file',
                 callback=self.cmd_read,
                 format=CommandParamStruct({
-                    'path': CommandParamElement('path', str, description='File Path',tooltip='The file path to read')
+                    'path': CommandParamElement('path', str, description='File Path',tooltip='filepath')
                 }),
                 callable_groups={'system','agent'},
                 in_interface=self,
@@ -44,12 +44,12 @@ class FileInterface(Interface):
             ),
             Command(
                 cmd='write',
-                description='Write File',
+                description='Write a file',
                 callback=self.cmd_write,
                 format=CommandParamStruct({
-                    'path': CommandParamElement('path', str, description='File Path',tooltip='The file path to write'),
-                    'content': CommandParamElement('content', str, description='File Content',tooltip='The file content to write'),
-                    'append': CommandParamElement('append', bool, description='Append',tooltip='Whether to append to the file', optional=True, default=False),
+                    'path': CommandParamElement('path', str, description='File Path',tooltip='filepath'),
+                    'content': CommandParamElement('content', str, description='File Content'),
+                    'append': CommandParamElement('append', bool, description='Append',tooltip='append-mode', optional=True, default=False),
                 }),
                 callable_groups={'system','agent'},
                 in_interface=self,
@@ -59,10 +59,10 @@ class FileInterface(Interface):
             ),
             Command(
                 cmd='listdir',
-                description='List Directory',
+                description='List the contents of a directory',
                 callback=self.cmd_listdir,
                 format=CommandParamStruct({
-                    'path': CommandParamElement('path', str, description='Directory Path',tooltip='The directory path to list')
+                    'path': CommandParamElement('path', str, description='Directory Path',tooltip='path', default='.', optional=True)
                 }),
                 callable_groups={'system','agent'},
                 in_interface=self,

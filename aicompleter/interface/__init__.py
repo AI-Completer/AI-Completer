@@ -7,6 +7,7 @@ from .base import (
 )
 from .command import (
     Command,
+    CommandCall,
     Commands,
     CommandParamElement,
     CommandParamStruct,

@@ -15,6 +15,14 @@ class Encoder:
 
     def encode(self, token:str) -> list[int]:
         '''Encode token'''
+        if not isinstance(token, str):
+            # For compatibility with ai.ai
+            # TODO: find a better way
+            from .ai import ZipContent
+            if isinstance(token, ZipContent):
+                token = token.zip
+            else:
+                raise TypeError("token should be str or ZipContent")
         return self._enc.encode(token)
 
     def decode(self, token:list[int]) -> str:

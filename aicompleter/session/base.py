@@ -206,7 +206,7 @@ class Session:
         return self._closed
     
     @overload
-    def asend(self, message:Message):
+    def asend(self, message:Message) -> Coroutine[None, None, Any]:
         ...
 
     @overload
@@ -217,13 +217,13 @@ class Session:
             last_message: Optional[Message] = None,
             src_interface:Optional[Interface] = None,
             dest_interface:Optional[Interface] = None,
-        ):
+        ) -> Coroutine[None, None, Any]:
         ...
     
     def asend(self, cmd_or_msg:str|Message, 
             content:Optional[MultiContent] = None,
             *args, **kwargs
-        ):
+        ) -> Coroutine[None, None, Any]:
         '''Send a message.(async)'''
         if isinstance(cmd_or_msg, Message):
             if content is not None or len(args) or len(kwargs):
@@ -264,7 +264,7 @@ class Session:
             raise TypeError(f"Unsupported type {type(cmd_or_msg)}")
     
     @overload
-    def send(self, message:Message):
+    def send(self, message:Message) -> None:
         ...
 
     @overload
@@ -275,13 +275,13 @@ class Session:
             last_message: Optional[Message] = None,
             src_interface:Optional[Interface] = None,
             dest_interface:Optional[Interface] = None,
-        ):
+        ) -> None:
         ...
     
     def send(self, cmd_or_msg:str|Message, 
             content:Optional[MultiContent] = None,
             *args, **kwargs
-        ):
+        ) -> None:
         '''Send a message.'''
         if isinstance(cmd_or_msg, Message):
             if content is not None or len(args) or len(kwargs):
@@ -307,8 +307,11 @@ class Session:
             raise TypeError(f"Unsupported type {type(cmd_or_msg)}")
         
     async def _init_session(self):
+        tasks = []
+        loop = self.in_handler._loop
         for interface in self.in_handler.interfaces:
-            await interface._invoke_session_init(self)
+            tasks.append(loop.create_task(interface._invoke_session_init(self)))
+        await asyncio.gather(*tasks)
 
     async def close(self):
         '''Close the session.'''
@@ -320,8 +323,11 @@ class Session:
         result = await asyncio.gather(*self._running_tasks, return_exceptions=True)
         if any([isinstance(r, Exception) and not isinstance(r, CancelledError) for r in result]):
             self.logger.exception(f"Error when closing session" + "\n".join([str(r) for r in result if isinstance(r, Exception)]))
+        tasks = []
+        loop = self.in_handler._loop
         for interface in self.in_handler._interfaces:
-            await interface._invoke_session_final(self)
+            tasks.append(loop.create_task(interface._invoke_session_final(self)))
+        await asyncio.gather(*tasks)
         self._closed = True
 
     async def _update_tasks(self):

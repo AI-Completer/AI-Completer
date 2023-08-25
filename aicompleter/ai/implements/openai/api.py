@@ -1,7 +1,5 @@
 import copy
-from enum import auto
 import json
-from tkinter.filedialog import Open
 from typing import Any, Generator, Iterator, Literal, Optional, Self
 import uuid
 
@@ -17,7 +15,7 @@ from aicompleter.ai.token import Encoder
 DEFAULT_API_URL:str = 'https://api.openai.com/v1/'
 'BASE URL of OpenAI API'
 
-@attr.s(auto_attribs=True)
+@attr.dataclass
 class OpenAIConversation(Conversation):
     '''
     OpenAI Conversation
@@ -141,6 +139,7 @@ class Chater(ChatTransformer,OpenAIGPT):
             support={"text"},
             config=config,
         )
+        self.model = self.name
         if not isinstance(self.config['chat'], EnhancedDict):
             raise ValueError(f'Invalid config: {self.config}')
         if not set(self.config['chat'].keys()) <= self.REQUIRE_PARAMS:
@@ -308,7 +307,7 @@ class Chater(ChatTransformer,OpenAIGPT):
             return history
         if len(history.messages) == 1 and ignore_init_prompt:
             return history
-        encoder = Encoder(model = self.name)
+        encoder = Encoder(model = self.model)
         totallen = sum(encoder.getTokenLength(message.content) for message in history.messages)
         init_len = encoder.getTokenLength(history.messages[0].content)
         if totallen <= max_token:
@@ -428,7 +427,7 @@ class Completer(TextTransformer,OpenAIGPT):
         '''
         return ''.join([value async for value in self._request(prompt)])
 
-    async def generate(self, prompt: str) -> Generator[str, Any, None]:
+    async def generate(self, prompt: str) -> Generator[Message, Any, None]:
         '''
         Generate the prompt and return text
         '''
@@ -438,10 +437,11 @@ class Completer(TextTransformer,OpenAIGPT):
             if '\n' in full_text:
                 lines = full_text.split('\n')
                 for line in lines[:-1]:
-                    yield json.loads(line)['choices'][0]['text']
+                    data = json.loads(line)
+                    yield Message(content = data['choices'][0]['text'], data=data)
                 full_text = lines[-1]
 
-    async def generate_many(self, prompt: str) -> Generator[list[str], Any, None]:
+    async def generate_many(self, prompt: str) -> Generator[list[Message], Any, None]:
         '''
         Generate the prompt and return text
         '''
@@ -451,8 +451,9 @@ class Completer(TextTransformer,OpenAIGPT):
             if '\n' in full_text:
                 lines = full_text.splitlines(keepends=True)
                 for line in lines[:-1]:
+                    data = json.loads(line)
                     yield [
-                        json.loads(line)['choices'][i]['text']
+                        Message(content=data['choices'][i]['text'], data = data)
                         for i in range(len(json.loads(line)['choices']))
-                        ]
+                    ]
                 full_text = lines[-1]

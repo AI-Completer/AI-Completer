@@ -14,7 +14,8 @@ def launch(loop:asyncio.AbstractEventLoop, logger:logging.Logger, max_try:int = 
         # The one task is this function
         while True:
             try:
-                if len(asyncio.all_tasks(loop)) == 1:
+                running_tasks = [task for task in asyncio.all_tasks(loop) if not task.done()]
+                if len(running_tasks) == 1:
                     loop.stop()
                     return
                 else:
@@ -37,6 +38,13 @@ def launch(loop:asyncio.AbstractEventLoop, logger:logging.Logger, max_try:int = 
             traceback.print_exc()
     finally:
         if not loop.is_closed():
+            exception_tasks = [task for task in asyncio.all_tasks(loop) if task.done() and task.exception() != None]
+            if len(exception_tasks) > 0:
+                logger.critical(f"Exception tasks: {exception_tasks!r}")
+                # remove them
+                for task in exception_tasks:
+                    task.cancel()
+                
             try_time = 0
             while not all(task.done() for task in asyncio.all_tasks(loop) if task not in expecttasks) and try_time < max_try:
                 try_time += 1
@@ -50,6 +58,12 @@ def launch(loop:asyncio.AbstractEventLoop, logger:logging.Logger, max_try:int = 
                     logger.critical(f"Unexception: {e}")
                     if logger.isEnabledFor(logging.DEBUG):
                         traceback.print_exc()
+                
+                exception_tasks = [task for task in asyncio.all_tasks(loop) if task.done() and task.exception() != None]
+                if len(exception_tasks) > 0:
+                    logger.critical(f"Exception tasks: {exception_tasks!r}")
+                    for task in exception_tasks:
+                        task.cancel()
 
             if try_time >= max_try:
                 logger.critical("Force Quit")
@@ -74,9 +88,16 @@ def start(*tasks: asyncio.Future, loop:Optional[asyncio.AbstractEventLoop] = Non
     if loop==None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+    intasks:list[asyncio.Task] = []
     for task in tasks:
-        loop.create_task(task)
-    launch(loop=loop, logger=logger or log.getLogger('main'))
+        intasks.append(loop.create_task(task))
+    logger = logger or log.getLogger('main')
+    launch(loop=loop, logger=logger)
+    for task in intasks:
+        if task.cancelled():
+            continue
+        if task.done() and task.exception() != None:
+            logger.debug(f"Task {task!r} has exception: {task.exception()!r}")
 
 def run_handler(entry: asyncio.Future, handler, loop:Optional[asyncio.AbstractEventLoop] = None, logger: Optional[logging.Logger] = None):
     '''
@@ -87,10 +108,16 @@ def run_handler(entry: asyncio.Future, handler, loop:Optional[asyncio.AbstractEv
     from .. import Handler, log
     if not isinstance(handler, Handler):
         raise TypeError(f"Invalid handler type: {handler!r}")
-    start(entry, loop=loop, logger=logger)
-    loop = loop or asyncio.get_event_loop()
-    handler.close()
-    loop.create_task(handler.wait_close())
     if logger == None:
         logger = log.getLogger('main')
+    if loop != None:
+        if handler._loop != None and handler._loop != loop:
+            logger.warning(f"Handler's loop is not None and not equal to the given loop, use the given loop")
+            handler._loop.close()
+        handler._loop = loop
+    else:
+        loop = handler._loop
+    start(entry, loop=loop, logger=logger)
+    loop = loop or asyncio.get_event_loop()
+    loop.create_task(handler.close())
     launch(loop=loop, logger=logger)

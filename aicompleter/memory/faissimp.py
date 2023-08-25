@@ -1,12 +1,22 @@
+import contextlib
+import os
 import uuid
-from typing import Callable, Iterable, Iterator, Optional
+from typing import Callable, Iterable, Iterator, Optional, Self
 
+from .. import utils
+
+# This operation is get the faiss module and do not unload it
+faiss = utils.require_module('faiss')
 import faiss
+
+import numpy as np
 import torch
 from transformers import BertModel, BertTokenizer, BertTokenizerFast
-import numpy as np
 
+from .. import common
 from .base import Memory, MemoryItem, Query, QueryResult, QueryResultItem
+
+
 class FaissMemory(Memory):
     '''
     Faiss Memory
@@ -95,6 +105,28 @@ class FaissMemory(Memory):
         Use this to restore index
 
         Example:
-        memory = FaissMemory(..., index=FaissMemory.read_index('index.bin'))
+        
+        >>> memory = FaissMemory(..., index=FaissMemory.read_index('index.bin'))
         '''
         return faiss.read_index(file)
+    
+    def save(self, path: str) -> None:
+        with contextlib.suppress(FileExistsError):
+            os.mkdir(path)
+        torch.save(self.model.state_dict(), os.path.join(path, 'model.pt'))
+        self.tokenizer.save_pretrained(path)
+        self.write_index(os.path.join(path, 'index.bin'))
+        with open(os.path.join(path, 'record.txt'), 'w', encoding='utf-8') as f:
+            f.write(common.serialize(self._record))
+
+    @classmethod
+    def load(cls, path: str) -> Self:
+        model = BertModel.from_pretrained(path)
+        tokenizer = BertTokenizerFast.from_pretrained(path)
+        index = cls.read_index(os.path.join(path, 'index.bin'))
+        with open(os.path.join(path, 'record.txt'), 'r', encoding='utf-8') as f:
+            record = common.deserialize(f.read())
+        ret = cls(model, tokenizer, index)
+        ret._record = record
+        return ret
+    

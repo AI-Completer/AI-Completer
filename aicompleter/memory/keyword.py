@@ -3,6 +3,9 @@ Key word analysis
 '''
 
 from typing import Optional
+from ..utils import require_module
+
+keyBERT = require_module('keybert')
 from keybert import KeyBERT
 from transformers import BertTokenizer, BertTokenizerFast
 

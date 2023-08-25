@@ -3,13 +3,13 @@ This is a simple example of how to use the executor interface.
 This will enable the agent to execute python code.
 '''
 
-import aicompleter as ac
 import sys
 import os
 
 sys.path.append(os.path.abspath(
     os.path.join(os.path.dirname(__file__), '../..')))
 
+import aicompleter as ac
 # Set global log level to DEBUG
 # This is sometimes important because GPT may continously generate wrong commands
 ac.log.setLevel(ac.log.DEBUG)
@@ -59,7 +59,8 @@ async def main():
     # Enable agent to call the commands of ConsoleInterface (ask, echo)
     grpah.add(agent_int, console_int)
     grpah.add(console_int, python_int)
-    grpah.add(python_int, author_int)  # Sometimes it's not necessary
+    
+    grpah.add(author_int, console_int)  # Authority Interface require console command
 
     await grpah.setup(handler)
 

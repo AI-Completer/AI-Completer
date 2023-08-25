@@ -3,17 +3,19 @@ Implement the interface of the AI
 Will generate a interface by the specified AI class
 '''
 from __future__ import annotations
+import asyncio
+import copy
+import json
 
 import uuid
 from typing import Optional, TypeVar
 
-from aicompleter import session
-
 from .. import *
-from ..ai import ChatTransformer, Conversation, Transformer
+from ..ai import ChatTransformer, Conversation, Transformer, Message as AIMessage
 from ..config import Config
-from ..interface import Command, Interface, User
+from ..interface import Command, Interface, User, CommandCall
 from ..common import deserialize, serialize
+from .. import Message, error
 
 from . import *
 
@@ -23,7 +25,7 @@ class TransformerInterface(Interface):
     '''
     Transformer interface
     '''
-    def __init__(self,*, ai:Transformer, namespace:str = "transformer", user:Optional[User] = None, id:Optional[uuid.UUID] = None, config:Config = Config()):
+    def __init__(self,*, ai:Transformer, namespace:Optional[str] = "transformer", user:Optional[User] = None, id:Optional[uuid.UUID] = None, config:Config = Config()):
         super().__init__(
             user=user or User(
                 in_group="agent",
@@ -58,7 +60,7 @@ class ChatInterface(TransformerInterface):
             )
 
     async def session_init(self, session: Session):
-        await super().session_init(session)
+        # Not necessary
         self.getdata(session)['conversation'] = self.ai.new_conversation(user=session.id.hex)
 
     async def set_conversation(self, session: Session, conversation:Conversation):
@@ -67,33 +69,10 @@ class ChatInterface(TransformerInterface):
         '''
         self.getdata(session)['conversation'] = conversation
     
-    # async def generate(self, session:Session, message:Message):
-    #     '''
-    #     Ask the AI
-    #     '''
-    #     raise NotImplementedError("generate() is not implemented in ChatInterface, will be implemented in the future")
-    #     self.ai.config = session.config[self.namespace]
-    #     conversation:Conversation = session.extra[f'{self.namespace}.conversation']
-    #     new_conversion = copy.copy(conversation)
-    #     new_conversion.messages.append(ai.Message(
-    #         content=message.content.text,
-    #         role='user',
-    #         user=session.id.hex,
-    #     ))
-    #     # Generate
-    #     ret = await self.ai.generate_text(conversation=new_conversion)
-    #     new_conversion.messages.append(ai.Message(
-    #         content=ret,
-    #         role='assistant',
-    #     ))
-    #     session.data[f'interface.{self.namespace}.conversation'] = new_conversion
-    #     return conversation.messages[-1].content
-    
     async def ask(self, session:Session, message:Message):
         '''
         Ask the AI
         '''
-        self.ai.config = self.getconfig(session)
         conversation:Conversation = self.getdata(session)['conversation']
         
         async for i in self.ai.ask(message=ai.Message(
@@ -101,9 +80,8 @@ class ChatInterface(TransformerInterface):
             role='user',
             user=session.id.hex,
         ), history=conversation):
-            ret_message = i
-        
-        return ret_message
+            pass
+        return i
 
     def __hash__(self):
         return hash(self.id)
@@ -115,4 +93,3 @@ class ChatInterface(TransformerInterface):
     def setStorage(self, session: Session, data: dict):
         conversation = deserialize(data)
         self.getdata(session)['conversation'] = conversation
-

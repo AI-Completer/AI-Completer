@@ -4,28 +4,21 @@ import asyncio
 import copy
 import json
 from typing import Any, Callable, Optional, Self, overload
-from ..common import JSONSerializable, serialize
+from ..common import JSONSerializable
+from .etype import make_model
 
-class defaultdict(dict, JSONSerializable):
+class defaultdict(dict):
     '''
     Dict that can automatically create new keys
     '''
     def __missing__(self, key):
         self[key] = defaultdict()
         return self[key]
-    
-    def __serialize__(self) -> dict:
-        return {
-            key: value for key, value in self.items() if isinstance(key, str) and not key.startswith('_')
-        }
-    
-    @staticmethod
-    def __deserialize__(data:dict) -> Self:
-        return defaultdict(data)
 
-class EnhancedDict(defaultdict):
+class EnhancedDict(defaultdict, JSONSerializable):
     '''
     Enhanced dict
+    
     param:
         readonly: bool, Optional, default: False, readonly or not
     '''
@@ -68,13 +61,15 @@ class EnhancedDict(defaultdict):
             value = self.__class__(value)
         return super().__setitem__(path, value)
 
-    def get(self, path:str, default:Any = None) -> Any:
+    def get(self, path:str, default:Any = ...) -> Any:
         '''
         Get a value
+
+        If the path is not found, return default or Self
         '''
         spilts = path.split('.', 1)
         if len(spilts) == 1:
-            if default is None:
+            if default is ...:
                 if path not in self:
                     return self.__class__()
             ret = super().get(path, default)
@@ -145,7 +140,7 @@ class EnhancedDict(defaultdict):
         return super().__repr__()
 
     def __repr__(self) -> str:
-        return f"<{self.__class__.__name__} {super().__repr__()}>"
+        return super().__repr__()
     
     def __delitem__(self, __key: Any) -> None:
         return super().__delitem__(__key)
@@ -213,7 +208,7 @@ class EnhancedDict(defaultdict):
         '''
         return copy.deepcopy(self)
 
-    @staticmethod
-    def __deserialize__(data: dict) -> Self:
-        return EnhancedDict(data)
-    
+DataModel = make_model(EnhancedDict)
+'''
+Data Model
+'''

@@ -3,7 +3,7 @@ from typing import Any, Coroutine, Optional
 from aicompleter.interface.base import User
 from aicompleter.interface.command import CommandAuthority
 import aicompleter.session as session
-from .. import *
+from ... import *
 
 class PythonCodeInterface(Interface):
     '''
@@ -31,7 +31,6 @@ class PythonCodeInterface(Interface):
         ))
 
     async def session_init(self, session: Session) -> Coroutine[Any, Any, None]:
-        ret = await super().session_init(session)
         # Create a new globals
         session.data[self.namespace.name]['globals'] = {
             '__name__': '__main__',

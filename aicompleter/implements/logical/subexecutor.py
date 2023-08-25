@@ -11,10 +11,10 @@ from typing import Any, Optional
 import uuid
 from aicompleter import *
 from aicompleter import Session
-from aicompleter.ai.ai import ChatTransformer
+from aicompleter.ai import ChatInterface
 from aicompleter.common import deserialize, serialize
 
-class SelfStateExecutor(ai.ChatInterface):
+class SelfStateExecutor(ChatInterface):
     '''
     AI Executor of the state machine
     '''
@@ -46,15 +46,11 @@ Commands:
 +  '' if 'ask' in avaliable_commands else 'You should not ask user for more details.' +
 '''
 You are talking with a command parser. So you should reply with the json format below:
-{
-  "commands":[{
-    "cmd":<command name>,
-    "param":<parameters>
-  }]
-}
+{"commands":[{"cmd":<command>,"param":<parameters>}]}
 If you execute commands, you will receive the return value from the command parser.
 You can execute multiple commands at once.
-User cannot execute the commands or see the result of the commands, they say words and tell you to do the task.
+User cannot execute the commands or see the result of the commands, they say words and tell you to do the task, 
+as a result, rely more on yourself to finish the task.
 You should use the "stop" command to stop the conversation.
 You can use "$last_result" to refer to the last command result, including the error.
 Do not reply with anything else.
@@ -80,15 +76,11 @@ Commands:
 +  '' if 'ask' in avaliable_commands else 'You should not ask user for more details.' +
 '''
 You are talking with a command parser. So you should reply with the json format below:
-{
-  "commands":[{
-    "cmd":<command name>,
-    "param":<parameters>
-  }]
-}
+{"commands":[{"cmd":<command>,"param":<parameters>}]}
 If you execute commands, you will receive the return value from the command parser.
 You can execute multiple commands at once.
 User cannot execute the commands or see the result of the commands, they say words and tell you to do the task.
+As a result, rely more on yourself to finish the task.
 You should use the "stop" command to stop the conversation.
 You can use "$last_result" to refer to the last command result, including the error.
 Do not reply with anything else.
@@ -115,9 +107,7 @@ Do not reply with anything else.
         return agent
         
     async def session_init(self, session: Session):
-        ret = await super().session_init(session)
         self._gen_agent(session)
-        return ret
 
     @cmdreg.register(
         'agent',

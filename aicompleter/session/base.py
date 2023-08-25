@@ -5,24 +5,23 @@ import enum
 import json
 import time
 import uuid
+from asyncio import CancelledError
 from typing import Any, Coroutine, Optional, Self, TypeVar, overload
 
-from asyncio import CancelledError
 import attr
 
 import aicompleter
-from aicompleter import events
-from aicompleter import config, log
-from aicompleter.config import Config, EnhancedDict
 
-if bool(config.varibles['disable_memory']) == False:
-    from aicompleter.memory import (Memory, MemoryItem, MemoryConfigure)
+from .. import config, events, log, utils
+from ..config import Config, EnhancedDict
+from ..utils.special import getcallercommand
 
 Handler = TypeVar('Handler', bound='aicompleter.handler.Handler')
 User = TypeVar('User', bound='aicompleter.interface.User')
 Group = TypeVar('Group', bound='aicompleter.interface.Group')
 Character = TypeVar('Character', bound='aicompleter.interface.Character')
 Interface = TypeVar('Interface', bound='aicompleter.interface.Interface')
+Command = TypeVar('Command', bound='aicompleter.interface.Command')
 
 class Content(object):
     '''Common content class.'''
@@ -70,7 +69,7 @@ class MultiContent(Content):
     def __init__(self, json: dict|list) -> None:
         ...
 
-    def __init__(self, param) -> None:
+    def __init__(self, param:str|list[Content]|dict|list|Self|type(None) = None) -> None:
         self.contents:list[Content] = []
         if isinstance(param, str):
             self.contents.append(Text(param))
@@ -80,6 +79,8 @@ class MultiContent(Content):
             self.contents.append(Text(json.dumps(param, ensure_ascii=False)))
         elif param is None:
             pass
+        elif isinstance(param, type(self)):
+            self.contents.extend(param.contents)
         else:
             raise TypeError(f"Unsupported type {type(param)}")
 
@@ -134,7 +135,7 @@ class MessageStatus(enum.Enum):
 
 class Session:
     '''Session'''
-    def __init__(self, handler:Handler, memory:Optional[MemoryConfigure] = None) -> None:
+    def __init__(self, handler:Handler) -> None:
         self.create_time: float = time.time()
         '''Create time'''
         # self.last_used: float = self.create_time
@@ -147,34 +148,27 @@ class Session:
         '''ID'''
         self.in_handler:Handler = handler
         '''In which handler'''
-        # self.src_interface:Interface|None = None
-        # '''Source interface'''
         self.config:Config = Config()
         '''Session Config'''
         self.data:EnhancedDict = EnhancedDict()
         '''Data'''
-        self._running_tasks:list[asyncio.Task] = []
+        self._running_tasks: utils.TaskList = utils.TaskList()
         '''Running tasks'''
+        self._running_commands: list[tuple[aicompleter.Command, Message]] = []
+        '''
+        Running commands.
+
+        This is a list of tuple of command and message, containing all running commands.
+        '''
         self.on_call: events.Event = events.Event(type=events.Type.Hook)
         '''
         Event of Call, this will be triggered when a command is called
         If the event is stopped, the command will not be called
         '''
-
-        from ..memory import MemoryConfigure, JsonMemory
-
-        memory = memory or MemoryConfigure(factory=JsonMemory)
-        self._memory:Memory = memory.initial_memory or memory.factory(*memory.factory_args, **memory.factory_kwargs)
-        '''Memory'''
-            
+        
         self.logger:log.Logger=log.Logger('session')
         '''Logger'''
         self.logger = log.getLogger('Session', [self.id.hex[:8]])
-
-    @property
-    def memory(self) -> Memory:
-        '''Memory'''
-        return self._memory
 
     @property
     def id(self) -> uuid.UUID:
@@ -211,17 +205,113 @@ class Session:
     def closed(self) -> bool:
         return self._closed
     
-    def asend(self, message:Message):
-        '''Send a message.(async)'''
-        if self._closed:
-            raise RuntimeError("Session closed")
-        return self.in_handler.asend(self,message)
+    @overload
+    def asend(self, message:Message) -> Coroutine[None, None, Any]:
+        ...
+
+    @overload
+    def asend(self, cmd:str, 
+            content:MultiContent = MultiContent(),
+            *,
+            data:EnhancedDict = EnhancedDict(), 
+            last_message: Optional[Message] = None,
+            src_interface:Optional[Interface] = None,
+            dest_interface:Optional[Interface] = None,
+        ) -> Coroutine[None, None, Any]:
+        ...
     
-    def send(self, message:Message):
+    def asend(self, cmd_or_msg:str|Message, 
+            content:Optional[MultiContent] = None,
+            *args, **kwargs
+        ) -> Coroutine[None, None, Any]:
+        '''Send a message.(async)'''
+        if isinstance(cmd_or_msg, Message):
+            if content is not None or len(args) or len(kwargs):
+                raise ValueError("Cannot specify content or args or kwargs when sending a Message")
+            if self._closed:
+                raise RuntimeError("Session closed")
+            
+            if cmd_or_msg.src_interface is None:
+                callercommand = getcallercommand(commands=self.in_handler.get_executable_cmds())
+                if callercommand is not None:
+                    cmd_or_msg.src_interface = callercommand.in_interface
+            cmd_or_msg._check_cache['src_interface'] = True
+            
+            return self.in_handler.call(self, cmd_or_msg)
+        elif isinstance(cmd_or_msg, str):
+            params = {
+                'cmd': cmd_or_msg,
+                'content': content or MultiContent(),
+                'data': kwargs.pop('data', EnhancedDict()),
+                'last_message': kwargs.pop('last_message', None),
+                'src_interface': kwargs.pop('src_interface', None),
+                'dest_interface': kwargs.pop('dest_interface', None),
+            }
+            if len(args) or len(kwargs):
+                raise ValueError("Cannot specify args or kwargs when sending a cmd")
+            if self._closed:
+                raise RuntimeError("Session closed")
+            
+            if params['src_interface'] is None:
+                callercommand = getcallercommand(commands=self.in_handler.get_executable_cmds())
+                if callercommand is not None:
+                    params['src_interface'] = callercommand.in_interface
+            msg = Message(**params)
+            msg._check_cache['src_interface'] = True
+
+            return self.in_handler.call(self, msg)
+        else:
+            raise TypeError(f"Unsupported type {type(cmd_or_msg)}")
+    
+    @overload
+    def send(self, message:Message) -> None:
+        ...
+
+    @overload
+    def send(self, cmd:str, 
+            content:MultiContent = MultiContent(),
+            *,
+            data:EnhancedDict = EnhancedDict(), 
+            last_message: Optional[Message] = None,
+            src_interface:Optional[Interface] = None,
+            dest_interface:Optional[Interface] = None,
+        ) -> None:
+        ...
+    
+    def send(self, cmd_or_msg:str|Message, 
+            content:Optional[MultiContent] = None,
+            *args, **kwargs
+        ) -> None:
         '''Send a message.'''
-        if self._closed:
-            raise RuntimeError("Session closed")
-        return self.in_handler.send(self,message)
+        if isinstance(cmd_or_msg, Message):
+            if content is not None or len(args) or len(kwargs):
+                raise ValueError("Cannot specify content or args or kwargs when sending a Message")
+            if self._closed:
+                raise RuntimeError("Session closed")
+            return self.in_handler.call_soon(self, cmd_or_msg)
+        elif isinstance(cmd_or_msg, str):
+            params = {
+                'cmd': cmd_or_msg,
+                'content': content or MultiContent(),
+                'data': kwargs.pop('data', EnhancedDict()),
+                'last_message': kwargs.pop('last_message', None),
+                'src_interface': kwargs.pop('src_interface', None),
+                'dest_interface': kwargs.pop('dest_interface', None),
+            }
+            if len(args) or len(kwargs):
+                raise ValueError("Cannot specify args or kwargs when sending a cmd")
+            if self._closed:
+                raise RuntimeError("Session closed")
+            return self.in_handler.call_soon(self, Message(**params))
+        else:
+            raise TypeError(f"Unsupported type {type(cmd_or_msg)}")
+        
+    async def _init_session(self):
+        tasks = []
+        loop = self.in_handler._loop
+        for interface in self.in_handler.interfaces:
+            tasks.append(loop.create_task(interface._invoke_session_init(self)))
+        await asyncio.gather(*tasks)
 
     async def close(self):
         '''Close the session.'''
@@ -233,8 +323,11 @@ class Session:
         result = await asyncio.gather(*self._running_tasks, return_exceptions=True)
         if any([isinstance(r, Exception) and not isinstance(r, CancelledError) for r in result]):
             self.logger.exception(f"Error when closing session" + "\n".join([str(r) for r in result if isinstance(r, Exception)]))
+        tasks = []
+        loop = self.in_handler._loop
         for interface in self.in_handler._interfaces:
-            await interface.session_final(self)
+            tasks.append(loop.create_task(interface._invoke_session_final(self)))
+        await asyncio.gather(*tasks)
         self._closed = True
 
     async def _update_tasks(self):
@@ -257,19 +350,78 @@ class Session:
                 'data': data
             })
         return ret
+    
+    def save(self, storage: utils.StorageManager | str):
+        if isinstance(storage, str):
+            storage = utils.StorageManager(storage)
+        meta = {
+            'id': self.id.hex,
+            'config': dict(self.config),
+            'created_time': self.create_time,
+            'closed': self._closed,
+        }
+        with open(storage.alloc_file('meta'), 'w') as f:
+            json.dump(meta, f)
+        for i in self.in_handler._interfaces:
+            i.save_session(storage.alloc_file({
+                'type': 'interface',
+                'id': i.id.hex,
+            }), self)
+        for i in self.history:
+            i.save(storage.alloc_file({
+                'type': 'message',
+                'id': i.id.hex,
+            }))
+        storage.save()
 
-@attr.s(auto_attribs=True, kw_only=True)
-class Message:
-    '''A normal message from the Interface.'''
-    cmd:str = attr.ib(default="", kw_only=False)
+    @classmethod
+    def load(cls, storage: utils.StorageManager | str, in_handler: Handler):
+        if isinstance(storage, str):
+            storage = utils.StorageManager.load(storage)
+        with open(storage['meta'].path, 'r') as f:
+            meta = json.load(f)
+        session = cls(handler=in_handler)
+        session.create_time = meta['created_time']
+        session.config = Config(meta['config'])
+        session._closed = meta['closed']
+        session._id = uuid.UUID(meta['id'])
+        intmap = {}
+        hislis = []
+        for i in storage:
+            if not isinstance(i.mark, dict) or 'type' not in i.mark:
+                continue
+            if i.mark['type'] == 'interface':
+                intmap[i.mark['id']] = storage[i.mark]
+            elif i.mark['type'] == 'message':
+                hislis.append(storage[i.mark])
+        for i in in_handler._interfaces:
+            # If not found, will throw KeyError
+            i.load_session(storage[intmap.pop(i.id.hex).mark].path, session)
+        for i in hislis:
+            session.history.append(Message.load(i.path, session))
+        if len(intmap):
+            log.warning(f"Interfaces(ID-baesd) not found: {intmap.keys()}. Are the interfaces changed?")
+        return session
+
+# Limited by the attrs module, the performance of attr on kw_only is not overridable by the attribute.
+@attr.dataclass(kw_only=False)
+class BaseMessage:
+    '''
+    Base Message class.
+    '''
+    cmd:str = attr.ib(default="")
     '''Call which command to transfer this Message'''
-    content:MultiContent = attr.ib(factory=MultiContent, converter=MultiContent, kw_only=False)
+    content:MultiContent = attr.ib(factory=MultiContent, converter=MultiContent)
     '''Content of the message'''
+
+@attr.dataclass(kw_only=True)
+class Message(BaseMessage):
+    '''A normal message from the Interface.'''
     session:Optional[Session] = attr.ib(default=None,validator=attr.validators.optional(attr.validators.instance_of(Session)))
     '''Session of the message'''
     id:uuid.UUID = attr.ib(factory=uuid.uuid4, validator=attr.validators.instance_of(uuid.UUID))
     '''ID of the message'''
-    data:EnhancedDict = attr.ib(factory=EnhancedDict, converter=EnhancedDict, alias='extra')
+    data:EnhancedDict = attr.ib(factory=EnhancedDict, converter=EnhancedDict)
     '''Data information'''
     last_message: Optional[Message] = None
     '''Last message'''
@@ -279,11 +431,10 @@ class Message:
     dest_interface:Optional[Interface] = None
     '''Interface which receive this message'''
 
+    _check_cache:dict = attr.ib(factory=dict, init=False)
+
     def __attrs_post_init__(self) -> None:
         self._status:MessageStatus = MessageStatus.NOT_SENT
-
-        if not isinstance(self.content, MultiContent):
-            self.content = MultiContent(self.content)
     
     '''
     Status of the message.
@@ -302,7 +453,8 @@ class Message:
             raise ValueError(f"Cannot set status to {value.name} from {self._status.name}")
         self._status = value
         if value == MessageStatus.SENT and self.session is not None and self._status != MessageStatus.SENT:
-            self.session.history.append(self)
+            if not self in self.session.history:
+                self.session.history.append(self)
 
     def __str__(self) -> str:
         return self.content.pure_text
@@ -322,10 +474,10 @@ class Message:
             'dest_interface': self.dest_interface.namespace if self.dest_interface is not None else None,
         }
     
-    @staticmethod
-    def from_json(data:dict):
+    @classmethod
+    def from_json(cls, data:dict):
         # TODO: add session
-        return Message(
+        return cls(
             content = MultiContent(data['content']),
             session = None,
             id = uuid.UUID(data['id']),
@@ -347,6 +499,39 @@ class Message:
             return self.content[key]
         else:
             return self.content.json.get(key, default)
+        
+    def save(self, file:str):
+        with open(file, 'w') as f:
+            json.dump(self.to_json(), f)
+
+    @classmethod
+    def load(cls, file:str, session:Session):
+        with open(file, 'r') as f:
+            data = json.load(f)
+        msg = cls.from_json(data)
+        msg.session = session
+        if data['last_message'] is not None:
+            for i in session.history:
+                if i.id.hex == data['last_message']:
+                    msg.last_message = i
+                    break
+            else:
+                log.warning(f"Last message not found: {data['last_message']}")
+        if data['src_interface'] is not None:
+            for i in session.in_handler._interfaces:
+                if i.id == data['src_interface']:
+                    msg.src_interface = i
+                    break
+            else:
+                log.warning(f"Source interface not found: {data['src_interface']}")
+        if data['dest_interface'] is not None:
+            for i in session.in_handler._interfaces:
+                if i.id == data['dest_interface']:
+                    msg.dest_interface = i
+                    break
+            else:
+                log.warning(f"Destination interface not found: {data['dest_interface']}")
+        return msg
     
 class MessageQueue(asyncio.Queue[Message]):
     '''Message Queue'''

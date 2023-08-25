@@ -53,8 +53,8 @@ class AuthorInterface(Interface):
         
         ret = await session.asend(
             Message(
-                src_interface=self,
                 cmd=author_cmd,
+                src_interface=self,
                 content = author_format.format(
                     src=message.src_interface.user.name,
                     cmd=cmd.cmd,
@@ -94,9 +94,7 @@ class AuthorInterface(Interface):
             raise ValueError(f"Config error: {self.getconfig(session)}")
         
         session.on_call.add_callback(self.hook)
-        return await super().session_init(session)
 
     async def session_final(self, session: Session) -> None:
-        session.in_handler.on_call.callbacks.remove(self.hook)
-        return await super().session_final(session)
+        session.on_call.callbacks.remove(self.hook)
 

@@ -42,7 +42,7 @@ async def main():
     # Start conversation
     while True:
         # Get input
-        # Optionally, you can use the ConsoleInterface (ac.implemets.ConsoleInterface) to get input
+        # Alternatively, you can use the ConsoleInterface (`ac.implemets.ConsoleInterface`) to get input
         # but for this example, it's not necessary
         try:
             text = input('>>> ')
@@ -50,10 +50,8 @@ async def main():
             break
         if text == 'exit':
             break
-        print("Response: ", await session.asend(ac.Message(
-            cmd='ask',
-            content=text,
-            dest_interface=ai_int,
-        )))
+        print("Response: ", await session.asend(
+            'ask',text
+        ))
 
 ac.utils.start(main())

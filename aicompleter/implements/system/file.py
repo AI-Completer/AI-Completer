@@ -8,29 +8,33 @@ from aicompleter.utils import Struct
 from ...interface import CommandAuthority
 from . import *
 
+# File Interface
+# TODO: add more file operations
 class FileInterface(Interface):
     '''
     File Interface for Autodone-AI
+
     Including File Read and Write
     '''
-    def __init__(self, user: Optional[User] = None, id: Optional[uuid.UUID] = uuid.uuid4()):
+    def __init__(self, config:Config = Config(), id: Optional[uuid.UUID] = uuid.uuid4()):
         super().__init__(
             namespace="file",
-            user = user or User(
+            user = User(
                 name="file",
                 in_group="system",
                 all_groups={"system","command"},
                 support={"text","file"}
             ),
-            id=id
+            id=id,
+            config = config,
         )
         self.commands.add(
             Command(
                 cmd='read',
-                description='Read File',
+                description='Read a file',
                 callback=self.cmd_read,
                 format=CommandParamStruct({
-                    'path': CommandParamElement('path', str, description='File Path',tooltip='The file path to read')
+                    'path': CommandParamElement('path', str, description='File Path',tooltip='filepath')
                 }),
                 callable_groups={'system','agent'},
                 in_interface=self,
@@ -40,12 +44,12 @@ class FileInterface(Interface):
             ),
             Command(
                 cmd='write',
-                description='Write File',
+                description='Write a file',
                 callback=self.cmd_write,
                 format=CommandParamStruct({
-                    'path': CommandParamElement('path', str, description='File Path',tooltip='The file path to write'),
-                    'content': CommandParamElement('content', str, description='File Content',tooltip='The file content to write'),
-                    'append': CommandParamElement('append', bool, description='Append',tooltip='Whether to append to the file', optional=True, default=False),
+                    'path': CommandParamElement('path', str, description='File Path',tooltip='filepath'),
+                    'content': CommandParamElement('content', str, description='File Content'),
+                    'append': CommandParamElement('append', bool, description='Append',tooltip='append-mode', optional=True, default=False),
                 }),
                 callable_groups={'system','agent'},
                 in_interface=self,
@@ -55,10 +59,10 @@ class FileInterface(Interface):
             ),
             Command(
                 cmd='listdir',
-                description='List Directory',
+                description='List the contents of a directory',
                 callback=self.cmd_listdir,
                 format=CommandParamStruct({
-                    'path': CommandParamElement('path', str, description='Directory Path',tooltip='The directory path to list')
+                    'path': CommandParamElement('path', str, description='Directory Path',tooltip='path', default='.', optional=True)
                 }),
                 callable_groups={'system','agent'},
                 in_interface=self,
@@ -69,11 +73,13 @@ class FileInterface(Interface):
         )
 
     async def session_init(self, session:Session):
-        ret = await super().session_init(session)
         # This data will be reuseable in other interfaces
         data = self.getdata(session)
         data['filesystem'] = FileSystem(session.config[self.namespace.name].get('root', 'workspace'))
         data['workspace'] = WorkSpace(data['filesystem'], '/')
+
+    def getworkspace(self, session:Session) -> WorkSpace:
+        return self.getdata(session)['workspace']
 
     async def cmd_read(self, session:Session, message:Message) -> str:
         '''Command for reading file'''

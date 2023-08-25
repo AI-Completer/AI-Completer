@@ -11,14 +11,15 @@ class Agent(common.AsyncLifeTimeManager):
     '''
     AI Agent
     '''
-    def __init__(self, chatai: ChatTransformer, init_prompt:Optional[str] = None, user:Optional[str] = None):
+    def __init__(self, chatai: ChatTransformer, init_prompt:Optional[str] = None, user:Optional[str] = None, loop:Optional[asyncio.AbstractEventLoop] = None):
         super().__init__()
         self.ai = chatai
         self._init_prompt = init_prompt
+        self._loop = loop = loop or asyncio.get_event_loop()
         
         self.conversation = self.ai.new_conversation(user,init_prompt=init_prompt)
         '''The conversation of the agent'''
-        self.on_call: Callable[[str, Any], Coroutine[Any, None, None]] = lambda cmd, param: asyncio.create_task()
+        self.on_call: Callable[[str, Any], Coroutine[Any, None, None]] = lambda cmd, param: self._loop.create_task()
         '''Event when a command is called'''
         self.on_subagent: Callable[[str, Any], None | Coroutine[None, None, None]] = lambda name, word: self.new_subagent(name, word)
         '''Event when a subagent is created'''
@@ -29,8 +30,8 @@ class Agent(common.AsyncLifeTimeManager):
 
         self._result_queue: asyncio.Queue[interface.Result] = asyncio.Queue()
         self._request_queue: asyncio.Queue[ai.Message | None] = asyncio.Queue()
-        self._handle_task = asyncio.get_event_loop().create_task(self._handle_result())
-        self._loop_task = asyncio.get_event_loop().create_task(self._loop())
+        self._handle_task = loop.create_task(self._handle_result())
+        self._loop_task = loop.create_task(self._handle_loop())
         self._result = ...
 
         self._subagents:dict[str, Self] = {}
@@ -55,7 +56,7 @@ class Agent(common.AsyncLifeTimeManager):
         except asyncio.CancelledError as e:
             pass
         except Exception as e:
-            asyncio.get_event_loop().create_task(self.on_exception(e))
+            self._loop.create_task(self.on_exception(e))
     
     @property
     def result(self) -> Any:
@@ -64,7 +65,7 @@ class Agent(common.AsyncLifeTimeManager):
         '''
         if not self.closed:
             raise error.AI_OnRun('The agent is not stopped yet')
-        if isinstance(self._result, Exception):
+        if isinstance(self._result, BaseException):
             raise self._result
         return self._result
 
@@ -72,7 +73,7 @@ class Agent(common.AsyncLifeTimeManager):
         '''
         Create a subagent
         '''
-        self._subagents[name] = Agent(ai or self.ai, init_prompt or self._init_prompt, user)
+        self._subagents[name] = Agent(ai or self.ai, init_prompt or self._init_prompt, user, self._loop)
         self._subagents[name].on_call = self.on_call
         self._subagents[name]._parent = self
         self._subagents[name]._parent_name = name
@@ -142,7 +143,7 @@ class Agent(common.AsyncLifeTimeManager):
         
         return json_dat
 
-    async def _loop(self):
+    async def _handle_loop(self):
         '''
         The loop for the agent
         '''
@@ -263,7 +264,7 @@ class Agent(common.AsyncLifeTimeManager):
                             else:
                                 self._result_queue.put_nowait(interface.Result(curcmd['cmd'], True, ret))
                                 self.logger.info(f'Command {curcmd["cmd"]} executed successfully, Result: {ret}')
-                        asyncio.get_event_loop().create_task(self.on_call(curcmd['cmd'], curcmd['param'])).add_done_callback(when_result)
+                        self._loop.create_task(self.on_call(curcmd['cmd'], curcmd['param'])).add_done_callback(when_result)
 
                     wrap_context()
             
@@ -277,7 +278,7 @@ class Agent(common.AsyncLifeTimeManager):
         finally:
             # The loop is done
             self.logger.debug('The agent is stopped')
-            self.close()
+            self._loop.create_task(self.close())
             if exception is not None:
                 if isinstance(exception, asyncio.CancelledError):
                     raise exception
@@ -330,7 +331,7 @@ class Agent(common.AsyncLifeTimeManager):
             'value': value,
         })
 
-    def close(self):
+    async def close(self):
         '''
         Close the agent
         '''
@@ -339,15 +340,21 @@ class Agent(common.AsyncLifeTimeManager):
         if self._handle_task:
             self._handle_task.cancel()
             self._handle_task.remove_done_callback(self._unexception)
-            self._close_tasks.append(self._handle_task)
+            try:
+                await self._handle_task
+            except asyncio.CancelledError:
+                pass
         if self._loop_task:
             self._loop_task.cancel()
             self._loop_task.remove_done_callback(self._unexception)
-            self._close_tasks.append(self._loop_task)
+            try:
+                await self._loop_task
+            except asyncio.CancelledError:
+                pass
         self._handle_task = None
         self._loop_task = None
         self.logger.debug('The agent is closed')
-        super().close()
+        await super().close()
 
     def wait(self):
         '''

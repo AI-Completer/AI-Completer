@@ -3,7 +3,7 @@ AI-Completer
 AI-Completer is a framework for interaction among AI, human and system.
 '''
 
-__version__ = "0.0.1beta"
+__version__ = "0.0.1rc5"
 __author__ = "Li Yan"
 __package__ = "aicompleter"
 __license__ = "GPL-3.0"
@@ -20,9 +20,14 @@ from . import (
     utils,
 )
 
+from .utils import (
+    EnhancedDict,
+    DataModel,
+)
+
 from .config import (
     Config,
-    EnhancedDict,
+    ConfigModel,
 )
 
 from .handler import (
@@ -43,6 +48,13 @@ from .interface import (
     Commands,
     CommandParamElement,
     CommandParamStruct,
+    CommandParam,
+    CommandAuthority,
+)
+
+from .namespace import (
+    BaseNamespace, 
+    Namespace
 )
 
 from .layer import (
@@ -60,8 +72,6 @@ from . import (
     ai,
     implements,
 )
-
-from .namespace import Namespace
 
 from . import (
     memory,

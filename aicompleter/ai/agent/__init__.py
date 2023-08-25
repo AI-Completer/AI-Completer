@@ -4,11 +4,12 @@ This module will enable you to create a AI agent to automaticly self-yield the m
 '''
 
 from .agent import Agent
-from .agentf import AgentF
-from .interface import AgentInterface
+from .reagent import Agent as ReAgent
+from .interface import AgentInterface, ReAgentInterface
 
 __all__ = (
     'Agent',
-    'AgentF',
     'AgentInterface',
+    'ReAgent',
+    'ReAgentInterface'
 )

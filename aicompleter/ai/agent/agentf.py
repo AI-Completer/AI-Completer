@@ -1,5 +1,7 @@
 '''
 AI Agent With Function
+
+Depreciated, use Agent instead
 '''
 
 import asyncio
@@ -17,9 +19,10 @@ class AgentF:
     '''
     AI Agent With Function
     '''
-    def __init__(self, chatai: ChatTransformer, init_prompt:str, commands:Commands,  user:Optional[str] = None) -> None:
+    def __init__(self, chatai: ChatTransformer, init_prompt:str, commands:Commands,  user:Optional[str] = None, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
         self.ai = chatai
         self._init_prompt = init_prompt
+        self._loop = loop or asyncio.get_event_loop()
         
         self.conversation = self.ai.new_conversation(user,init_prompt=init_prompt)
         '''The conversation of the agent'''
@@ -91,7 +94,7 @@ class AgentF:
         ]
 
         self._request_queue: asyncio.Queue[ai.Message] = asyncio.Queue()
-        self._loop_task = asyncio.get_event_loop().create_task(self._loop())
+        self._loop_task = self._loop.create_task(self._handle_loop())
 
         self._result = ...
 
@@ -116,7 +119,7 @@ class AgentF:
         except asyncio.CancelledError as e:
             pass
         except Exception as e:
-            asyncio.get_event_loop().create_task(self.on_exception(e))
+            self._loop.create_task(self.on_exception(e))
 
     @property
     def stopped(self) -> bool:
@@ -157,7 +160,7 @@ class AgentF:
             role=role,
         ))
 
-    async def _loop(self):
+    async def _handle_loop(self):
         '''
         The loop for the agent
         '''
@@ -226,7 +229,7 @@ class AgentF:
                             ))
                             self.logger.info(f'Command {name} executed successfully, Result: {ret}')
 
-                    asyncio.get_event_loop().create_task(self.on_call(name, param)).add_done_callback(when_result)
+                    self._loop.create_task(self.on_call(name, param)).add_done_callback(when_result)
 
                 if new_message.data.get('function_call') == None:
                     # Ask Command

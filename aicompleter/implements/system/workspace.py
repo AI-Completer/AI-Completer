@@ -1,7 +1,7 @@
 '''
 Virtual File System
+
 This is a virtual file system prepared specially for AI Interface
-Unstable, need to be improved
 '''
 
 from __future__ import annotations
@@ -410,7 +410,8 @@ class FileSystem:
         :param force: Force to move (will overwrite)
         :param user: User , if not None, will check permission
         '''
-        path = normpath(path)
+        from_ = normpath(from_)
+        to_ = normpath(to_)
         if from_[0] != sep:
             raise error.InvalidPath('Invalid Path', path=from_)
         if to_[0] != sep:
@@ -438,7 +439,8 @@ class FileSystem:
         :param force: Force to copy (will overwrite)
         :param user: User , if not None, will check permission
         '''
-        path = normpath(path)
+        from_ = normpath(from_)
+        to_ = normpath(to_)
         if from_[0] != sep:
             raise error.InvalidPath('Invalid Path', path=from_)
         if to_[0] != sep:

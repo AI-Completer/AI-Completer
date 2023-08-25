@@ -13,6 +13,7 @@ if sys.version_info < (3, 11):
     raise RuntimeError('This program requires python 3.11 or higher.')
 
 from aicompleter.log import Logger, getLogger
+from aicompleter import utils
 logger = getLogger('startup')
 
 def require_input(prompt:Optional[str] = None, default:Optional[str] = ...) -> str:
@@ -31,17 +32,6 @@ def require_input(prompt:Optional[str] = None, default:Optional[str] = ...) -> s
             else:
                 print('Value required.')
     return ret
-
-def try_parse_bool(value:str) -> bool:
-    '''
-    Try to parse a string to bool
-    '''
-    if value.lower() in ('true', 'yes', '1' , 'y', 't'):
-        return True
-    elif value.lower() in ('false', 'no', '0', 'n', 'f'):
-        return False
-    else:
-        raise ValueError(f'Invalid bool value {value}')
 
 try:
 
@@ -77,7 +67,7 @@ try:
         # Require debug
         while True:
             try:
-                config['global']['debug'] = try_parse_bool(require_input('Debug (default to False): ', 'False'))
+                config['global']['debug'] =utils.is_enable(require_input('Debug (default to False): ', False))
                 break
             except ValueError as e:
                 print(e.args[0])
@@ -86,9 +76,7 @@ try:
         with open('config.json', 'w') as f:
             json.dump(config, f, indent=4)
     else:
-        logger.info('Config file found, loading...')
-        with open('config.json', 'r') as f:
-            config = json.load(f)
+        logger.info('Config file found')
     
 except KeyboardInterrupt:
     logger.info('KeyboardInterrupt, exiting...')
@@ -103,6 +91,14 @@ if len(sys.argv) == 1:
     # Add default arguments
     sys.argv = ['aicompleter', '--config', 'config.json', 'helper', '--enable-agent', '--include','pythoncode','--include','searcher']
     # TODO: Get available ai model
+
+elif os.path.isfile(sys.argv[1]):
+    # Run the file, instead of the helper
+    # With the other parameters
+    executor = sys.argv[0]
+    logger.info('Running file: ' + sys.argv[1])
+    os.execvp(executor, sys.argv)
+    sys.exit(0)
 
 # Launch the main program
 runpy.run_module('aicompleter', run_name='__main__', alter_sys=True)

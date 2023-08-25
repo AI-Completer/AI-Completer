@@ -14,7 +14,7 @@ class BaseException(Exception):
         
         from .. import log
         self._logger:log.Logger = log.getLogger('Exception', [self.__class__.__name__])
-        self._logger.debug(f"Exception raised. interface={interface} parent={self.parent} args={args} kwargs={kwargs}")
+        self._logger.debug(f"Exception raised. args={args} kwargs={kwargs}")
 
     def __str__(self) -> str:
         return f"<{self.__class__.__name__}: {self.args} {self.kwargs}>"
@@ -22,7 +22,6 @@ class BaseException(Exception):
     def __init_subclass__(cls) -> None:
         if cls.__doc__ == BaseException.__doc__:
             cls.__doc__ = None
-        return super().__init_subclass__()
     
     @property
     def interface(self):
@@ -33,6 +32,11 @@ class BaseException(Exception):
     def session(self):
         '''Session'''
         return self.kwargs.get('session', None)
+
+class InnerException(BaseException):
+    '''
+    This exception is raised because programming error, not runtime error.
+    '''
 
 class ParamRequired(BaseException):
     '''Param Required'''
@@ -45,6 +49,9 @@ class Existed(BaseException):
 
 class NotFound(BaseException):
     '''Not Found'''
+
+class InvalidArgument(BaseException):
+    '''Invalid Argument'''
 
 class InvalidPath(BaseException):
     '''Invalid Path'''

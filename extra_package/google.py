@@ -154,9 +154,7 @@ class GoogleInterface(ac.Interface):
         return results
     
     async def session_init(self, session: ac.Session) -> None:
-        ret = await super().session_init(session)
         self.getdata(session)['session'] = aiohttp.ClientSession()
-        return ret
     
     def cmd_google(self, session:ac.Session, message: ac.Message):
         '''
@@ -174,11 +172,9 @@ class GoogleInterface(ac.Interface):
                             )
     
     async def session_final(self, session: ac.Session) -> None:
-        ret = await super().session_final(session)
         data = self.getdata(session)
         await data['session'].close()
         del data['session']
-        return ret
 
 if __name__ == '__main__':
     import asyncio

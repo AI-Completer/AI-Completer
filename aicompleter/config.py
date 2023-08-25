@@ -7,10 +7,10 @@ from __future__ import annotations
 import json
 import os
 from re import A
-from typing import Any, Self
+from typing import Any, Optional, Self, TypeAlias
 
 from .error import ConfigureMissing
-from .utils import EnhancedDict
+from .utils import EnhancedDict, make_model
 
 Pointer = list
 '''
@@ -22,8 +22,8 @@ class Config(EnhancedDict):
     '''Configuration Class'''
     ALLOWED_VALUE_TYPE = (str, int, float, bool, type(None))
 
-    @staticmethod
-    def loadFromFile(path:str) -> Config:
+    @classmethod
+    def loadFromFile(cls, path:str) -> Self:
         '''
         Load Configuration From File
         The file should be in json format
@@ -31,7 +31,7 @@ class Config(EnhancedDict):
         if not os.path.exists(path):
             raise FileNotFoundError(f"Configuration file not found: {path}")
         with open(path, "r", encoding="utf-8") as f:
-            return Config(json.load(f))
+            return cls(json.load(f))
         
     def require(self, path: str) -> Any:
         '''
@@ -56,6 +56,8 @@ class Config(EnhancedDict):
     
     def __setitem__(self, __key: Any, __value: Any) -> None:
         # Check type
+        self.__on_setter__ and self.__on_setter__(__key, __value)
+
         def _check(key: Any, value: Any) -> None:
             if not isinstance(key, str):
                 raise TypeError(f"Invalid key type: {key!r}")
@@ -87,24 +89,30 @@ class Config(EnhancedDict):
             if name == 'global':
                 continue
             if isinstance(value, dict):
-                value.update(super()['global'])
-    
+                value.update(super().__getitem__('global'))
+
+    __on_setter__ = None
+
+ConfigModel = make_model(Config)
+'''
+Config Model
+
+When creating a config model, just inherit this class
+'''
+
 def loadConfig(path:str) -> Config:
     '''Load configuration from file'''
     return Config.loadFromFile(path)
 
 # Global configuration bypass different modules
 varibles = Config({
-    'disable_faiss': False,
+    # 'disable_faiss': False,
 })
 
-__map_environment__ = {
-    'DISABLE_FAISS': ('disable_faiss', bool),
-}
+# __map_environment__ = {
+#     'DISABLE_FAISS': ('disable_faiss', bool),
+# }
 
-for k, (v, tp) in __map_environment__.items():
-    if k in os.environ:
-        varibles[v] = tp(os.environ[k])
-# Due to the moudle launch limitation, we have to check this here
-# TODO: Wait for a better solution
-
+# for k, (v, tp) in __map_environment__.items():
+#     if k in os.environ:
+#         varibles[v] = tp(os.environ[k])

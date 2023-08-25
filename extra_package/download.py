@@ -51,12 +51,9 @@ class DownloadInterface(Interface):
                 data['fileint'] = i.id
                 break
 
-        return await super().session_init(session)
-
     async def session_final(self, session: Session) -> None:
         data = self.getdata(session)
         await data['session'].close()
-        return await super().session_final(session)
 
     async def cmd_download(self, session: Session, message: Message) -> None:
         '''

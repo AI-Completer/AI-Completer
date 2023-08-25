@@ -56,13 +56,111 @@ class LogRecord(logging.LogRecord):
     def __repr__(self) -> str:
         return f"<LogRecord: name={self.name} level={self.levelname} substruct=[{','.join(self.substruct)}] msg={self.msg}>"
     
-class ColorStrFormatStyle(logging.StrFormatStyle):
+class StrFormatStyle(logging.StrFormatStyle):
+    def __init__(self, fmt: str, *, defaults: Mapping[str, Any] | None = None, format_func: Callable[[str, dict[str, Any]], str] = str.format_map) -> None:
+        super().__init__(fmt, defaults=defaults)
+        self._format_func = format_func
+
+    def format(self, record: LogRecord):
+        try:
+            if defaults := self._defaults:
+                values = defaults | record.__dict__
+            else:
+                values = record.__dict__
+            return self._format_func(self._fmt, values)
+        except KeyError as e:
+            raise ValueError('Formatting field not found in record: %s' % e)
+
+class FormatMap:
+    '''
+    Custom format map
+
+    This class is used to format the string, with self-defined format function
+    '''
+    def __init__(self, default_map:dict[str, str] = {}, fmt_func:Optional[Callable[[str, dict[str, Any]], str]] = None):
+        self._fmt_func = fmt_func or str.format_map
+        self._fmt_map_func:dict[str, Callable[[str, Any], str]] = {}
+        self._defaults:dict[str, str] = default_map
+        self._on_nofunc:Callable[[str, Any], str] = lambda x, y: str(y)
+
+    def register(self, key:str):
+        '''
+        Register a key
+        '''
+        def decorator(func:Callable[[str, Any], str]):
+            self._fmt_map_func[key] = func
+            return func
+        return decorator
+
+    def on_nofunc(self, func:Callable[[str, Any], str]):
+        '''
+        Set the function when no function is registered
+        '''
+        self._on_nofunc = func
+
+    def setdefault(self, key:str, value:str):
+        '''
+        Set the default value
+        '''
+        self._defaults[key] = value
+    
+    def __call__(self, fmt:str, values:dict[str, Any]):
+        '''
+        Format the string
+        '''
+        values = values.copy()
+        for key, value in self._defaults.items():
+            if key not in values:
+                values[key] = value
+        handled_key = set()
+        for key, func in self._fmt_map_func.items():
+            if key in values:
+                values[key] = func(key, values[key])
+                handled_key.add(key)
+        if self._on_nofunc:
+            for key in values:
+                if key not in handled_key:
+                    values[key] = self._on_nofunc(key, values[key])
+        return self._fmt_func(fmt, values)
+    
+defaultFormatMap = FormatMap()
+'''
+Default format map
+
+This is used to format the string
+'''
+@defaultFormatMap.register('substruct')
+def _(key:str, substruct:list[str]):
+    return "".join([
+        f"[{sub}]" 
+            for sub in substruct
+        ])
+
+defaultStrFormatStyle = StrFormatStyle(
+    "{asctime} - {levelname} [{name}]{substruct} {message}",
+    format_func=defaultFormatMap
+)
+
+class ColorStrFormatStyle(StrFormatStyle):
     '''
     Custom StrFormatStyle
     '''
-
     def __init__(self, fmt: str, *, defaults: Mapping[str, Any] | None = None, colormap: Optional[dict[str, str]] = None, levelcolormap: Optional[dict[int, str]] = None) -> None:
-        super().__init__(fmt, defaults=defaults)
+        format_map = FormatMap()
+        @format_map.on_nofunc
+        def _(key:str, value:Any):
+            if key in self._colormap:
+                return self._colormap.get(key) + str(value) + colorama.Fore.RESET + colorama.Style.RESET_ALL
+            else:
+                return str(value)
+        @format_map.register('substruct')
+        def _(key:str, value:list[str]):
+            return "".join([
+                f"[{self._colormap['substruct'] + sub + colorama.Fore.RESET + colorama.Style.RESET_ALL}]" 
+                    for sub in value
+                ])
+
+        super().__init__(fmt, defaults=defaults, format_func=format_map)
         self._colormap = defaultColorMap
         if colormap:
             self._colormap.update(colormap)
@@ -71,26 +169,10 @@ class ColorStrFormatStyle(logging.StrFormatStyle):
             self._levelcolormap.update(levelcolormap)
 
     def format(self, record: LogRecord):
-        record = copy.copy(record)
-        try:
-            if defaults := self._defaults:
-                values = defaults | record.__dict__
-            else:
-                values = record.__dict__
-            for key, value in values.items():
-                if isinstance(value, str) and key in self._colormap:
-                    values[key] = self._colormap.get(key) + value + colorama.Fore.RESET + colorama.Style.RESET_ALL
-            # levelname
-            values['levelname'] = self._levelcolormap[int(record.levelno / 10) * 10] + values['levelname'] + colorama.Fore.RESET + colorama.Style.RESET_ALL
-
-            if 'substruct' in values:
-                values['substruct'] = "".join([
-                    f"[{self._colormap['substruct'] + sub + colorama.Fore.RESET + colorama.Style.RESET_ALL}]" 
-                        for sub in values['substruct']
-                    ])
-            return self._fmt.format(**values)
-        except KeyError as e:
-            raise ValueError('Formatting field not found in record: %s' % e)
+        @self._format_func.register('levelname')
+        def _(key:str, value:str):
+            return self._levelcolormap[int(record.levelno / 10) * 10] + value + colorama.Fore.RESET + colorama.Style.RESET_ALL
+        return super().format(record)
 
 class Formatter(logging.Formatter):
     '''
@@ -103,11 +185,7 @@ class Formatter(logging.Formatter):
         self._fmt = self._style._fmt
         self.datefmt = datefmt
 
-class StreamHandler(logging.StreamHandler):
-    def __init__(self, stream=None):
-        if stream == None:
-            stream = sys.stdout     # Just set stdout as default
-        super().__init__(stream)
+StreamHandler: TypeAlias = logging.StreamHandler
 
 class Logger(logging.Logger):
     '''
@@ -315,9 +393,7 @@ colorstyle = Formatter(ColorStrFormatStyle(
 consolehandler = StreamHandler()
 consolehandler.setFormatter(colorstyle)
 
-emptystyle = Formatter(logging.StrFormatStyle(
-    "{asctime} - {levelname} [{name}]{substruct} {message}"
-))
+emptystyle = Formatter(defaultStrFormatStyle)
 filehandler = logging.FileHandler("log.log", encoding='utf-8')
 filehandler.setFormatter(emptystyle)
 
@@ -344,5 +420,7 @@ def getLogger(name:str, substruct:list[str] = []) -> Logger:
 __all__ = (
     'CRITICAL', 'FATAL', 'ERROR', 'WARNING', 'WARN', 'INFO', 'DEBUG', 'NOTSET',
     'StreamHandler', 'Logger', 'getLogger', 'setLevel', 'debug', 'info', 'warning', 'warn', 'error', 'critical', 'fatal',
-    'root', 'Formatter', 'ColorStrFormatStyle', 'LogRecord', 'defaultColorMap', 'defaultLevelColorMap'
+    'root', 'Formatter', 'ColorStrFormatStyle', 'LogRecord', 'defaultColorMap', 'defaultLevelColorMap',
+    'filehandler', 'consolehandler',
+    'StrFormatStyle', 'defaultStrFormatStyle', 'defaultFormatMap', 'FormatMap'
 )
